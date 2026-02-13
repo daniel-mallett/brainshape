@@ -1,15 +1,17 @@
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import neo4j
-from neo4j_graphrag.embeddings.base import Embedder
+from neo4j_graphrag.embeddings.sentence_transformers import (
+    SentenceTransformerEmbeddings,
+)
 from neo4j_graphrag.experimental.components.embedder import TextChunkEmbedder
 from neo4j_graphrag.experimental.components.entity_relation_extractor import (
     LLMEntityRelationExtractor,
     OnError,
 )
-from neo4j_graphrag.experimental.components.kg_writer import Neo4jWriter
+from neo4j_graphrag.experimental.components.kg_writer import KGWriterModel, Neo4jWriter
 from neo4j_graphrag.experimental.components.pdf_loader import (
     DataLoader,
     DocumentInfo,
@@ -21,23 +23,82 @@ from neo4j_graphrag.experimental.components.resolver import (
 from neo4j_graphrag.experimental.components.text_splitters.fixed_size_splitter import (
     FixedSizeSplitter,
 )
+from neo4j_graphrag.experimental.components.types import (
+    LexicalGraphConfig,
+    Neo4jGraph,
+    Neo4jNode,
+)
+from neo4j_graphrag.indexes import create_vector_index
 from neo4j_graphrag.llm import AnthropicLLM
+from neo4j_graphrag.neo4j_queries import upsert_node_query
 
 from brain.config import settings
 
+EMBEDDING_MODEL = "google/embeddinggemma-300m"
+EMBEDDING_DIMENSIONS = 768
 
-class NoOpEmbedder(Embedder):
-    """Placeholder embedder that returns zero vectors.
 
-    Entity extraction uses the LLM, not embeddings. Real embeddings
-    can be swapped in later for semantic search over chunks.
+class MergingNeo4jWriter(Neo4jWriter):
+    """Custom writer that MERGEs Document nodes on path instead of CREATEing them.
+
+    The default Neo4jWriter always CREATEs new nodes, which produces duplicates
+    when structural sync has already created :Note:Document nodes for the same
+    files. This subclass splits the node batch: Document nodes get MERGE'd on
+    their path property, everything else (Chunks, entities) goes through the
+    standard CREATE path.
     """
 
-    def __init__(self, dimensions: int = 384):
-        self.dimensions = dimensions
+    def _upsert_nodes(
+        self, nodes: list[Neo4jNode], lexical_graph_config: LexicalGraphConfig
+    ) -> None:
+        doc_nodes: list[Neo4jNode] = []
+        other_nodes: list[Neo4jNode] = []
 
-    def embed_query(self, text: str) -> list[float]:
-        return [0.0] * self.dimensions
+        for node in nodes:
+            if node.label == lexical_graph_config.document_node_label:
+                doc_nodes.append(node)
+            else:
+                other_nodes.append(node)
+
+        # MERGE Document nodes on path so they unify with structural sync nodes
+        for node in doc_nodes:
+            row = self._nodes_to_rows([node], lexical_graph_config)[0]
+            path = row["properties"].get("path")
+            if not path:
+                continue
+            params: dict[str, Any] = {
+                "path": path,
+                "props": row["properties"],
+                "tmp_id": row["id"],
+            }
+            self.driver.execute_query(
+                "MERGE (n:Document {path: $path}) "
+                "SET n += $props, n:__KGBuilder__, n.__tmp_internal_id = $tmp_id",
+                parameters_=params,
+                database_=self.neo4j_database,
+            )
+
+        # CREATE everything else via the standard path
+        if other_nodes:
+            parameters = {
+                "rows": self._nodes_to_rows(other_nodes, lexical_graph_config)
+            }
+            query = upsert_node_query(
+                support_variable_scope_clause=self.is_version_5_23_or_above
+            )
+            self.driver.execute_query(
+                query,
+                parameters_=parameters,
+                database_=self.neo4j_database,
+            )
+
+
+    async def run(
+        self,
+        graph: Neo4jGraph,
+        lexical_graph_config: LexicalGraphConfig = LexicalGraphConfig(),
+    ) -> KGWriterModel:
+        return await super().run(graph=graph, lexical_graph_config=lexical_graph_config)
 
 
 class ObsidianLoader(DataLoader):
@@ -89,16 +150,28 @@ class KGPipeline:
             api_key=settings.anthropic_api_key,
         )
 
+        embedder = SentenceTransformerEmbeddings(model=EMBEDDING_MODEL)
+
         self.loader = ObsidianLoader(vault_path)
         self.splitter = FixedSizeSplitter(chunk_size=4000, chunk_overlap=200)
-        self.embedder = TextChunkEmbedder(embedder=NoOpEmbedder())
+        self.embedder = TextChunkEmbedder(embedder=embedder)
         self.extractor = LLMEntityRelationExtractor(
             llm=llm,
             on_error=OnError.IGNORE,
             create_lexical_graph=True,
         )
-        self.writer = Neo4jWriter(driver=driver)
+        self.writer = MergingNeo4jWriter(driver=driver)
         self.resolver = SinglePropertyExactMatchResolver(driver=driver)
+
+        # Ensure the vector index exists for semantic search over chunks
+        create_vector_index(
+            driver=driver,
+            name="chunk_embeddings",
+            label="Chunk",
+            embedding_property="embedding",
+            dimensions=EMBEDDING_DIMENSIONS,
+            similarity_fn="cosine",
+        )
 
     async def run_async(self, file_path: str) -> None:
         """Process a single note through the full pipeline."""
@@ -108,7 +181,7 @@ class KGPipeline:
         # 2. Split into chunks
         chunks = await self.splitter.run(text=doc.text)
 
-        # 3. Embed chunks (no-op for now)
+        # 3. Embed chunks
         embedded_chunks = await self.embedder.run(text_chunks=chunks)
 
         # 4. Extract entities and relationships via LLM

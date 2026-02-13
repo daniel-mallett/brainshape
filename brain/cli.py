@@ -20,7 +20,7 @@ def _run_sync(db: GraphDB, pipeline: KGPipeline, args: list[str]) -> None:
         s = stats["structural"]
         sem = stats["semantic"]
         print(
-            f"  Structural: {s['notes']} updated, {s['skipped']} unchanged, "
+            f"  Structural: {s['notes']} notes, "
             f"{s['tags']} tag links, {s['links']} note links"
         )
         print(f"  Semantic: {sem['processed']} processed, {sem['skipped']} skipped")
@@ -29,10 +29,10 @@ def _run_sync(db: GraphDB, pipeline: KGPipeline, args: list[str]) -> None:
         stats = sync_semantic(db, pipeline, vault_path)
         print(f"  Processed: {stats['processed']}, Skipped: {stats['skipped']}")
     else:
-        print("Running structural sync (incremental)...")
+        print("Running structural sync...")
         stats = sync_structural(db, vault_path)
         print(
-            f"  {stats['notes']} updated, {stats['skipped']} unchanged, "
+            f"  {stats['notes']} notes, "
             f"{stats['tags']} tag links, {stats['links']} note links"
         )
 
@@ -58,7 +58,7 @@ def run_cli():
     print("Starting Brain...")
     agent, db, pipeline = create_brain_agent()
 
-    # Incremental structural sync on startup (only processes dirty files)
+    # Structural sync on startup
     vault_path = Path(settings.vault_path).expanduser()
     if vault_path.exists():
         notes = list(vault_path.rglob("*.md"))
@@ -66,7 +66,7 @@ def run_cli():
             print(f"Syncing vault from {vault_path} ({len(notes)} notes)...")
             stats = sync_structural(db, vault_path)
             print(
-                f"  {stats['notes']} updated, {stats['skipped']} unchanged, "
+                f"  {stats['notes']} notes, "
                 f"{stats['tags']} tag links, {stats['links']} note links"
             )
         else:

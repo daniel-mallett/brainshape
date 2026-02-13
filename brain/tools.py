@@ -35,11 +35,11 @@ def _sync_note_structural(db: GraphDB, note_data: dict) -> None:
     db.query(
         """
         MERGE (n {path: $path})
+        ON CREATE SET n.created_at = timestamp()
         SET n:Note, n:Document,
             n.title = $title,
             n.content = $content,
             n.modified_at = timestamp()
-        ON CREATE SET n.created_at = timestamp()
         """,
         {
             "path": note_data["path"],
@@ -61,9 +61,7 @@ def _sync_note_structural(db: GraphDB, note_data: dict) -> None:
         db.query(
             """
             MATCH (source:Note {path: $source_path})
-            MERGE (target:Note {title: $target_title})
-            ON CREATE SET target.path = $target_title + '.md',
-                         target.created_at = timestamp()
+            MATCH (target:Note {title: $target_title})
             MERGE (source)-[:LINKS_TO]->(target)
             """,
             {"source_path": note_data["path"], "target_title": link_title},

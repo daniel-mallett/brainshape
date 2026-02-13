@@ -43,7 +43,7 @@ def main():
         if args.structural:
             stats = sync_structural(db, vault_path)
             print(
-                f"Structural: {stats['notes']} updated, {stats['skipped']} unchanged, "
+                f"Structural: {stats['notes']} notes, "
                 f"{stats['tags']} tag links, {stats['links']} note links"
             )
         elif args.full:
@@ -51,7 +51,7 @@ def main():
             stats = sync_vault(db, pipeline, vault_path)
             s, sem = stats["structural"], stats["semantic"]
             print(
-                f"Structural: {s['notes']} updated, {s['skipped']} unchanged, "
+                f"Structural: {s['notes']} notes, "
                 f"{s['tags']} tag links, {s['links']} note links"
             )
             print(f"Semantic: {sem['processed']} processed, {sem['skipped']} skipped")

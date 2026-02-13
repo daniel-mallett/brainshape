@@ -41,7 +41,7 @@ The following tools were removed as unnecessary:
 
 ## Helper: _sync_note_structural()
 
-Shared by `create_note` and `edit_note`. Merges `:Note` and `:Document` labels onto a node by path, sets properties, and creates Tag/wikilink relationships. Uses `MERGE` for idempotent updates.
+Shared by `create_note` and `edit_note`. Merges `:Note` and `:Document` labels onto a node by path, sets properties, and creates Tag/wikilink relationships. Uses `MERGE` for idempotent node updates and `MATCH` (not `MERGE`) for wikilink targets to avoid creating placeholder nodes.
 
 ## System Prompt
 

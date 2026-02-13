@@ -24,10 +24,10 @@ main.py → brain/cli.py → brain/agent.py → tools → graph_db / obsidian / 
 
 ## Development Environment
 
-- Python 3.14 (managed via `.python-version`)
+- Python 3.13 (managed via `.python-version`)
 - Package management: uv (uses `pyproject.toml`, no `requirements.txt`)
 - Virtual environment: `.venv/`
-- Neo4j 5 via Docker
+- Neo4j 5 via Docker (with APOC plugin)
 
 ## Commands
 
@@ -44,6 +44,10 @@ main.py → brain/cli.py → brain/agent.py → tools → graph_db / obsidian / 
 ## Configuration
 
 Copy `.env.example` to `.env` and fill in `ANTHROPIC_API_KEY` and `VAULT_PATH`.
+
+**Known issue:** `.env` loading doesn't work for all dependencies — the Anthropic API key may need to be exported in your shell profile (e.g. `~/.zshrc`) as well.
+
+**HuggingFace auth:** The embedding model (`google/embeddinggemma-300m`) is gated. Users must accept the license at https://huggingface.co/google/embeddinggemma-300m and run `huggingface-cli login` once. This is a known friction point — switching to an ungated model or Ollama is planned.
 
 ## Security Principles
 

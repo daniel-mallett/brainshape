@@ -67,23 +67,18 @@ def sync_structural(db: GraphDB, vault_path: Path) -> dict:
 
     Uses a two-pass approach:
       Pass 1 — MERGE all note nodes (so every note exists before linking).
-      Pass 2 — Create tag and wikilink relationships for changed notes.
+      Pass 2 — Create tag and wikilink relationships.
                Wikilinks use MATCH (not MERGE) to avoid creating placeholder
                nodes with fabricated paths.
+
+    Runs on every note unconditionally — structural sync is cheap Cypher
+    queries, so hash-gating isn't worth the complexity.
     """
     notes = read_vault(vault_path)
-    hash_map = _get_stored_hashes(db)
-    stats = {"notes": 0, "tags": 0, "links": 0, "skipped": 0}
+    stats = {"notes": 0, "tags": 0, "links": 0}
 
     # Pass 1: MERGE all note nodes
-    changed_notes: list[dict] = []
     for note in notes:
-        file_hash = compute_file_hash(vault_path / note["path"])
-
-        if hash_map.get(note["path"]) == file_hash:
-            stats["skipped"] += 1
-            continue
-
         db.query(
             """
             MERGE (n {path: $path})
@@ -91,21 +86,18 @@ def sync_structural(db: GraphDB, vault_path: Path) -> dict:
             SET n:Note, n:Document,
                 n.title = $title,
                 n.content = $content,
-                n.content_hash = $content_hash,
                 n.modified_at = timestamp()
             """,
             {
                 "path": note["path"],
                 "title": note["title"],
                 "content": note["content"],
-                "content_hash": file_hash,
             },
         )
-        changed_notes.append(note)
         stats["notes"] += 1
 
-    # Pass 2: create relationships for changed notes
-    for note in changed_notes:
+    # Pass 2: create relationships
+    for note in notes:
         # Clear old structural relationships before re-creating
         db.query(
             "MATCH (n:Note {path: $path})-[r:TAGGED_WITH]->() DELETE r",

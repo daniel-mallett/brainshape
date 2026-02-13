@@ -37,10 +37,10 @@ The agent core (`agent.py`) is completely decoupled from any UI. `create_brain_a
 
 ## Sync Model
 
-Sync is incremental — files are tracked by SHA-256 content hash. Only dirty (changed) files are processed.
+Two independent sync layers with different cost profiles:
 
-- **Structural sync** (cheap): runs on CLI startup and via `/sync`. Parses tags, wikilinks, frontmatter from markdown files.
-- **Semantic sync** (expensive): runs via `/sync --full`, `/sync --semantic`, or overnight batch. Uses LLM to extract entities and relationships.
+- **Structural sync** (cheap, always current): runs on every CLI startup and via `/sync`. Processes every note unconditionally — parses tags, wikilinks, frontmatter from markdown files. No hash-gating because it's just Cypher queries.
+- **Semantic sync** (expensive, incremental): runs via `/sync --full`, `/sync --semantic`, or overnight batch. Uses LLM to extract entities and relationships. Tracked by SHA-256 content hash — only dirty (changed) files are processed.
 - **Batch processing**: `uv run python -m brain.batch` for cron/launchd jobs.
 
 ## Key Dependencies
@@ -50,7 +50,8 @@ Sync is incremental — files are tracked by SHA-256 content hash. Only dirty (c
 | `langchain` + `langchain-anthropic` | Agent framework, Claude model provider |
 | `langgraph` | `MemorySaver` for in-session conversation history |
 | `neo4j` | Python driver for Bolt protocol |
-| `neo4j-graphrag` (v1.1.0) | KG pipeline components (entity extraction, graph writing, entity resolution) |
+| `neo4j-graphrag` | KG pipeline components (entity extraction, graph writing, entity resolution) |
+| `sentence-transformers` | Local embedding model (EmbeddingGemma 300m, 768-dim) |
 | `anthropic` | Required by neo4j-graphrag's `AnthropicLLM` |
 | `python-frontmatter` | Parse YAML frontmatter from Obsidian markdown |
 | `pydantic-settings` + `python-dotenv` | Type-safe .env config |
