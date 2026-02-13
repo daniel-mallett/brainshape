@@ -13,12 +13,13 @@ main.py → brain/cli.py → brain/agent.py → tools → graph_db / obsidian / 
 ```
 
 - `brain/agent.py` — agent factory (`create_brain_agent()`), interface-agnostic
-- `brain/tools.py` — 9 LangChain tools (search, read, create, edit notes; query graph; remember/recall; sync; find related)
+- `brain/tools.py` — 6 LangChain tools (search, read, create, edit notes; query graph; find related)
 - `brain/graph_db.py` — Neo4j connection wrapper
 - `brain/obsidian.py` — vault reader/writer/parser (wikilinks, tags, frontmatter)
-- `brain/kg_pipeline.py` — neo4j-graphrag KG Builder for entity/relationship extraction
-- `brain/sync.py` — orchestrates structural + semantic sync from vault to graph
-- `brain/cli.py` — interactive CLI chat loop
+- `brain/kg_pipeline.py` — component-based KG pipeline for entity/relationship extraction
+- `brain/sync.py` — orchestrates incremental structural + semantic sync from vault to graph
+- `brain/cli.py` — interactive CLI chat loop with `/sync` commands
+- `brain/batch.py` — standalone batch sync entry point for cron/launchd
 - `brain/config.py` — pydantic-settings from .env
 
 ## Development Environment
@@ -33,6 +34,7 @@ main.py → brain/cli.py → brain/agent.py → tools → graph_db / obsidian / 
 - **Run**: `uv run main.py`
 - **Start Neo4j**: `docker compose up -d`
 - **Neo4j browser**: http://localhost:7474
+- **Batch sync**: `uv run python -m brain.batch` (semantic), `--structural`, or `--full`
 - **Add dependency**: `uv add <package>`
 - **Sync environment**: `uv sync`
 - **Lint**: `uv run ruff check`

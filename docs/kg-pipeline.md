@@ -1,95 +1,101 @@
-# KG Builder Pipeline
+# KG Pipeline
 
 ## Overview
 
-The knowledge graph is built using `neo4j-graphrag` v1.1.0's `SimpleKGPipeline`. It uses an LLM (Claude via `AnthropicLLM`) to extract entities and relationships from note content — producing a much richer graph than Obsidian's simple link-based visualization.
+The knowledge graph is built using individual components from `neo4j-graphrag` v1.1.0. The `KGPipeline` class in `brain/kg_pipeline.py` calls these components sequentially, giving full control over each step. This replaces the previous `SimpleKGPipeline` approach which was opaque and harder to customize.
 
 ## Pipeline Components
 
-### ObsidianLoader (custom DataLoader)
+### KGPipeline Class
 
-`brain/kg_pipeline.py:ObsidianLoader` is a custom `DataLoader` that reads Obsidian markdown files instead of PDFs. It returns `PdfDocument` (the library's expected return type) with:
-- `text`: the markdown file content
-- `document_info.path`: vault-relative path (e.g., `notes/meeting.md`)
-- `document_info.metadata`: includes the note title
-
-This is critical for the unified graph design — the `document_info.path` becomes the Document node's `id` and `path` property, which the structural sync later uses to merge the `:Note` label onto the same node.
-
-### SimpleKGPipeline Configuration
+The `KGPipeline` orchestrates 6 components called sequentially:
 
 ```python
-SimpleKGPipeline(
-    llm=AnthropicLLM(...),
-    driver=neo4j_driver,
-    embedder=NoOpEmbedder(),      # placeholder, swap for real embeddings later
-    entities=NODE_TYPES,           # Person, Concept, Project, etc.
-    relations=RELATIONSHIP_TYPES,  # RELATED_TO, WORKS_ON, etc.
-    potential_schema=PATTERNS,     # allowed (source, rel, target) triples
-    from_pdf=True,                 # True because we use ObsidianLoader
-    pdf_loader=ObsidianLoader(vault_path),
-    on_error="IGNORE",            # skip chunks where extraction fails
-    perform_entity_resolution=True, # merge duplicate entities
-)
+class KGPipeline:
+    def __init__(self, driver, vault_path):
+        self.loader = ObsidianLoader(vault_path)
+        self.splitter = FixedSizeSplitter(chunk_size=4000, chunk_overlap=200)
+        self.embedder = TextChunkEmbedder(embedder=NoOpEmbedder())
+        self.extractor = LLMEntityRelationExtractor(llm=llm, on_error=OnError.IGNORE)
+        self.writer = Neo4jWriter(driver=driver)
+        self.resolver = SinglePropertyExactMatchResolver(driver=driver)
+        self._schema = SchemaBuilder.create_schema_model(...)
 ```
-
-Key: `from_pdf=True` is set despite processing markdown, because this mode activates the loader → splitter → extractor pipeline that passes `document_info` through. With `from_pdf=False`, no `document_info` is passed and no Document nodes are created.
 
 ### Pipeline Flow
 
 ```
-ObsidianLoader (reads .md file)
-    ↓ text + document_info
-FixedSizeSplitter (chunks text)
-    ↓ text_chunks
-TextChunkEmbedder (embeds chunks — currently no-op)
-    ↓ embedded_chunks
-LLMEntityRelationExtractor (extracts entities + relationships via Claude)
+1. ObsidianLoader (reads .md file, provides vault-relative path as document_info)
+    ↓ PdfDocument (text + document_info)
+2. FixedSizeSplitter (splits text into 4000-char chunks with 200-char overlap)
+    ↓ TextChunks
+3. TextChunkEmbedder (embeds chunks — currently no-op)
+    ↓ TextChunks (with embedding metadata)
+4. LLMEntityRelationExtractor (extracts entities + relationships via Claude)
     ↓ Neo4jGraph (Document + Chunk + Entity nodes, all relationships)
-Neo4jWriter (writes to Neo4j)
+5. Neo4jWriter (writes to Neo4j)
     ↓
-SinglePropertyExactMatchResolver (merges duplicate entities by name)
+6. SinglePropertyExactMatchResolver (merges duplicate entities by name)
 ```
 
-### What the Extractor Creates
+### ObsidianLoader (custom DataLoader)
 
-When `document_info` is provided (which our ObsidianLoader ensures):
+Reads Obsidian markdown files and returns `PdfDocument` with:
+- `text`: the markdown file content
+- `document_info.path`: vault-relative path (e.g., `notes/meeting.md`)
+- `document_info.metadata`: includes the note title
+
+The vault-relative `document_info.path` becomes the Document node's `id` and `path` property, which the structural sync uses to merge the `:Note` label onto the same node.
+
+### Schema Configuration
+
+Schema is built once at `KGPipeline.__init__` using `SchemaBuilder.create_schema_model()`:
+
+```python
+ENTITY_TYPES = [
+    SchemaEntity(label="Person"),
+    SchemaEntity(label="Concept"),
+    SchemaEntity(label="Project"),
+    SchemaEntity(label="Location"),
+    SchemaEntity(label="Event"),
+    SchemaEntity(label="Tool"),
+    SchemaEntity(label="Organization"),
+]
+
+RELATION_TYPES = [
+    SchemaRelation(label="RELATED_TO"),
+    SchemaRelation(label="WORKS_ON"),
+    SchemaRelation(label="USES"),
+    SchemaRelation(label="LOCATED_IN"),
+    SchemaRelation(label="PART_OF"),
+    SchemaRelation(label="CREATED_BY"),
+]
+
+PATTERNS = [
+    ("Person", "WORKS_ON", "Project"),
+    ("Person", "USES", "Tool"),
+    ...
+]
+```
+
+The `PATTERNS` list constrains which relationships the LLM can extract between entity types.
+
+### What the Pipeline Creates
+
 1. **Document node** with `id = document_info.path` (vault-relative)
 2. **Chunk nodes** linked to Document via `FROM_DOCUMENT`
 3. **Chunk → Chunk** via `NEXT_CHUNK` (document flow)
 4. **Entity nodes** (Person, Concept, etc.) linked to Chunks via `FROM_CHUNK`
 5. **Entity → Entity** relationships (WORKS_ON, RELATED_TO, etc.)
 
-### Process Functions
+## Why Component-Based
 
-- `process_note(pipeline, file_path)` — synchronous, processes one note file
-- `process_note_async(pipeline, file_path)` — async version
+The component-based approach (vs `SimpleKGPipeline`) provides:
+- **Control over each step** — can intercept, modify, or skip individual stages
+- **Future batch API integration** — components can be swapped to use Anthropic Batch API
+- **Better error handling** — can handle failures per-component instead of per-pipeline
+- **Incremental processing** — pairs with content-hash-based change detection in `sync.py`
 
-## Reference Implementation
+## Embeddings (Placeholder)
 
-A more advanced KG pipeline exists at `/Users/dmallett/Developer/ambition/ahi/kg/pipeline.py`. Key differences:
-- Uses a **newer version** of neo4j-graphrag with `LexicalGraphBuilder` as a standalone component
-- Builds pipeline from **individual components** instead of `SimpleKGPipeline` (more control)
-- Uses **Anthropic Batch API** for 50% cost discount on bulk processing
-- Uses **SentenceTransformerEmbeddings** for real vector embeddings
-- Includes **preflight checks** (Neo4j connectivity, APOC plugin, LLM, embedder)
-- Has **post-processing** to create document-level edges (e.g., `ATTENDED`)
-- Includes **GraphPruning** to enforce schema constraints
-- Supports **incremental processing** (skip already-processed documents)
-
-When upgrading neo4j-graphrag to a newer version, consider migrating to the component-based approach for more control.
-
-## Entity Schema Design
-
-The schema is intentionally broad for a personal notes use case:
-
-| Entity Type | Description |
-|------------|-------------|
-| Person | People mentioned in notes |
-| Concept | Abstract ideas, topics, themes |
-| Project | Work projects, side projects, initiatives |
-| Location | Places, cities, countries |
-| Event | Meetings, conferences, milestones |
-| Tool | Software, languages, frameworks |
-| Organization | Companies, teams, groups |
-
-The `PATTERNS` list constrains which relationships the LLM can extract between entity types. This prevents hallucinated connections while still allowing rich extraction.
+Currently using `NoOpEmbedder` (returns zero vectors) to satisfy the embedder requirement without pulling in `torch` (~2GB). Entity extraction uses the LLM, not embeddings. Swap in `SentenceTransformerEmbeddings` or an API embedder later for vector-based semantic search over chunks.

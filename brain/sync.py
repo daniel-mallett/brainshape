@@ -1,20 +1,27 @@
 from pathlib import Path
 
 from brain.graph_db import GraphDB
-from brain.kg_pipeline import SimpleKGPipeline, process_note
-from brain.obsidian import list_notes, read_vault
+from brain.kg_pipeline import KGPipeline
+from brain.obsidian import compute_file_hash, list_notes, read_vault
+
+
+def _get_stored_hashes(db: GraphDB) -> dict[str, str]:
+    """Batch-fetch all stored content hashes from Neo4j."""
+    results = db.query("MATCH (n:Note) RETURN n.path AS path, n.content_hash AS hash")
+    return {r["path"]: r["hash"] for r in results if r["hash"]}
 
 
 def sync_semantic(
-    pipeline: SimpleKGPipeline, vault_path: Path
+    db: GraphDB, pipeline: KGPipeline, vault_path: Path
 ) -> dict:
-    """Run KG Builder pipeline to extract entities and relationships from note content.
+    """Run KG pipeline to extract entities and relationships from note content.
 
-    Creates Document nodes (keyed by vault-relative path), Chunk nodes,
-    and Entity nodes with relationships. Runs FIRST so that structural
-    sync can merge the :Note label onto the Document nodes.
+    Only processes files whose content has changed since last processing
+    (compared via SHA-256 content hash). For changed notes, clears old
+    Chunks and extracted entities before re-processing to avoid duplicates.
     """
     note_files = list_notes(vault_path)
+    hash_map = _get_stored_hashes(db)
     stats = {"processed": 0, "skipped": 0}
 
     for file_path in note_files:
@@ -23,8 +30,30 @@ def sync_semantic(
             stats["skipped"] += 1
             continue
 
+        relative_path = str(file_path.relative_to(vault_path))
+        file_hash = compute_file_hash(file_path)
+
+        if hash_map.get(relative_path) == file_hash:
+            stats["skipped"] += 1
+            continue
+
+        # Clear old semantic data for this note before re-processing
+        db.query(
+            """
+            MATCH (d:Document {path: $path})<-[:FROM_DOCUMENT]-(c:Chunk)
+            OPTIONAL MATCH (c)<-[:FROM_CHUNK]-(e)
+            DETACH DELETE c, e
+            """,
+            {"path": relative_path},
+        )
+
         try:
-            process_note(pipeline, str(file_path))
+            pipeline.run(str(file_path))
+            # Store the content hash on the Document node
+            db.query(
+                "MATCH (n:Document {path: $path}) SET n.content_hash = $hash",
+                {"path": relative_path, "hash": file_hash},
+            )
             stats["processed"] += 1
         except Exception as e:
             print(f"  Warning: failed to process '{file_path.stem}': {e}")
@@ -36,38 +65,58 @@ def sync_semantic(
 def sync_structural(db: GraphDB, vault_path: Path) -> dict:
     """Add :Note label, properties, and structural relationships to Document nodes.
 
-    The KG Builder creates (:Document {path}) nodes. This step:
-    1. Adds the :Note label and sets title/content properties
-    2. Creates Tag nodes and TAGGED_WITH relationships
-    3. Creates LINKS_TO relationships from wikilinks
-
-    For notes not yet processed by the KG Builder, creates standalone
-    :Note nodes (they'll gain :Document on next semantic sync).
+    Uses a two-pass approach:
+      Pass 1 — MERGE all note nodes (so every note exists before linking).
+      Pass 2 — Create tag and wikilink relationships for changed notes.
+               Wikilinks use MATCH (not MERGE) to avoid creating placeholder
+               nodes with fabricated paths.
     """
     notes = read_vault(vault_path)
-    stats = {"notes": 0, "tags": 0, "links": 0}
+    hash_map = _get_stored_hashes(db)
+    stats = {"notes": 0, "tags": 0, "links": 0, "skipped": 0}
 
+    # Pass 1: MERGE all note nodes
+    changed_notes: list[dict] = []
     for note in notes:
-        # Merge onto existing Document node (from KG Builder) or create new.
-        # Adds :Note label either way.
+        file_hash = compute_file_hash(vault_path / note["path"])
+
+        if hash_map.get(note["path"]) == file_hash:
+            stats["skipped"] += 1
+            continue
+
         db.query(
             """
             MERGE (n {path: $path})
+            ON CREATE SET n.created_at = timestamp()
             SET n:Note, n:Document,
                 n.title = $title,
                 n.content = $content,
+                n.content_hash = $content_hash,
                 n.modified_at = timestamp()
-            ON CREATE SET n.created_at = timestamp()
             """,
             {
                 "path": note["path"],
                 "title": note["title"],
                 "content": note["content"],
+                "content_hash": file_hash,
             },
         )
+        changed_notes.append(note)
         stats["notes"] += 1
 
-        # Upsert tags and relationships
+    # Pass 2: create relationships for changed notes
+    for note in changed_notes:
+        # Clear old structural relationships before re-creating
+        db.query(
+            "MATCH (n:Note {path: $path})-[r:TAGGED_WITH]->() DELETE r",
+            {"path": note["path"]},
+        )
+        db.query(
+            "MATCH (n:Note {path: $path})-[r:LINKS_TO]->() DELETE r",
+            {"path": note["path"]},
+        )
+
+        # Create tag relationships
         for tag in note["tags"]:
             db.query(
                 """
@@ -80,14 +129,12 @@ def sync_structural(db: GraphDB, vault_path: Path) -> dict:
             )
             stats["tags"] += 1
 
-        # Upsert wikilink relationships
+        # Create wikilink relationships (MATCH only — no placeholder nodes)
         for link_title in note["links"]:
             db.query(
                 """
                 MATCH (source:Note {path: $source_path})
-                MERGE (target:Note {title: $target_title})
-                ON CREATE SET target.path = $target_title + '.md',
-                             target.created_at = timestamp()
+                MATCH (target:Note {title: $target_title})
                 MERGE (source)-[:LINKS_TO]->(target)
                 """,
                 {
@@ -102,11 +149,12 @@ def sync_structural(db: GraphDB, vault_path: Path) -> dict:
 
 def sync_vault(
     db: GraphDB,
-    pipeline: SimpleKGPipeline,
+    pipeline: KGPipeline,
     vault_path: Path,
 ) -> dict:
     """Full vault sync: semantic first (creates Document nodes), then structural
-    (adds :Note label, tags, wikilinks onto those same nodes)."""
-    semantic = sync_semantic(pipeline, vault_path)
+    (adds :Note label, tags, wikilinks onto those same nodes).
+    Both steps are incremental — only dirty files are processed."""
+    semantic = sync_semantic(db, pipeline, vault_path)
     structural = sync_structural(db, vault_path)
     return {"structural": structural, "semantic": semantic}

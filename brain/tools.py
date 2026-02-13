@@ -1,19 +1,16 @@
-import uuid
 from pathlib import Path
 
 from brain.config import settings
 from brain.graph_db import GraphDB
-from brain.kg_pipeline import SimpleKGPipeline, process_note
-from brain.obsidian import edit_note as _edit_note
-from brain.obsidian import parse_note, write_note
-from brain.sync import sync_vault
+from brain.kg_pipeline import KGPipeline
+from brain.obsidian import parse_note, rewrite_note, write_note
 
 # Module-level references, initialized via init_tools()
 _db: GraphDB | None = None
-_pipeline: SimpleKGPipeline | None = None
+_pipeline: KGPipeline | None = None
 
 
-def init_tools(db: GraphDB, pipeline: SimpleKGPipeline) -> None:
+def init_tools(db: GraphDB, pipeline: KGPipeline) -> None:
     global _db, _pipeline
     _db = db
     _pipeline = pipeline
@@ -24,7 +21,7 @@ def _get_db() -> GraphDB:
     return _db
 
 
-def _get_pipeline() -> SimpleKGPipeline:
+def _get_pipeline() -> KGPipeline:
     assert _pipeline is not None, "Tools not initialized. Call init_tools() first."
     return _pipeline
 
@@ -123,7 +120,7 @@ def create_note(title: str, content: str, tags: str = "") -> str:
 
     # Semantic extraction first (creates Document + Chunk + Entity nodes)
     try:
-        process_note(pipeline, str(file_path))
+        pipeline.run(str(file_path))
     except Exception as e:
         return (
             f"Created note '{title}' at {file_path} "
@@ -147,13 +144,13 @@ def edit_note(title: str, new_content: str) -> str:
     vault_path = _vault_path()
 
     try:
-        file_path = _edit_note(vault_path, title, new_content)
+        file_path = rewrite_note(vault_path, title, new_content)
     except FileNotFoundError as e:
         return str(e)
 
     # Re-run semantic extraction
     try:
-        process_note(pipeline, str(file_path))
+        pipeline.run(str(file_path))
     except Exception:
         pass
 
@@ -193,74 +190,6 @@ def query_graph(cypher: str) -> str:
         return "\n".join(lines)
     except Exception as e:
         return f"Cypher query error: {e}"
-
-
-def remember(content: str, memory_type: str = "fact") -> str:
-    """Store a memory (fact, preference, or instruction) in the knowledge graph.
-    memory_type must be one of: fact, preference, instruction.
-    Use this to remember things the user tells you about themselves,
-    their preferences, or instructions for how to behave."""
-    db = _get_db()
-    if memory_type not in ("fact", "preference", "instruction"):
-        memory_type = "fact"
-    memory_id = str(uuid.uuid4())
-    db.query(
-        """
-        CREATE (m:Memory {
-            id: $id,
-            type: $type,
-            content: $content,
-            created_at: timestamp()
-        })
-        """,
-        {"id": memory_id, "type": memory_type, "content": content},
-    )
-    return f"Remembered: {content}"
-
-
-def recall_memories(query: str = "") -> str:
-    """Recall stored memories. Optionally filter by a keyword query.
-    Returns all agent memories (facts, preferences, instructions)."""
-    db = _get_db()
-    if query:
-        results = db.query(
-            """
-            MATCH (m:Memory)
-            WHERE m.content CONTAINS $query
-            RETURN m.type AS type, m.content AS content,
-                   m.created_at AS created_at
-            ORDER BY m.created_at DESC LIMIT 20
-            """,
-            {"query": query},
-        )
-    else:
-        results = db.query(
-            """
-            MATCH (m:Memory)
-            RETURN m.type AS type, m.content AS content,
-                   m.created_at AS created_at
-            ORDER BY m.created_at DESC LIMIT 20
-            """
-        )
-    if not results:
-        return "No memories found."
-    return "\n".join(f"[{r['type']}] {r['content']}" for r in results)
-
-
-def sync_vault_tool() -> str:
-    """Re-sync the Obsidian vault into the knowledge graph.
-    Run this after notes have been updated outside of Brain."""
-    db = _get_db()
-    pipeline = _get_pipeline()
-    vault_path = _vault_path()
-    stats = sync_vault(db, pipeline, vault_path)
-    s = stats["structural"]
-    sem = stats["semantic"]
-    return (
-        f"Vault synced: {s['notes']} notes, {s['tags']} tag links, "
-        f"{s['links']} note links. "
-        f"Semantic: {sem['processed']} processed, {sem['skipped']} skipped."
-    )
 
 
 def find_related(entity_name: str) -> str:

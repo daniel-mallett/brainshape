@@ -4,48 +4,26 @@ from typing import Optional
 
 import neo4j
 from neo4j_graphrag.embeddings.base import Embedder
+from neo4j_graphrag.experimental.components.embedder import TextChunkEmbedder
+from neo4j_graphrag.experimental.components.entity_relation_extractor import (
+    LLMEntityRelationExtractor,
+    OnError,
+)
+from neo4j_graphrag.experimental.components.kg_writer import Neo4jWriter
 from neo4j_graphrag.experimental.components.pdf_loader import (
     DataLoader,
     DocumentInfo,
     PdfDocument,
 )
-from neo4j_graphrag.experimental.pipeline.kg_builder import SimpleKGPipeline
+from neo4j_graphrag.experimental.components.resolver import (
+    SinglePropertyExactMatchResolver,
+)
+from neo4j_graphrag.experimental.components.text_splitters.fixed_size_splitter import (
+    FixedSizeSplitter,
+)
 from neo4j_graphrag.llm import AnthropicLLM
 
 from brain.config import settings
-
-# Entity types and relationships to extract from notes
-NODE_TYPES = [
-    "Person",
-    "Concept",
-    "Project",
-    "Location",
-    "Event",
-    "Tool",
-    "Organization",
-]
-
-RELATIONSHIP_TYPES = [
-    "RELATED_TO",
-    "WORKS_ON",
-    "USES",
-    "LOCATED_IN",
-    "PART_OF",
-    "CREATED_BY",
-]
-
-PATTERNS = [
-    ("Person", "WORKS_ON", "Project"),
-    ("Person", "USES", "Tool"),
-    ("Person", "PART_OF", "Organization"),
-    ("Project", "USES", "Tool"),
-    ("Event", "LOCATED_IN", "Location"),
-    ("Concept", "RELATED_TO", "Concept"),
-    ("Person", "RELATED_TO", "Person"),
-    ("Project", "RELATED_TO", "Concept"),
-    ("Organization", "LOCATED_IN", "Location"),
-    ("Person", "CREATED_BY", "Organization"),
-]
 
 
 class NoOpEmbedder(Embedder):
@@ -63,11 +41,11 @@ class NoOpEmbedder(Embedder):
 
 
 class ObsidianLoader(DataLoader):
-    """Loads Obsidian markdown files for the KG Builder pipeline.
+    """Loads Obsidian markdown files for the KG pipeline.
 
     Reads the .md file and returns its content with document metadata
-    containing the vault-relative path. This ensures the KG Builder
-    creates Document nodes with stable, device-independent paths.
+    containing the vault-relative path. This ensures Document nodes
+    have stable, device-independent paths.
     """
 
     def __init__(self, vault_path: Path):
@@ -92,39 +70,64 @@ class ObsidianLoader(DataLoader):
         )
 
 
-def create_kg_pipeline(
-    driver: neo4j.Driver, vault_path: Path
-) -> SimpleKGPipeline:
-    """Create a KG Builder pipeline for processing Obsidian notes."""
-    llm = AnthropicLLM(
-        model_name=settings.model_name,
-        model_params={"max_tokens": 2000},
-        api_key=settings.anthropic_api_key,
-    )
+class KGPipeline:
+    """Component-based KG pipeline for processing Obsidian notes.
 
-    return SimpleKGPipeline(
-        llm=llm,
-        driver=driver,
-        embedder=NoOpEmbedder(),
-        entities=NODE_TYPES,
-        relations=RELATIONSHIP_TYPES,
-        potential_schema=PATTERNS,
-        from_pdf=True,
-        pdf_loader=ObsidianLoader(vault_path),
-        on_error="IGNORE",
-        perform_entity_resolution=True,
-    )
+    Uses individual neo4j-graphrag components called sequentially,
+    giving full control over each step (vs SimpleKGPipeline's opaque
+    orchestration). This enables future batch API integration,
+    custom error handling, and incremental processing.
+    """
+
+    def __init__(self, driver: neo4j.Driver, vault_path: Path):
+        self.driver = driver
+        self.vault_path = vault_path
+
+        llm = AnthropicLLM(
+            model_name=settings.model_name,
+            model_params={"max_tokens": 2000},
+            api_key=settings.anthropic_api_key,
+        )
+
+        self.loader = ObsidianLoader(vault_path)
+        self.splitter = FixedSizeSplitter(chunk_size=4000, chunk_overlap=200)
+        self.embedder = TextChunkEmbedder(embedder=NoOpEmbedder())
+        self.extractor = LLMEntityRelationExtractor(
+            llm=llm,
+            on_error=OnError.IGNORE,
+            create_lexical_graph=True,
+        )
+        self.writer = Neo4jWriter(driver=driver)
+        self.resolver = SinglePropertyExactMatchResolver(driver=driver)
+
+    async def run_async(self, file_path: str) -> None:
+        """Process a single note through the full pipeline."""
+        # 1. Load the file
+        doc = await self.loader.run(filepath=Path(file_path))
+
+        # 2. Split into chunks
+        chunks = await self.splitter.run(text=doc.text)
+
+        # 3. Embed chunks (no-op for now)
+        embedded_chunks = await self.embedder.run(text_chunks=chunks)
+
+        # 4. Extract entities and relationships via LLM
+        graph = await self.extractor.run(
+            chunks=embedded_chunks,
+            document_info=doc.document_info,
+        )
+
+        # 5. Write to Neo4j
+        await self.writer.run(graph=graph)
+
+        # 6. Resolve duplicate entities
+        await self.resolver.run()
+
+    def run(self, file_path: str) -> None:
+        """Synchronous wrapper for processing a single note."""
+        asyncio.run(self.run_async(file_path))
 
 
-async def process_note_async(
-    pipeline: SimpleKGPipeline, file_path: str
-) -> None:
-    """Process a single note file through the KG pipeline."""
-    await pipeline.run_async(file_path=file_path)
-
-
-def process_note(
-    pipeline: SimpleKGPipeline, file_path: str
-) -> None:
-    """Synchronous wrapper for processing a single note."""
-    asyncio.run(process_note_async(pipeline, file_path))
+def create_kg_pipeline(driver: neo4j.Driver, vault_path: Path) -> KGPipeline:
+    """Create a KG pipeline for processing Obsidian notes."""
+    return KGPipeline(driver, vault_path)

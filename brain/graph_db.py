@@ -28,6 +28,7 @@ class GraphDB:
             "CREATE CONSTRAINT tag_name IF NOT EXISTS FOR (t:Tag) REQUIRE t.name IS UNIQUE",
             "CREATE CONSTRAINT memory_id IF NOT EXISTS FOR (m:Memory) REQUIRE m.id IS UNIQUE",
             "CREATE INDEX note_title IF NOT EXISTS FOR (n:Note) ON (n.title)",
+            "CREATE INDEX note_content_hash IF NOT EXISTS FOR (n:Note) ON (n.content_hash)",
             "CREATE FULLTEXT INDEX note_content IF NOT EXISTS"
             " FOR (n:Note) ON EACH [n.content, n.title]",
         ]

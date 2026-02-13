@@ -20,8 +20,6 @@ The agent's tools (`tools.py`) call these pre-authenticated clients. They never 
 | search_notes, read_note | Read notes from graph (not filesystem) | Low — only sees note content |
 | create_note, edit_note | Write to vault directory only | Low — scoped to vault_path |
 | query_graph | Arbitrary Cypher on Neo4j | Low — Neo4j has no env vars |
-| remember, recall_memories | Read/write Memory nodes | Low — agent's own data |
-| sync_vault_tool | Read vault files, write to graph | Low — scoped to vault_path |
 | find_related | Read graph | Low |
 
 ## Future Risks

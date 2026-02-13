@@ -1,3 +1,4 @@
+import hashlib
 import re
 from pathlib import Path
 
@@ -5,6 +6,11 @@ import frontmatter
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
 TAG_RE = re.compile(r"(?:^|\s)#([a-zA-Z][\w/-]*)", re.MULTILINE)
+
+
+def compute_file_hash(file_path: Path) -> str:
+    """SHA-256 hash of a file's raw content."""
+    return hashlib.sha256(file_path.read_bytes()).hexdigest()
 
 
 def parse_note(file_path: Path, vault_path: Path) -> dict:
@@ -18,7 +24,7 @@ def parse_note(file_path: Path, vault_path: Path) -> dict:
     metadata = dict(post.metadata)
 
     # Extract wikilinks: [[Page Name]] or [[Page Name|display text]]
-    links = WIKILINK_RE.findall(content)
+    links = [link.split("/")[-1] for link in WIKILINK_RE.findall(content)]
 
     # Extract tags from content body
     body_tags = TAG_RE.findall(content)
@@ -70,8 +76,8 @@ def write_note(
     return file_path
 
 
-def edit_note(vault_path: Path, title: str, new_content: str) -> Path:
-    """Edit an existing note, preserving frontmatter keys not related to content.
+def rewrite_note(vault_path: Path, title: str, new_content: str) -> Path:
+    """Rewrite an existing note's content, preserving frontmatter.
     Returns the file path, or raises FileNotFoundError."""
     file_path = vault_path / f"{title}.md"
     if not file_path.exists():
