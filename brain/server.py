@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Brain", lifespan=lifespan)
 
 app.add_middleware(
-    CORSMiddleware,
+    CORSMiddleware,  # type: ignore[arg-type]  # Starlette middleware typing is too strict for ty
     allow_origins=[
         "http://localhost:1420",
         "http://localhost:5173",
