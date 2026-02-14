@@ -1,12 +1,30 @@
 import pytest
 
 from brain.obsidian import (
+    _ensure_within_vault,
     compute_file_hash,
     list_notes,
     parse_note,
     rewrite_note,
     write_note,
 )
+
+
+class TestEnsureWithinVault:
+    def test_valid_path(self, tmp_path):
+        child = tmp_path / "notes" / "hello.md"
+        child.parent.mkdir()
+        child.touch()
+        result = _ensure_within_vault(tmp_path, child)
+        assert result.is_relative_to(tmp_path.resolve())
+
+    def test_rejects_parent_traversal(self, tmp_path):
+        with pytest.raises(ValueError, match="escapes vault"):
+            _ensure_within_vault(tmp_path, tmp_path / ".." / "etc" / "passwd")
+
+    def test_rejects_absolute_escape(self, tmp_path):
+        with pytest.raises(ValueError, match="escapes vault"):
+            _ensure_within_vault(tmp_path, tmp_path / ".." / ".." / "tmp" / "evil.md")
 
 
 class TestComputeFileHash:
@@ -124,6 +142,14 @@ class TestWriteNote:
         text = path.read_text()
         assert "author: Dan" in text
 
+    def test_rejects_folder_traversal(self, tmp_path):
+        with pytest.raises(ValueError, match="escapes vault"):
+            write_note(tmp_path, "evil", "pwned", folder="../../etc")
+
+    def test_rejects_title_traversal(self, tmp_path):
+        with pytest.raises(ValueError, match="escapes vault"):
+            write_note(tmp_path, "../../../etc/cron.d/backdoor", "pwned")
+
 
 class TestRewriteNote:
     def test_preserves_frontmatter(self, tmp_path):
@@ -160,3 +186,11 @@ class TestRewriteNote:
         path = rewrite_note(tmp_path, "Deep", "Updated", relative_path="sub/Deep.md")
         assert path.exists()
         assert "Updated" in path.read_text()
+
+    def test_rejects_relative_path_traversal(self, tmp_path):
+        with pytest.raises(ValueError, match="escapes vault"):
+            rewrite_note(tmp_path, "evil", "pwned", relative_path="../../.bashrc")
+
+    def test_rejects_title_traversal(self, tmp_path):
+        with pytest.raises(ValueError, match="escapes vault"):
+            rewrite_note(tmp_path, "../../../evil", "pwned")
