@@ -1,6 +1,6 @@
 import pytest
 
-from brain.obsidian import (
+from brain.vault import (
     _ensure_within_vault,
     compute_file_hash,
     list_notes,

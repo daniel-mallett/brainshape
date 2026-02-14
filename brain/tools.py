@@ -5,7 +5,7 @@ from langchain_core.tools import tool
 from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline
-from brain.obsidian import parse_note, rewrite_note, write_note
+from brain.vault import parse_note, rewrite_note, write_note
 
 # Set by create_brain_agent() before tools are used
 db: GraphDB = None  # type: ignore[assignment]
@@ -116,7 +116,7 @@ def read_note(title: str) -> str:
 
 @tool
 def create_note(title: str, content: str, tags: str = "", folder: str = "") -> str:
-    """Create a new note in the Obsidian vault and sync it to the knowledge graph.
+    """Create a new note in the vault and sync it to the knowledge graph.
     Tags should be comma-separated (e.g., 'project,ideas,important').
     Folder is the subdirectory within the vault (e.g., 'Notes', 'Projects/2026').
     If empty, the note is created at the vault root."""
@@ -141,7 +141,7 @@ def create_note(title: str, content: str, tags: str = "", folder: str = "") -> s
 
 @tool
 def edit_note(title: str, new_content: str) -> str:
-    """Edit an existing note in the Obsidian vault. Rewrites the note content
+    """Edit an existing note in the vault. Rewrites the note content
     while preserving frontmatter. Use this to clean up rough notes, improve
     formatting, add wikilinks, or expand content with context from the
     knowledge graph."""

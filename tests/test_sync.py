@@ -47,7 +47,7 @@ class TestSyncSemantic:
         db = MagicMock()
         pipeline = MagicMock()
         # Precompute hashes so everything appears unchanged
-        from brain.obsidian import compute_file_hash, list_notes
+        from brain.vault import compute_file_hash, list_notes
 
         hashes = {}
         for f in list_notes(tmp_vault):

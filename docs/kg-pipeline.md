@@ -13,7 +13,7 @@ The `KGPipeline` orchestrates 6 components called sequentially:
 ```python
 class KGPipeline:
     def __init__(self, driver, vault_path):
-        self.loader = ObsidianLoader(vault_path)
+        self.loader = VaultLoader(vault_path)
         self.splitter = FixedSizeSplitter(chunk_size=4000, chunk_overlap=200)
         self.embedder = TextChunkEmbedder(embedder=SentenceTransformerEmbeddings(...))
         self.extractor = LLMEntityRelationExtractor(llm=llm, on_error=OnError.IGNORE)
@@ -24,7 +24,7 @@ class KGPipeline:
 ### Pipeline Flow
 
 ```
-1. ObsidianLoader (reads .md file, provides vault-relative path as document_info)
+1. VaultLoader (reads .md file, provides vault-relative path as document_info)
     ↓ PdfDocument (text + document_info)
 2. FixedSizeSplitter (splits text into 4000-char chunks with 200-char overlap)
     ↓ TextChunks
@@ -37,9 +37,9 @@ class KGPipeline:
 6. SinglePropertyExactMatchResolver (merges duplicate entities by name)
 ```
 
-### ObsidianLoader (custom DataLoader)
+### VaultLoader (custom DataLoader)
 
-Reads Obsidian markdown files and returns `PdfDocument` with:
+Reads markdown files from the vault and returns `PdfDocument` with:
 - `text`: the markdown file content
 - `document_info.path`: vault-relative path (e.g., `notes/meeting.md`)
 - `document_info.metadata`: includes the note title

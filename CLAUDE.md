@@ -4,18 +4,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-"Brain" is a personal second-brain agent with knowledge graph memory. It connects an Obsidian vault to a Neo4j knowledge graph, allowing an AI agent to read/search/create/edit notes and maintain its own long-term memory.
+"Brain" is a personal second-brain agent with knowledge graph memory. It connects a markdown note vault to a Neo4j knowledge graph, allowing an AI agent to read/search/create/edit notes and maintain its own long-term memory. It includes a standalone desktop app (Tauri 2 + React) and a FastAPI backend server.
 
 ## Architecture
 
 ```
-main.py → brain/cli.py → brain/agent.py → tools → graph_db / obsidian / kg_pipeline
+brain/                    # Python backend
+├── server.py             # FastAPI (HTTP + SSE) — desktop app backend
+├── agent.py → tools → graph_db / vault / kg_pipeline
+
+desktop/                  # Tauri 2 + React + TypeScript
+├── src/components/       # Editor (CodeMirror 6 + vim), Chat (SSE), Sidebar, SyncStatus
+├── src/lib/              # API client, useAgentStream hook
+└── src-tauri/            # Rust shell
 ```
 
 - `brain/agent.py` — agent factory (`create_brain_agent()`), interface-agnostic
 - `brain/tools.py` — 7 LangChain tools (search, semantic search, read, create, edit notes; query graph; find related)
 - `brain/graph_db.py` — Neo4j connection wrapper
-- `brain/obsidian.py` — vault reader/writer/parser (wikilinks, tags, frontmatter)
+- `brain/vault.py` — vault reader/writer/parser (wikilinks, tags, frontmatter)
+- `brain/server.py` — FastAPI server (HTTP + SSE) for desktop app
 - `brain/kg_pipeline.py` — component-based KG pipeline for entity/relationship extraction
 - `brain/sync.py` — orchestrates incremental structural + semantic sync from vault to graph
 - `brain/cli.py` — interactive CLI chat loop with `/sync` commands
@@ -29,19 +37,32 @@ main.py → brain/cli.py → brain/agent.py → tools → graph_db / obsidian / 
 - Package management: uv (uses `pyproject.toml`, no `requirements.txt`)
 - Virtual environment: `.venv/`
 - Neo4j 5 via Docker (with APOC plugin)
+- Node.js 20+ / npm (for desktop frontend)
+- Rust / Cargo (for Tauri shell)
 
 ## Commands
 
-- **Run**: `uv run main.py`
+### Full Dev Environment
+- **Start everything**: `./scripts/dev.sh` (starts Neo4j + Python server + Tauri app, Ctrl+C stops all)
+
+### Python Backend
+- **Run CLI**: `uv run main.py`
+- **Run server**: `uv run python -m brain.server` (starts FastAPI on port 8765)
 - **Start Neo4j**: `docker compose up -d`
 - **Neo4j browser**: http://localhost:7474
 - **Batch sync**: `uv run python -m brain.batch` (semantic), `--structural`, or `--full`
-- **Test**: `uv run pytest` (all tests), `uv run pytest -v` (verbose), `uv run pytest tests/test_obsidian.py` (single file)
+- **Test**: `uv run pytest` (all tests), `uv run pytest -v` (verbose), `uv run pytest tests/test_vault.py` (single file)
 - **Lint**: `uv run ruff check`
 - **Lint fix**: `uv run ruff check --fix`
 - **Type check**: `uv run ty check`
 - **Pre-commit (install)**: `uv run pre-commit install`
 - **Pre-commit (run manually)**: `uv run pre-commit run --all-files`
+
+### Desktop App
+- **Dev mode**: `cd desktop && npm run tauri dev` (requires Python server running separately)
+- **Frontend only**: `cd desktop && npm run dev` (Vite dev server on port 1420)
+- **Type check frontend**: `cd desktop && npx tsc --noEmit`
+- **Build**: `cd desktop && npm run tauri build`
 
 ## CI & Pre-commit
 
@@ -87,7 +108,7 @@ Copy `.env.example` to `.env` and fill in `ANTHROPIC_API_KEY` and `VAULT_PATH`.
 Unit tests live in `tests/`. All external dependencies (Neo4j, Anthropic, HuggingFace) are mocked — no Docker or network access required to run tests.
 
 - `tests/conftest.py` — shared fixtures (`mock_db`, `mock_pipeline`, `tmp_vault`, `vault_settings`)
-- Tests cover: obsidian parsing/writing, config, graph_db, all 7 tools, sync logic, kg_pipeline components
+- Tests cover: vault parsing/writing, config, graph_db, all 7 tools, sync logic, kg_pipeline components, server endpoints
 
 When adding new functionality, add corresponding tests. When fixing bugs, add a regression test.
 

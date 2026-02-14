@@ -1,10 +1,10 @@
-# Obsidian Integration
+# Vault Integration
 
 ## How It Works
 
-Obsidian stores notes as plain markdown files on disk. There is **no Obsidian API** to access the graph view — it's just a visualization layer on top of the file structure. We read the files directly, which gives us everything Obsidian knows plus much more (via LLM entity extraction).
+Brain reads notes as plain markdown files on disk. We read the files directly, extracting wikilinks, tags, and frontmatter, plus much more via LLM entity extraction. Vaults can be imported from Obsidian or created fresh.
 
-## Vault Parser (`brain/obsidian.py`)
+## Vault Parser (`brain/vault.py`)
 
 ### parse_note(file_path, vault_path)
 
@@ -71,7 +71,7 @@ Replaces a note's content while preserving existing frontmatter. Re-extracts tag
 
 Notes use vault-relative paths as unique keys in Neo4j. If the vault is at `/Users/alice/vault` on one machine and `/home/alice/vault` on another, the same note still maps to the same graph node (e.g., `notes/meeting.md`).
 
-The vault itself needs to be synced by an external tool (Obsidian Sync, Dropbox, iCloud, etc.). Brain just reads/writes the files — it doesn't handle vault replication.
+The vault itself needs to be synced by an external tool (iCloud, Dropbox, etc.). Brain just reads/writes the files — it doesn't handle vault replication.
 
 ## Future: File Watching
 

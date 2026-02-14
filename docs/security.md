@@ -20,7 +20,7 @@ The `.env` file is listed in `.gitignore` and is not readable through any agent 
 
 All file operations are restricted to the configured vault directory:
 
-- `write_note()` and `rewrite_note()` in `obsidian.py` validate that the resolved file path stays within the vault using `_ensure_within_vault()`. Paths containing `../` traversal sequences that would escape the vault raise `ValueError`.
+- `write_note()` and `rewrite_note()` in `vault.py` validate that the resolved file path stays within the vault using `_ensure_within_vault()`. Paths containing `../` traversal sequences that would escape the vault raise `ValueError`.
 - `read_note` reads content from Neo4j, not the filesystem directly.
 - `list_notes` and `read_vault` use `vault_path.rglob()`, which stays within the vault.
 
@@ -49,6 +49,16 @@ The practical risk is limited because:
 - The worst-case outcome of a destructive query (e.g., `MATCH (n) DETACH DELETE n`) is data loss in the graph, which can be rebuilt from the vault via `/sync`.
 
 If the project grows to support untrusted input sources (shared vaults, web clipping, plugins), this tool should be revisited — either by restricting it to read-only and using a dedicated `store_memory` tool for writes, or by adding a Cypher keyword allowlist.
+
+## HTTP Server (`server.py`)
+
+The FastAPI server binds to `127.0.0.1:8765` — localhost only, not exposed to the network. It adds a web-accessible surface to the agent:
+
+- **CORS** is restricted to `http://localhost:5173` (Vite dev), `tauri://localhost`, and `https://tauri.localhost` (Tauri webview). No wildcard origins.
+- **No authentication** — the server is single-user and local-only. If the server were ever exposed to the network, session auth would need to be added.
+- **Vault CRUD endpoints** reuse `vault.py` functions, inheriting path-traversal protection via `_ensure_within_vault()`.
+- **Agent SSE streaming** at `/agent/message` passes user input through the same agent/tool pipeline as the CLI — no additional attack surface vs the CLI.
+- **Session state** is in-memory (dict keyed by session_id). No persistence, no cross-session data leakage.
 
 ## Known Limitations
 

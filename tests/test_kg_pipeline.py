@@ -2,13 +2,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from brain.kg_pipeline import MergingNeo4jWriter, ObsidianLoader
+from brain.kg_pipeline import MergingNeo4jWriter, VaultLoader
 
 
-class TestObsidianLoader:
+class TestVaultLoader:
     @pytest.fixture
     def loader(self, tmp_path):
-        return ObsidianLoader(vault_path=tmp_path)
+        return VaultLoader(vault_path=tmp_path)
 
     async def test_reads_file_and_returns_document(self, loader, tmp_path):
         note = tmp_path / "Hello.md"
@@ -28,7 +28,7 @@ class TestObsidianLoader:
         sub.mkdir()
         note = sub / "Deep.md"
         note.write_text("Deep content")
-        loader = ObsidianLoader(vault_path=tmp_path)
+        loader = VaultLoader(vault_path=tmp_path)
         doc = await loader.run(filepath=note)
         assert doc.document_info.path == "folder/Deep.md"
 

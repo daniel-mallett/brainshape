@@ -2,7 +2,7 @@
 
 ## Core Principle: Unified Nodes
 
-Each Obsidian markdown file is represented as a **single node** with dual labels `:Document:Note`. This node is the hub connecting both the structural world (tags, wikilinks) and the semantic world (chunks, extracted entities).
+Each markdown file is represented as a **single node** with dual labels `:Document:Note`. This node is the hub connecting both the structural world (tags, wikilinks) and the semantic world (chunks, extracted entities).
 
 ```
 (:Tag) <-TAGGED_WITH- (:Document:Note) <-FROM_DOCUMENT- (:Chunk) <-FROM_CHUNK- (:Person)
@@ -28,9 +28,9 @@ RETURN n.title, p.name
 
 Everything lives in a single Neo4j graph database. "Layers" are a conceptual distinction, not physical separation.
 
-### Structural Layer (from our parser in `obsidian.py`)
+### Structural Layer (from our parser in `vault.py`)
 
-Created by `sync_structural()` in `sync.py`. Mirrors Obsidian's explicit connections.
+Created by `sync_structural()` in `sync.py`. Mirrors the vault's explicit connections.
 
 | Node | Properties | Unique Key |
 |------|-----------|------------|
@@ -51,7 +51,7 @@ Created by `sync_semantic()` in `sync.py` using the component-based `KGPipeline`
 
 | Node | Properties | Created By |
 |------|-----------|------------|
-| `:Document` (also `:Note`) | `path` (vault-relative) | KG Builder (via `ObsidianLoader`) |
+| `:Document` (also `:Note`) | `path` (vault-relative) | KG Builder (via `VaultLoader`) |
 | `:Chunk` | `text`, `index`, embedding vector | KG Builder (text splitter) |
 | Entity nodes (`:Person`, `:Concept`, `:Project`, `:Location`, `:Event`, `:Tool`, `:Organization`) | `name` + type-specific props | KG Builder (LLM extraction) |
 
@@ -66,7 +66,7 @@ Created by `sync_semantic()` in `sync.py` using the component-based `KGPipeline`
 
 **Semantic runs first**, then structural:
 
-1. `sync_semantic()` — KG Builder processes each note file via `ObsidianLoader`, creates `:Document` nodes (keyed by vault-relative path), Chunk nodes, Entity nodes with relationships
+1. `sync_semantic()` — KG Builder processes each note file via `VaultLoader`, creates `:Document` nodes (keyed by vault-relative path), Chunk nodes, Entity nodes with relationships
 2. `sync_structural()` — Finds existing Document nodes by `path`, adds `:Note` label, sets `title`/`content` properties, creates `Tag` nodes and `TAGGED_WITH`/`LINKS_TO` relationships
 
 This order ensures the structural sync can merge onto the Document nodes the KG Builder already created.
@@ -75,7 +75,7 @@ This order ensures the structural sync can merge onto the Document nodes the KG 
 
 Node paths are **vault-relative** (e.g., `notes/meeting.md`) not absolute (e.g., `/Users/dmallett/obsidian-vault/notes/meeting.md`). This ensures the same note doesn't create duplicate nodes when the vault is synced across devices with different mount points.
 
-Implemented in `obsidian.py:parse_note()` using `file_path.relative_to(vault_path)`.
+Implemented in `vault.py:parse_note()` using `file_path.relative_to(vault_path)`.
 
 ## Constraints and Indexes
 

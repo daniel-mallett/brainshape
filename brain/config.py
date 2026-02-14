@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     neo4j_user: str = "neo4j"
     neo4j_password: str = "brain-dev-password"
 
-    # Obsidian
+    # Vault
     vault_path: str = "~/obsidian-vault"
 
 

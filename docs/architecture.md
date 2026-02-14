@@ -2,7 +2,7 @@
 
 ## Overview
 
-Brain is a personal second-brain agent with knowledge graph memory. It connects an Obsidian vault to a Neo4j knowledge graph, allowing an AI agent to read/search/create/edit notes and maintain its own long-term memory.
+Brain is a personal second-brain agent with knowledge graph memory. It connects a markdown note vault to a Neo4j knowledge graph, allowing an AI agent to read/search/create/edit notes and maintain its own long-term memory. It includes a standalone desktop app (Tauri 2 + React) backed by a FastAPI server.
 
 ## Module Map
 
@@ -10,46 +10,87 @@ Brain is a personal second-brain agent with knowledge graph memory. It connects 
 main.py                      # Thin entry point → brain.cli.run_cli()
 docker-compose.yml           # Neo4j 5 community (ports 7474, 7687)
 .env / .env.example          # Configuration (gitignored / template)
+scripts/dev.sh               # Start full dev environment (Neo4j + server + Tauri)
 
 brain/
 ├── config.py                # pydantic-settings, loads from .env
 ├── graph_db.py              # Neo4j driver wrapper, schema bootstrap, query() helper
-├── obsidian.py              # Vault reader/writer/parser (wikilinks, tags, frontmatter)
+├── vault.py                 # Vault reader/writer/parser (wikilinks, tags, frontmatter)
 ├── kg_pipeline.py           # Component-based KG pipeline (entity/relationship extraction)
 ├── sync.py                  # Orchestrates incremental semantic + structural sync
 ├── tools.py                 # 7 LangChain tools for the agent
 ├── agent.py                 # create_brain_agent() — model + tools + system prompt
+├── server.py                # FastAPI server (HTTP + SSE) for desktop app
 ├── cli.py                   # Interactive CLI chat loop with /sync commands
 └── batch.py                 # Standalone batch sync for cron/launchd
 
+desktop/                     # Tauri 2 desktop app (React + TypeScript + Vite)
+├── src/
+│   ├── components/
+│   │   ├── Editor.tsx       # CodeMirror 6 + vim mode
+│   │   ├── Chat.tsx         # Agent chat panel with SSE streaming
+│   │   ├── Sidebar.tsx      # File tree / vault browser
+│   │   └── SyncStatus.tsx   # Sync controls + progress
+│   ├── lib/
+│   │   ├── api.ts           # HTTP client for Python backend
+│   │   └── useAgentStream.ts # SSE streaming hook
+│   └── App.tsx              # 3-panel layout (sidebar | editor | chat)
+├── src-tauri/               # Rust shell (Tauri 2)
+├── package.json
+└── vite.config.ts
+
 tests/
 ├── conftest.py              # Shared fixtures (mock db, mock pipeline, tmp vault)
-├── test_obsidian.py         # Parsing, writing, hashing
+├── test_vault.py            # Parsing, writing, hashing
 ├── test_config.py           # Settings defaults and env loading
 ├── test_graph_db.py         # GraphDB with mocked driver
 ├── test_tools.py            # Tool functions with mocked db/pipeline
 ├── test_sync.py             # Sync logic with mocked deps
-└── test_kg_pipeline.py      # ObsidianLoader, MergingNeo4jWriter (mocked driver)
+├── test_server.py           # FastAPI endpoint tests
+└── test_kg_pipeline.py      # VaultLoader, MergingNeo4jWriter (mocked driver)
 ```
 
 ## Data Flow
 
 ```
-main.py → brain/cli.py → brain/agent.py → tools → graph_db / obsidian / kg_pipeline
-                              ↑
-                    (future: slack.py, web.py, discord.py, voice, native app)
+                              ┌─ brain/cli.py (terminal)
+main.py ──┤                   │
+           └─ brain/server.py ─┬─ FastAPI HTTP+SSE ← desktop/ (Tauri app)
+                               │
+                               └─ brain/agent.py → tools → graph_db / vault / kg_pipeline
 ```
 
 ## Interface-Agnostic Design
 
-The agent core (`agent.py`) is completely decoupled from any UI. `create_brain_agent()` returns a compiled LangGraph agent that any interface can call via `invoke()` or `stream()`. The CLI (`cli.py`) is just the first consumer. Future interfaces (Slack, Discord, web, native app, voice) each import `create_brain_agent()` and provide their own message loop.
+The agent core (`agent.py`) is completely decoupled from any UI. `create_brain_agent()` returns a compiled LangGraph agent that any interface can call via `invoke()` or `stream()`. Current consumers:
+
+- **CLI** (`cli.py`) — terminal chat loop
+- **Server** (`server.py`) — FastAPI with SSE streaming, consumed by the desktop app
+
+Future interfaces (Slack, Discord, voice) each import `create_brain_agent()` and provide their own message loop.
+
+## Server Architecture
+
+`brain/server.py` is a FastAPI app on `localhost:8765` that exposes:
+
+- `GET /health` — health check
+- `GET /config` — current settings
+- `POST /agent/init` — create session, returns session_id
+- `POST /agent/message` — stream agent response via SSE
+- `GET /vault/files` — list all notes
+- `GET /vault/file/{path}` — read a note
+- `POST /vault/file` — create a note
+- `PUT /vault/file/{path}` — update a note
+- `POST /sync/structural`, `/sync/semantic`, `/sync/full` — trigger sync
+
+In dev mode, the server is started separately. In production, it will be bundled as a Tauri sidecar via PyInstaller.
 
 ## Sync Model
 
 Two independent sync layers with different cost profiles:
 
-- **Structural sync** (cheap, always current): runs on every CLI startup and via `/sync`. Processes every note unconditionally — parses tags, wikilinks, frontmatter from markdown files. No hash-gating because it's just Cypher queries.
-- **Semantic sync** (expensive, incremental): runs via `/sync --full`, `/sync --semantic`, or overnight batch. Uses LLM to extract entities and relationships. Tracked by SHA-256 content hash — only dirty (changed) files are processed.
+- **Structural sync** (cheap, always current): runs on every startup (CLI and server) and via `/sync` or `POST /sync/structural`. Processes every note unconditionally — parses tags, wikilinks, frontmatter from markdown files. No hash-gating because it's just Cypher queries.
+- **Semantic sync** (expensive, incremental): runs via `/sync --full`, `/sync --semantic`, or `POST /sync/semantic`. Uses LLM to extract entities and relationships. Tracked by SHA-256 content hash — only dirty (changed) files are processed.
 - **Batch processing**: `uv run python -m brain.batch` for cron/launchd jobs.
 
 ## Key Dependencies
@@ -63,9 +104,12 @@ Two independent sync layers with different cost profiles:
 | `neo4j-graphrag` | KG pipeline components (entity extraction, graph writing, entity resolution, `AnthropicLLM`) |
 | `sentence-transformers` | Local embedding model (EmbeddingGemma 300m, 768-dim), used via neo4j-graphrag |
 | `anthropic` | Transitive dep of neo4j-graphrag's `AnthropicLLM` (not directly imported) |
-| `python-frontmatter` | Parse YAML frontmatter from Obsidian markdown |
+| `python-frontmatter` | Parse YAML frontmatter from markdown notes |
 | `pydantic-settings` | Type-safe .env config (handles `.env` loading natively) |
 | `python-dotenv` | Transitive dep (not directly imported — pydantic-settings handles `.env`) |
+| `fastapi` | HTTP server framework for desktop app backend |
+| `uvicorn` | ASGI server for FastAPI |
+| `sse-starlette` | Server-Sent Events for agent response streaming |
 
 ### Dev Dependencies
 
@@ -73,6 +117,7 @@ Two independent sync layers with different cost profiles:
 |---------|---------|
 | `pytest` | Test runner |
 | `pytest-asyncio` | Async test support (kg_pipeline has async methods) |
+| `pytest-cov` | Coverage reporting |
 | `ruff` | Linter |
 | `ty` | Type checker |
 

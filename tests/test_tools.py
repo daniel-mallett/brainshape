@@ -82,7 +82,7 @@ class TestCreateNote:
 class TestEditNote:
     def test_updates_note(self, mock_db, mock_pipeline, vault_settings):
         # Create the note on disk first
-        from brain.obsidian import write_note
+        from brain.vault import write_note
 
         write_note(vault_settings, "Editable", "Old content")
         mock_db.query.return_value = [{"path": "Editable.md"}]

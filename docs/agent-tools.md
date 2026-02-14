@@ -20,7 +20,7 @@ Vector similarity search over chunk embeddings. Embeds the query text using the 
 Read the full content of a specific note by title. Queries the graph for the Note node and returns its content.
 
 ### 4. create_note(title: str, content: str, tags: str = "", folder: str = "")
-Create a new note in the Obsidian vault and sync it to the graph. Tags are comma-separated. Folder specifies the subdirectory within the vault (e.g., 'Notes', 'Projects/2026'). Flow:
+Create a new note in the vault and sync it to the graph. Tags are comma-separated. Folder specifies the subdirectory within the vault (e.g., 'Notes', 'Projects/2026'). Flow:
 1. Write markdown file to vault (with frontmatter)
 2. Run semantic extraction (KG pipeline creates Document + Chunk + Entity nodes)
 3. Run structural sync (adds :Note label, tags, wikilinks)
@@ -56,4 +56,4 @@ The agent's system prompt (in `agent.py`) describes the full graph schema so the
 - Place notes in the right folder
 - Preserve user's voice when editing notes
 - Persist memories and preferences to the graph
-- Use Obsidian conventions (wikilinks, tags, headings)
+- Use markdown conventions (wikilinks, tags, headings)

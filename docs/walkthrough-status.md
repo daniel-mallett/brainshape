@@ -12,11 +12,15 @@
 
 5. **Graph design deep dive** — Extensive discussion resulting in the unified `:Document:Note` node design. Two layers (structural + semantic) in one graph. Vault-relative paths as unique keys for cross-device consistency. See `docs/graph-design.md`.
 
-6. **brain/kg_pipeline.py** — Component-based pipeline with `ObsidianLoader`, `MergingNeo4jWriter`, and sequential component orchestration. The `ObsidianLoader` provides `document_info` with vault-relative paths which triggers Document node creation.
+6. **brain/kg_pipeline.py** — Component-based pipeline with `VaultLoader`, `MergingNeo4jWriter`, and sequential component orchestration. The `VaultLoader` provides `document_info` with vault-relative paths which triggers Document node creation.
 
-7. **brain/obsidian.py** — Regex-based parsing for wikilinks, tags; `python-frontmatter` for YAML. Discussion: considered replacing with Obsidian plugin API (`app.metadataCache`) for richer/more authoritative metadata. Decided regex is fine for v0.1 but plugin is planned for later (see Open Items).
+7. **brain/vault.py** — Regex-based parsing for wikilinks, tags; `python-frontmatter` for YAML. Decided regex is fine for v0.1.
 
 8. **brain/sync.py** — Three functions: `sync_semantic` (KG pipeline, expensive, incremental via content hash), `sync_structural` (Cypher, cheap, runs unconditionally), `sync_vault` (orchestrator, semantic-first then structural).
+
+9. **brain/server.py** — FastAPI server exposing all Brain operations over HTTP + SSE. Endpoints for health, config, vault CRUD, agent streaming, and sync. CORS locked to localhost + Tauri origins. Session-based agent conversations.
+
+10. **desktop/** — Tauri 2 app with React + TypeScript. CodeMirror 6 editor with vim mode, agent chat panel with SSE streaming, file tree sidebar, sync controls. ShadCN UI components with Tailwind v4 and dark mode.
 
 ## Not Yet Walked Through
 
@@ -29,28 +33,15 @@
 1. **Vault-relative paths** — Changed from absolute paths to `file_path.relative_to(vault_path)` for cross-device consistency
 2. **Unified nodes** — `:Document:Note` dual-label design instead of separate disconnected nodes
 3. **Semantic-first sync** — KG Builder runs first (creates Document nodes), structural sync runs second (adds :Note label + tags + wikilinks)
-4. **ObsidianLoader** — Custom DataLoader for the KG Builder that provides vault-relative `document_info`, triggering proper Document node creation
+4. **VaultLoader** — Custom DataLoader for the KG Builder that provides vault-relative `document_info`, triggering proper Document node creation
 5. **Security principles** — Agent gets pre-authenticated clients, never raw credentials. Vault path must not overlap project directory. Documented in CLAUDE.md.
 6. **Processing model** — Semantic extraction (LLM, multi-chunk per file) is expensive and should never run automatically on every save or startup. Structural sync (cheap) can run on startup. Semantic sync should be incremental (content-hash-based) and intentional (user-triggered or overnight batch). The agent can always read raw files as a fallback — not every note needs to be "processed" to be useful.
 
 ## Open Items / Future Work
 
-### Obsidian Plugin (HIGH PRIORITY — pick up after v0.1)
+### Desktop App — DONE
 
-An Obsidian plugin that runs inside the app, giving access to `app.metadataCache.getFileCache(file)` — the authoritative source for how notes render in Obsidian. This matters because our regex parsing may not match what the user actually sees.
-
-**What the plugin would provide:**
-- **Rich metadata from `CachedMetadata`** — resolved/unresolved links, backlinks, heading structure, sections, list hierarchy, block references. Richer and more reliable than regex for tags, titles, and user-defined links between files.
-- **User-initiated KG processing** — command palette action to "process this note" or "process all pending." Status bar showing "14 notes pending processing."
-- **Dirty file tracking for overnight batch** — though this can also be done without the plugin via content hashes in Neo4j (compare file hash to stored hash at processing time).
-- **Future: in-app KG visualization** — sidebar showing related entities, suggested links, etc.
-
-**What the plugin is NOT needed for:**
-- Dirty file detection (content hash comparison works from any Python process)
-- Overnight batch processing (cron/launchd job calling Python pipeline)
-- Structural sync (reading files + regex is fine for v0.1)
-
-**Key reference:** Obsidian plugin API — `app.metadataCache` returns `CachedMetadata` with `links`, `embeds`, `headings`, `sections`, `listItems`, `tags`, `blocks`, `frontmatter`. Events: `changed`, `resolved`, `deleted`. See https://docs.obsidian.md/Reference/TypeScript+API/MetadataCache
+Tauri 2 + React + TypeScript desktop app with CodeMirror 6 editor (vim mode), agent chat (SSE streaming), vault browser, sync controls. FastAPI backend (`brain/server.py`) on localhost:8765. ShadCN UI + Tailwind v4 dark theme. PyInstaller bundling for production is planned.
 
 ### Incremental Processing — DONE
 
@@ -66,7 +57,7 @@ Replaced `SimpleKGPipeline` with sequential component orchestration in `KGPipeli
 
 ### Unit Tests — DONE
 
-62 unit tests covering all modules. All external deps mocked. Run with `uv run pytest`.
+85 unit tests covering all modules including server endpoints (71% line coverage). All external deps mocked. Run with `uv run pytest`.
 
 ### Other
 

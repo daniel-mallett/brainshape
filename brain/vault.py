@@ -26,7 +26,7 @@ def compute_file_hash(file_path: Path) -> str:
 
 
 def parse_note(file_path: Path, vault_path: Path) -> dict:
-    """Parse an Obsidian markdown file into a structured dict.
+    """Parse a markdown file into a structured dict.
 
     The path stored is relative to vault_path, so it stays consistent
     across devices regardless of where the vault is mounted.

@@ -96,8 +96,8 @@ class MergingNeo4jWriter(Neo4jWriter):
         return await super().run(graph=graph, lexical_graph_config=lexical_graph_config)
 
 
-class ObsidianLoader(DataLoader):
-    """Loads Obsidian markdown files for the KG pipeline.
+class VaultLoader(DataLoader):
+    """Loads markdown files from the vault for the KG pipeline.
 
     Reads the .md file and returns its content with document metadata
     containing the vault-relative path. This ensures Document nodes
@@ -127,7 +127,7 @@ class ObsidianLoader(DataLoader):
 
 
 class KGPipeline:
-    """Component-based KG pipeline for processing Obsidian notes.
+    """Component-based KG pipeline for processing vault notes.
 
     Uses individual neo4j-graphrag components called sequentially,
     giving full control over each step (vs SimpleKGPipeline's opaque
@@ -147,7 +147,7 @@ class KGPipeline:
 
         self._embedder = SentenceTransformerEmbeddings(model=EMBEDDING_MODEL)
 
-        self.loader = ObsidianLoader(vault_path)
+        self.loader = VaultLoader(vault_path)
         self.splitter = FixedSizeSplitter(chunk_size=4000, chunk_overlap=200)
         self.embedder = TextChunkEmbedder(embedder=self._embedder)
         self.extractor = LLMEntityRelationExtractor(
@@ -201,5 +201,5 @@ class KGPipeline:
 
 
 def create_kg_pipeline(driver: neo4j.Driver, vault_path: Path) -> KGPipeline:
-    """Create a KG pipeline for processing Obsidian notes."""
+    """Create a KG pipeline for processing vault notes."""
     return KGPipeline(driver, vault_path)

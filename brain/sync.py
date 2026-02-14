@@ -2,7 +2,7 @@ from pathlib import Path
 
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline
-from brain.obsidian import compute_file_hash, list_notes, read_vault
+from brain.vault import compute_file_hash, list_notes, read_vault
 
 
 def _get_stored_hashes(db: GraphDB) -> dict[str, str]:
