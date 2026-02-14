@@ -59,6 +59,7 @@ def write_note(
     vault_path: Path,
     title: str,
     content: str,
+    folder: str = "",
     tags: list[str] | None = None,
     metadata: dict | None = None,
 ) -> Path:
@@ -69,17 +70,24 @@ def write_note(
     if tags:
         post.metadata["tags"] = tags
 
-    file_path = vault_path / f"{title}.md"
+    if folder:
+        file_path = vault_path / folder / f"{title}.md"
+    else:
+        file_path = vault_path / f"{title}.md"
     file_path.parent.mkdir(parents=True, exist_ok=True)
     with open(file_path, "w") as f:
         f.write(frontmatter.dumps(post))
     return file_path
 
 
-def rewrite_note(vault_path: Path, title: str, new_content: str) -> Path:
+def rewrite_note(vault_path: Path, title: str, new_content: str, relative_path: str = "") -> Path:
     """Rewrite an existing note's content, preserving frontmatter.
-    Returns the file path, or raises FileNotFoundError."""
-    file_path = vault_path / f"{title}.md"
+    Returns the file path, or raises FileNotFoundError.
+    If relative_path is provided, uses it directly instead of guessing from title."""
+    if relative_path:
+        file_path = vault_path / relative_path
+    else:
+        file_path = vault_path / f"{title}.md"
     if not file_path.exists():
         raise FileNotFoundError(f"Note '{title}' not found at {file_path}")
 

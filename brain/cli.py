@@ -106,10 +106,13 @@ def run_cli():
                 node = chunk.get("model") or chunk.get("agent")
                 if node:
                     for msg in node["messages"]:
+                        # Show tool calls
+                        if hasattr(msg, "tool_calls") and msg.tool_calls:
+                            for tc in msg.tool_calls:
+                                args = ", ".join(tc["args"])
+                                print(f"\n  → {tc['name']}({args})", flush=True)
+                            continue
                         if hasattr(msg, "content") and msg.content:
-                            # Skip tool call messages
-                            if hasattr(msg, "tool_calls") and msg.tool_calls:
-                                continue
                             if isinstance(msg.content, str):
                                 print(msg.content, end="", flush=True)
                             elif isinstance(msg.content, list):

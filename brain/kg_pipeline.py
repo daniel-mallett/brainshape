@@ -150,11 +150,11 @@ class KGPipeline:
             api_key=settings.anthropic_api_key,
         )
 
-        embedder = SentenceTransformerEmbeddings(model=EMBEDDING_MODEL)
+        self._embedder = SentenceTransformerEmbeddings(model=EMBEDDING_MODEL)
 
         self.loader = ObsidianLoader(vault_path)
         self.splitter = FixedSizeSplitter(chunk_size=4000, chunk_overlap=200)
-        self.embedder = TextChunkEmbedder(embedder=embedder)
+        self.embedder = TextChunkEmbedder(embedder=self._embedder)
         self.extractor = LLMEntityRelationExtractor(
             llm=llm,
             on_error=OnError.IGNORE,
@@ -172,6 +172,10 @@ class KGPipeline:
             dimensions=EMBEDDING_DIMENSIONS,
             similarity_fn="cosine",
         )
+
+    def embed_query(self, text: str) -> list[float]:
+        """Embed a text string using the pipeline's embedding model."""
+        return self._embedder.embed_query(text)
 
     async def run_async(self, file_path: str) -> None:
         """Process a single note through the full pipeline."""

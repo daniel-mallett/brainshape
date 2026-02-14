@@ -90,6 +90,33 @@ def search_notes(query: str) -> str:
     )
 
 
+def semantic_search(query: str) -> str:
+    """Search for notes by meaning using vector similarity.
+    Use this when keyword search misses relevant results, or when you need
+    to find notes that are conceptually related to a topic even if they
+    don't contain the exact words."""
+    db = _get_db()
+    pipeline = _get_pipeline()
+    embedding = pipeline.embed_query(query)
+    results = db.query(
+        """
+        CALL db.index.vector.queryNodes('chunk_embeddings', 10, $embedding)
+        YIELD node, score
+        MATCH (node)-[:FROM_DOCUMENT]->(doc:Document)
+        RETURN doc.title AS title, doc.path AS path,
+               left(node.text, 300) AS chunk, score
+        ORDER BY score DESC
+        """,
+        {"embedding": embedding},
+    )
+    if not results:
+        return "No semantically similar content found."
+    return "\n\n".join(
+        f"**{r['title']}** (score: {r['score']:.2f})\n{r['chunk']}"
+        for r in results
+    )
+
+
 def read_note(title: str) -> str:
     """Read the full content of a specific note by its title."""
     db = _get_db()
@@ -106,22 +133,25 @@ def read_note(title: str) -> str:
     return f"# {note['title']}\n\n{note['content']}"
 
 
-def create_note(title: str, content: str, tags: str = "") -> str:
+def create_note(title: str, content: str, tags: str = "", folder: str = "") -> str:
     """Create a new note in the Obsidian vault and sync it to the knowledge graph.
-    Tags should be comma-separated (e.g., 'project,ideas,important')."""
+    Tags should be comma-separated (e.g., 'project,ideas,important').
+    Folder is the subdirectory within the vault (e.g., 'Notes', 'Projects/2026').
+    If empty, the note is created at the vault root."""
     db = _get_db()
     pipeline = _get_pipeline()
     vault_path = _vault_path()
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
 
-    file_path = write_note(vault_path, title, content, tags=tag_list)
+    file_path = write_note(vault_path, title, content, folder=folder, tags=tag_list)
+    rel_path = file_path.relative_to(vault_path)
 
     # Semantic extraction first (creates Document + Chunk + Entity nodes)
     try:
         pipeline.run(str(file_path))
     except Exception as e:
         return (
-            f"Created note '{title}' at {file_path} "
+            f"Created note '{title}' at {rel_path} "
             f"(semantic extraction failed: {e})"
         )
 
@@ -129,7 +159,7 @@ def create_note(title: str, content: str, tags: str = "") -> str:
     note_data = parse_note(file_path, vault_path)
     _sync_note_structural(db, note_data)
 
-    return f"Created note '{title}' at {file_path}"
+    return f"Created note '{title}' at {rel_path}"
 
 
 def edit_note(title: str, new_content: str) -> str:
@@ -141,8 +171,15 @@ def edit_note(title: str, new_content: str) -> str:
     pipeline = _get_pipeline()
     vault_path = _vault_path()
 
+    # Look up the note's actual path from the graph
+    results = db.query(
+        "MATCH (n:Note {title: $title}) RETURN n.path AS path LIMIT 1",
+        {"title": title},
+    )
+    relative_path = results[0]["path"] if results else ""
+
     try:
-        file_path = rewrite_note(vault_path, title, new_content)
+        file_path = rewrite_note(vault_path, title, new_content, relative_path=relative_path)
     except FileNotFoundError as e:
         return str(e)
 
@@ -164,7 +201,8 @@ def edit_note(title: str, new_content: str) -> str:
     )
     _sync_note_structural(db, note_data)
 
-    return f"Updated note '{title}' at {file_path}"
+    rel_path = file_path.relative_to(vault_path)
+    return f"Updated note '{title}' at {rel_path}"
 
 
 def query_graph(cypher: str) -> str:

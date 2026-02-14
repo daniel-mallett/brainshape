@@ -13,7 +13,7 @@ main.py → brain/cli.py → brain/agent.py → tools → graph_db / obsidian / 
 ```
 
 - `brain/agent.py` — agent factory (`create_brain_agent()`), interface-agnostic
-- `brain/tools.py` — 6 LangChain tools (search, read, create, edit notes; query graph; find related)
+- `brain/tools.py` — 7 LangChain tools (search, semantic search, read, create, edit notes; query graph; find related)
 - `brain/graph_db.py` — Neo4j connection wrapper
 - `brain/obsidian.py` — vault reader/writer/parser (wikilinks, tags, frontmatter)
 - `brain/kg_pipeline.py` — component-based KG pipeline for entity/relationship extraction
