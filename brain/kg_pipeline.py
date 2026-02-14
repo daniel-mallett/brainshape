@@ -82,7 +82,7 @@ class MergingNeo4jWriter(Neo4jWriter):
         if other_nodes:
             parameters = {"rows": self._nodes_to_rows(other_nodes, lexical_graph_config)}
             query = upsert_node_query(support_variable_scope_clause=self.is_version_5_23_or_above)
-            self.driver.execute_query(
+            self.driver.execute_query(  # type: ignore[no-matching-overload]  # neo4j overload stubs
                 query,
                 parameters_=parameters,
                 database_=self.neo4j_database,

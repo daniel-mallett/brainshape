@@ -31,6 +31,9 @@ testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
 
+[tool.ty.src]
+exclude = ["tests/"]
+
 [tool.ruff]
 target-version = "py313"
 line-length = 100
