@@ -9,5 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
+# Caches
+.ruff_cache/
+
 # Environment
 .env

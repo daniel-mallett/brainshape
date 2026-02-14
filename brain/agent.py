@@ -3,19 +3,10 @@ from pathlib import Path
 from langchain.agents import create_agent
 from langgraph.checkpoint.memory import MemorySaver
 
+from brain import tools
 from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline, create_kg_pipeline
-from brain.tools import (
-    create_note,
-    edit_note,
-    find_related,
-    init_tools,
-    query_graph,
-    read_note,
-    search_notes,
-    semantic_search,
-)
 
 SYSTEM_PROMPT = """\
 You are Brain, a personal knowledge management assistant.
@@ -55,16 +46,6 @@ Do not just say you'll remember something — actually persist it to the graph.
 Be concise but helpful. Use good Obsidian conventions (wikilinks, tags, clear headings).\
 """
 
-TOOL_FUNCTIONS = [
-    search_notes,
-    semantic_search,
-    read_note,
-    create_note,
-    edit_note,
-    query_graph,
-    find_related,
-]
-
 
 def create_brain_agent(
     db: GraphDB | None = None,
@@ -82,7 +63,8 @@ def create_brain_agent(
         vault_path = Path(settings.vault_path).expanduser()
         pipeline = create_kg_pipeline(db._driver, vault_path)
 
-    init_tools(db, pipeline)
+    tools.db = db
+    tools.pipeline = pipeline
 
     checkpointer = MemorySaver()
 
@@ -92,7 +74,7 @@ def create_brain_agent(
 
     agent = create_agent(
         model=model,
-        tools=TOOL_FUNCTIONS,
+        tools=tools.ALL_TOOLS,
         system_prompt=SYSTEM_PROMPT,
         checkpointer=checkpointer,
     )

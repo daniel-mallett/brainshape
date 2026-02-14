@@ -2,19 +2,22 @@
 
 ## What's Working
 
-- Structural sync: two-pass (nodes first, then relationships), runs on every startup, no hash-gating
-- Semantic sync: incremental (hash-gated), EmbeddingGemma 300m for chunk embeddings, LLM entity extraction
+- Structural sync: two-pass (nodes first, then relationships), runs on every startup unconditionally
+- Semantic sync: incremental (SHA-256 hash-gated), EmbeddingGemma 300m for chunk embeddings, LLM entity extraction
 - MergingNeo4jWriter: custom writer that MERGEs Document nodes on path (prevents duplicates between structural/semantic layers)
+- Component-based KG pipeline: sequential component orchestration (loader → splitter → embedder → extractor → writer → resolver)
 - Vector index on Chunk nodes for cosine similarity search
 - 7 agent tools: search, semantic_search, read, create, edit, query_graph, find_related
 - semantic_search tool: embeds query text locally, runs vector similarity against chunk index
 - CLI with /sync commands, tool call visibility, batch entry point for cron
 - APOC plugin enabled in Docker
 - Memory persistence: agent stores user preferences/info as :Memory nodes via query_graph
-- System prompt updated: no hardcoded entity types, memory instructions, folder-aware note creation
-- Folder-aware note creation: create_note accepts folder parameter
-- Folder-aware note editing: edit_note looks up path from graph, works with subdirectories
+- System prompt: auto-discovered entity types, memory instructions, folder-aware note creation
+- Folder-aware note creation and editing (edit_note looks up path from graph)
 - Tool responses use vault-relative paths only (no system path leakage)
+- Unit test suite: 62 tests covering all modules, all external deps mocked
+- CI: GitHub Actions workflow runs lint, type-check, and tests on push/PR to main
+- Pre-commit hooks: ruff lint, ruff format, and pytest run on every commit
 
 ## Known Issues
 
@@ -26,7 +29,7 @@
 - **Anthropic Batch API**: not yet integrated — would halve LLM costs for semantic sync
 - **`tools.py` runs pipeline on create/edit**: agent-triggered semantic extraction is expensive and may not be desired
 - **`obsidian.py` is a stopgap**: parsing markdown manually when Obsidian plugin could provide richer metadata
-- **Chapter 3 intermittent failure**: consistently fails on first semantic sync attempt, succeeds on retry (likely transient API timeout)
+- **Potentially unused deps**: `anthropic`, `langchain-anthropic`, `python-dotenv` are not directly imported — may be transitive deps that could be removed
 
 ## Next Steps (to discuss)
 
@@ -36,3 +39,4 @@
 4. Decide on embedding model distribution (ungated model vs Ollama vs bundled weights)
 5. Obsidian plugin for richer vault integration
 6. Standalone chat UI with graph visualization
+7. Dependency cleanup (audit and remove transitive-only deps)

@@ -1,36 +1,22 @@
 from pathlib import Path
 
+from langchain_core.tools import tool
+
 from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline
 from brain.obsidian import parse_note, rewrite_note, write_note
 
-# Module-level references, initialized via init_tools()
-_db: GraphDB | None = None
-_pipeline: KGPipeline | None = None
-
-
-def init_tools(db: GraphDB, pipeline: KGPipeline) -> None:
-    global _db, _pipeline
-    _db = db
-    _pipeline = pipeline
-
-
-def _get_db() -> GraphDB:
-    assert _db is not None, "Tools not initialized. Call init_tools() first."
-    return _db
-
-
-def _get_pipeline() -> KGPipeline:
-    assert _pipeline is not None, "Tools not initialized. Call init_tools() first."
-    return _pipeline
+# Set by create_brain_agent() before tools are used
+db: GraphDB = None  # type: ignore[assignment]
+pipeline: KGPipeline = None  # type: ignore[assignment]
 
 
 def _vault_path() -> Path:
     return Path(settings.vault_path).expanduser()
 
 
-def _sync_note_structural(db: GraphDB, note_data: dict) -> None:
+def _sync_note_structural(note_data: dict) -> None:
     """Merge :Note label and structural relationships onto a Document node."""
     db.query(
         """
@@ -68,10 +54,10 @@ def _sync_note_structural(db: GraphDB, note_data: dict) -> None:
         )
 
 
+@tool
 def search_notes(query: str) -> str:
     """Search notes in the knowledge graph by keyword.
     Returns matching note titles and snippets."""
-    db = _get_db()
     results = db.query(
         """
         CALL db.index.fulltext.queryNodes('note_content', $query)
@@ -85,18 +71,16 @@ def search_notes(query: str) -> str:
     if not results:
         return "No notes found matching your query."
     return "\n\n".join(
-        f"**{r['title']}** (score: {r['score']:.2f})\n{r['snippet']}..."
-        for r in results
+        f"**{r['title']}** (score: {r['score']:.2f})\n{r['snippet']}..." for r in results
     )
 
 
+@tool
 def semantic_search(query: str) -> str:
     """Search for notes by meaning using vector similarity.
     Use this when keyword search misses relevant results, or when you need
     to find notes that are conceptually related to a topic even if they
     don't contain the exact words."""
-    db = _get_db()
-    pipeline = _get_pipeline()
     embedding = pipeline.embed_query(query)
     results = db.query(
         """
@@ -111,15 +95,12 @@ def semantic_search(query: str) -> str:
     )
     if not results:
         return "No semantically similar content found."
-    return "\n\n".join(
-        f"**{r['title']}** (score: {r['score']:.2f})\n{r['chunk']}"
-        for r in results
-    )
+    return "\n\n".join(f"**{r['title']}** (score: {r['score']:.2f})\n{r['chunk']}" for r in results)
 
 
+@tool
 def read_note(title: str) -> str:
     """Read the full content of a specific note by its title."""
-    db = _get_db()
     results = db.query(
         """
         MATCH (n:Note {title: $title})
@@ -133,13 +114,12 @@ def read_note(title: str) -> str:
     return f"# {note['title']}\n\n{note['content']}"
 
 
+@tool
 def create_note(title: str, content: str, tags: str = "", folder: str = "") -> str:
     """Create a new note in the Obsidian vault and sync it to the knowledge graph.
     Tags should be comma-separated (e.g., 'project,ideas,important').
     Folder is the subdirectory within the vault (e.g., 'Notes', 'Projects/2026').
     If empty, the note is created at the vault root."""
-    db = _get_db()
-    pipeline = _get_pipeline()
     vault_path = _vault_path()
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
 
@@ -150,25 +130,21 @@ def create_note(title: str, content: str, tags: str = "", folder: str = "") -> s
     try:
         pipeline.run(str(file_path))
     except Exception as e:
-        return (
-            f"Created note '{title}' at {rel_path} "
-            f"(semantic extraction failed: {e})"
-        )
+        return f"Created note '{title}' at {rel_path} (semantic extraction failed: {e})"
 
     # Then structural sync (adds :Note label, tags, wikilinks to Document node)
     note_data = parse_note(file_path, vault_path)
-    _sync_note_structural(db, note_data)
+    _sync_note_structural(note_data)
 
     return f"Created note '{title}' at {rel_path}"
 
 
+@tool
 def edit_note(title: str, new_content: str) -> str:
     """Edit an existing note in the Obsidian vault. Rewrites the note content
     while preserving frontmatter. Use this to clean up rough notes, improve
     formatting, add wikilinks, or expand content with context from the
     knowledge graph."""
-    db = _get_db()
-    pipeline = _get_pipeline()
     vault_path = _vault_path()
 
     # Look up the note's actual path from the graph
@@ -199,12 +175,13 @@ def edit_note(title: str, new_content: str) -> str:
         "MATCH (n:Note {path: $path})-[r:LINKS_TO]->() DELETE r",
         {"path": note_data["path"]},
     )
-    _sync_note_structural(db, note_data)
+    _sync_note_structural(note_data)
 
     rel_path = file_path.relative_to(vault_path)
     return f"Updated note '{title}' at {rel_path}"
 
 
+@tool
 def query_graph(cypher: str) -> str:
     """Run a Cypher query against the knowledge graph. Use this to explore
     relationships between notes, find notes by tag, trace link paths, etc.
@@ -215,7 +192,6 @@ def query_graph(cypher: str) -> str:
     - Entity types: Person, Concept, Project, Location, Event, Tool, Organization
     - Entity relationships: RELATED_TO, WORKS_ON, USES, PART_OF, etc.
     - Memory: (:Memory {type, content}) with ABOUT relationships"""
-    db = _get_db()
     try:
         results = db.query(cypher)
         if not results:
@@ -228,10 +204,10 @@ def query_graph(cypher: str) -> str:
         return f"Cypher query error: {e}"
 
 
+@tool
 def find_related(entity_name: str) -> str:
     """Find entities and notes related to a given concept, person, project, etc.
     Searches the semantic knowledge graph for connections."""
-    db = _get_db()
     results = db.query(
         """
         MATCH (e {name: $name})-[r]-(related)
@@ -268,3 +244,14 @@ def find_related(entity_name: str) -> str:
         tgt = f"{':'.join(r['target_labels'])}({tgt_name})"
         lines.append(f"{src} -[{r['relationship']}]-> {tgt}")
     return "\n".join(lines)
+
+
+ALL_TOOLS = [
+    search_notes,
+    semantic_search,
+    read_note,
+    create_note,
+    edit_note,
+    query_graph,
+    find_related,
+]

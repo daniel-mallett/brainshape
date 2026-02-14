@@ -47,7 +47,7 @@ Created by `sync_structural()` in `sync.py`. Mirrors Obsidian's explicit connect
 
 ### Semantic Layer (from KG Builder in `kg_pipeline.py`)
 
-Created by `sync_semantic()` in `sync.py` using `neo4j-graphrag`'s `SimpleKGPipeline`.
+Created by `sync_semantic()` in `sync.py` using the component-based `KGPipeline` in `kg_pipeline.py`.
 
 | Node | Properties | Created By |
 |------|-----------|------------|
@@ -96,25 +96,8 @@ CREATE FULLTEXT INDEX note_content IF NOT EXISTS FOR (n:Note) ON EACH [n.content
 
 ## Entity Schema
 
-Configurable in `kg_pipeline.py`. Starting point:
+No predefined schema — the `LLMEntityRelationExtractor` auto-discovers entity types and relationships from note content. Common types that emerge include Person, Concept, Project, Location, Event, Tool, Organization, with relationships like RELATED_TO, WORKS_ON, USES, PART_OF, etc.
 
-```python
-NODE_TYPES = ["Person", "Concept", "Project", "Location", "Event", "Tool", "Organization"]
-RELATIONSHIP_TYPES = ["RELATED_TO", "WORKS_ON", "USES", "LOCATED_IN", "PART_OF", "CREATED_BY"]
-PATTERNS = [
-    ("Person", "WORKS_ON", "Project"),
-    ("Person", "USES", "Tool"),
-    ("Person", "PART_OF", "Organization"),
-    ("Project", "USES", "Tool"),
-    ("Event", "LOCATED_IN", "Location"),
-    ("Concept", "RELATED_TO", "Concept"),
-    ("Person", "RELATED_TO", "Person"),
-    ("Project", "RELATED_TO", "Concept"),
-    ("Organization", "LOCATED_IN", "Location"),
-    ("Person", "CREATED_BY", "Organization"),
-]
-```
+## Embeddings
 
-## Embeddings (Placeholder)
-
-Currently using `NoOpEmbedder` (returns zero vectors) to satisfy the KG Builder's required `embedder` parameter without pulling in `torch` (~2GB). Entity extraction works fine — it uses the LLM, not embeddings. Swap in `SentenceTransformerEmbeddings` later for real vector-based semantic search over chunks.
+Uses `SentenceTransformerEmbeddings` with Google's `embeddinggemma-300m` model (768 dimensions). The model runs locally — no API cost for embeddings. A vector index (`chunk_embeddings`) on `Chunk.embedding` enables cosine similarity search via the `semantic_search` tool.

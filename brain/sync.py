@@ -11,9 +11,7 @@ def _get_stored_hashes(db: GraphDB) -> dict[str, str]:
     return {r["path"]: r["hash"] for r in results if r["hash"]}
 
 
-def sync_semantic(
-    db: GraphDB, pipeline: KGPipeline, vault_path: Path
-) -> dict:
+def sync_semantic(db: GraphDB, pipeline: KGPipeline, vault_path: Path) -> dict:
     """Run KG pipeline to extract entities and relationships from note content.
 
     Only processes files whose content has changed since last processing

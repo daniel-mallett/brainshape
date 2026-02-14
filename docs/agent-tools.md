@@ -4,7 +4,7 @@
 
 The Brain agent has 7 tools, all defined as plain Python functions in `brain/tools.py`. LangChain's `create_agent` infers the tool schema from type hints and docstrings.
 
-Tools are initialized via `init_tools(db, pipeline)` which sets module-level references to the GraphDB and KG pipeline instances.
+Tools use module-level `db` and `pipeline` variables set by `create_brain_agent()` in `agent.py` before tools are used.
 
 Tool responses only include vault-relative paths — absolute system paths are never exposed to the agent.
 

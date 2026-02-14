@@ -12,11 +12,11 @@
 
 5. **Graph design deep dive** — Extensive discussion resulting in the unified `:Document:Note` node design. Two layers (structural + semantic) in one graph. Vault-relative paths as unique keys for cross-device consistency. See `docs/graph-design.md`.
 
-6. **brain/kg_pipeline.py** — Reviewed against reference implementation at `/Users/dmallett/Developer/ambition/ahi/kg/pipeline.py`. Confirmed our `SimpleKGPipeline` + `ObsidianLoader` approach works for neo4j-graphrag v1.1.0 (v1.1.0 doesn't have standalone `LexicalGraphBuilder`; it's embedded in the extractor). The ObsidianLoader provides `document_info` which triggers Document node creation.
+6. **brain/kg_pipeline.py** — Component-based pipeline with `ObsidianLoader`, `MergingNeo4jWriter`, and sequential component orchestration. The `ObsidianLoader` provides `document_info` with vault-relative paths which triggers Document node creation.
 
 7. **brain/obsidian.py** — Regex-based parsing for wikilinks, tags; `python-frontmatter` for YAML. Discussion: considered replacing with Obsidian plugin API (`app.metadataCache`) for richer/more authoritative metadata. Decided regex is fine for v0.1 but plugin is planned for later (see Open Items).
 
-8. **brain/sync.py** — Three functions: `sync_semantic` (KG Builder, expensive), `sync_structural` (Cypher, cheap), `sync_vault` (orchestrator). Major discussion about processing model — current implementation reprocesses everything with no change detection. See "Processing Model" design decision and "Obsidian Plugin" open item.
+8. **brain/sync.py** — Three functions: `sync_semantic` (KG pipeline, expensive, incremental via content hash), `sync_structural` (Cypher, cheap, runs unconditionally), `sync_vault` (orchestrator, semantic-first then structural).
 
 ## Not Yet Walked Through
 
@@ -52,19 +52,25 @@ An Obsidian plugin that runs inside the app, giving access to `app.metadataCache
 
 **Key reference:** Obsidian plugin API — `app.metadataCache` returns `CachedMetadata` with `links`, `embeds`, `headings`, `sections`, `listItems`, `tags`, `blocks`, `frontmatter`. Events: `changed`, `resolved`, `deleted`. See https://docs.obsidian.md/Reference/TypeScript+API/MetadataCache
 
-### Incremental Processing (v0.1 — implement before first real use)
+### Incremental Processing — DONE
 
-- Store `content_hash` (sha256) on every `:Note`/`:Document` node
-- On sync, compare file's current hash to stored hash — skip unchanged files
-- Structural sync: cheap enough to reprocess, but still skip unchanged for correctness
-- Semantic sync: must skip unchanged — each file = multiple LLM calls (chunked)
-- Overnight cron job (launchd on macOS) to process dirty files on a schedule
+Implemented in `sync.py`. SHA-256 content hashes stored on `:Document` nodes. Semantic sync skips unchanged files. Structural sync runs unconditionally (cheap). Batch entry point at `brain/batch.py`.
+
+### Real Embeddings — DONE
+
+Using `SentenceTransformerEmbeddings` with `embeddinggemma-300m` (768-dim). Vector index on Chunk nodes for cosine similarity search.
+
+### Component-Based Pipeline — DONE
+
+Replaced `SimpleKGPipeline` with sequential component orchestration in `KGPipeline`.
+
+### Unit Tests — DONE
+
+62 unit tests covering all modules. All external deps mocked. Run with `uv run pytest`.
 
 ### Other
 
-- Real embeddings (replace `NoOpEmbedder` with `SentenceTransformerEmbeddings`)
-- Upgrade to newer `neo4j-graphrag` for component-based pipeline (more control)
-- Batch API support for cost-efficient bulk processing (like the ambition reference)
+- Batch API support for cost-efficient bulk processing
 - Additional interfaces (Slack, Discord, web, native app, voice)
 - Internet access tools (with security service layer)
 - GraphPruning for schema enforcement

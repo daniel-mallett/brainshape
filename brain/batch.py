@@ -23,12 +23,8 @@ from brain.sync import sync_semantic, sync_structural, sync_vault
 
 def main():
     parser = argparse.ArgumentParser(description="Brain vault sync (batch mode)")
-    parser.add_argument(
-        "--structural", action="store_true", help="Run structural sync only"
-    )
-    parser.add_argument(
-        "--full", action="store_true", help="Run structural + semantic sync"
-    )
+    parser.add_argument("--structural", action="store_true", help="Run structural sync only")
+    parser.add_argument("--full", action="store_true", help="Run structural + semantic sync")
     args = parser.parse_args()
 
     vault_path = Path(settings.vault_path).expanduser()
@@ -50,10 +46,7 @@ def main():
             pipeline = create_kg_pipeline(db._driver, vault_path)
             stats = sync_vault(db, pipeline, vault_path)
             s, sem = stats["structural"], stats["semantic"]
-            print(
-                f"Structural: {s['notes']} notes, "
-                f"{s['tags']} tag links, {s['links']} note links"
-            )
+            print(f"Structural: {s['notes']} notes, {s['tags']} tag links, {s['links']} note links")
             print(f"Semantic: {sem['processed']} processed, {sem['skipped']} skipped")
         else:
             # Default: semantic only (the expensive/important one for overnight batch)

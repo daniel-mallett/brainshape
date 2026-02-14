@@ -19,10 +19,7 @@ def _run_sync(db: GraphDB, pipeline: KGPipeline, args: list[str]) -> None:
         stats = sync_vault(db, pipeline, vault_path)
         s = stats["structural"]
         sem = stats["semantic"]
-        print(
-            f"  Structural: {s['notes']} notes, "
-            f"{s['tags']} tag links, {s['links']} note links"
-        )
+        print(f"  Structural: {s['notes']} notes, {s['tags']} tag links, {s['links']} note links")
         print(f"  Semantic: {sem['processed']} processed, {sem['skipped']} skipped")
     elif "--semantic" in args:
         print("Running semantic sync (incremental)...")
@@ -31,10 +28,7 @@ def _run_sync(db: GraphDB, pipeline: KGPipeline, args: list[str]) -> None:
     else:
         print("Running structural sync...")
         stats = sync_structural(db, vault_path)
-        print(
-            f"  {stats['notes']} notes, "
-            f"{stats['tags']} tag links, {stats['links']} note links"
-        )
+        print(f"  {stats['notes']} notes, {stats['tags']} tag links, {stats['links']} note links")
 
 
 def _handle_command(command: str, db: GraphDB, pipeline: KGPipeline) -> None:
@@ -66,8 +60,7 @@ def run_cli():
             print(f"Syncing vault from {vault_path} ({len(notes)} notes)...")
             stats = sync_structural(db, vault_path)
             print(
-                f"  {stats['notes']} notes, "
-                f"{stats['tags']} tag links, {stats['links']} note links"
+                f"  {stats['notes']} notes, {stats['tags']} tag links, {stats['links']} note links"
             )
         else:
             print(f"Vault at {vault_path} is empty.")

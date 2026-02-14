@@ -56,9 +56,9 @@ Actual note content here
 
 Creates a new `.md` file with optional frontmatter tags and metadata.
 
-### edit_note(vault_path, title, new_content)
+### rewrite_note(vault_path, title, new_content, relative_path="")
 
-Replaces a note's content while preserving existing frontmatter. Re-extracts tags from the new content and merges with existing frontmatter tags.
+Replaces a note's content while preserving existing frontmatter. Re-extracts tags from the new content and merges with existing frontmatter tags. If `relative_path` is provided, uses it directly instead of guessing from title (needed for notes in subdirectories).
 
 ## Vault Path
 
@@ -75,4 +75,4 @@ The vault itself needs to be synced by an external tool (Obsidian Sync, Dropbox,
 
 ## Future: File Watching
 
-Currently sync is manual (on startup or via `sync_vault_tool`). A future enhancement could use `watchdog` to auto-sync vault changes in the background.
+Currently sync is manual (on startup or via `/sync` CLI commands). A future enhancement could use `watchdog` to auto-sync vault changes in the background.
