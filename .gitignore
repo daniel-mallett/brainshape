@@ -11,6 +11,8 @@ wheels/
 
 # Caches
 .ruff_cache/
+.pytest_cache/
+.coverage
 
 # Environment
 .env

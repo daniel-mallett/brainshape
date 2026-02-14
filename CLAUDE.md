@@ -48,14 +48,19 @@ main.py → brain/cli.py → brain/agent.py → tools → graph_db / obsidian / 
 **Pre-commit hooks** (via `pre-commit` framework):
 - `ruff` — lint check
 - `ruff-format` — format check
+- `gitleaks` — secret detection (API keys, passwords, tokens)
 - `pytest` — runs the test suite
 
 Install hooks after cloning: `uv run pre-commit install`
 
 **GitHub Actions CI** (`.github/workflows/ci.yml`):
 - Runs on push to `main` and on PRs targeting `main`
-- Steps: `ruff check`, `ty check`, `pytest`
+- Steps: `ruff check`, `ty check`, `pytest` (with coverage)
 - `ty` runs in CI only (too slow for pre-commit)
+- Coverage report printed in CI output via `pytest-cov`
+
+**Dependabot** (`.github/dependabot.yml`):
+- Weekly PRs for Python dependency updates and GitHub Actions version bumps
 
 ## Dependency Management
 

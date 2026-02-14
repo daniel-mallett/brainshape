@@ -15,9 +15,11 @@
 - System prompt: auto-discovered entity types, memory instructions, folder-aware note creation
 - Folder-aware note creation and editing (edit_note looks up path from graph)
 - Tool responses use vault-relative paths only (no system path leakage)
-- Unit test suite: 62 tests covering all modules, all external deps mocked
-- CI: GitHub Actions workflow runs lint, type-check, and tests on push/PR to main
-- Pre-commit hooks: ruff lint, ruff format, and pytest run on every commit
+- Unit test suite: 62 tests covering all modules, all external deps mocked (61% line coverage)
+- CI: GitHub Actions workflow runs ruff, ty, and pytest (with coverage) on push/PR to main
+- Pre-commit hooks: ruff lint, ruff format, gitleaks secret detection, pytest
+- Dependabot: weekly PRs for Python deps and GitHub Actions versions
+- Type checking: ty configured to check `brain/` only (tests excluded — LangChain stubs cause false positives)
 
 ## Known Issues
 
