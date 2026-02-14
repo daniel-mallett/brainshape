@@ -8,6 +8,18 @@ WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
 TAG_RE = re.compile(r"(?:^|\s)#([a-zA-Z][\w/-]*)", re.MULTILINE)
 
 
+def _ensure_within_vault(vault_path: Path, file_path: Path) -> Path:
+    """Resolve *file_path* and verify it lives inside *vault_path*.
+
+    Raises ``ValueError`` if the resolved path escapes the vault directory
+    (e.g. via ``../`` traversal sequences).
+    """
+    resolved = file_path.resolve()
+    if not resolved.is_relative_to(vault_path.resolve()):
+        raise ValueError(f"Path escapes vault directory: {file_path}")
+    return resolved
+
+
 def compute_file_hash(file_path: Path) -> str:
     """SHA-256 hash of a file's raw content."""
     return hashlib.sha256(file_path.read_bytes()).hexdigest()
@@ -74,6 +86,7 @@ def write_note(
         file_path = vault_path / folder / f"{title}.md"
     else:
         file_path = vault_path / f"{title}.md"
+    file_path = _ensure_within_vault(vault_path, file_path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
     with open(file_path, "w") as f:
         f.write(frontmatter.dumps(post))
@@ -88,6 +101,7 @@ def rewrite_note(vault_path: Path, title: str, new_content: str, relative_path: 
         file_path = vault_path / relative_path
     else:
         file_path = vault_path / f"{title}.md"
+    file_path = _ensure_within_vault(vault_path, file_path)
     if not file_path.exists():
         raise FileNotFoundError(f"Note '{title}' not found at {file_path}")
 
