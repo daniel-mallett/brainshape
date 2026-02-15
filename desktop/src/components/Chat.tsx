@@ -3,6 +3,7 @@ import { useAgentStream, type Message } from "../lib/useAgentStream";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { VoiceRecorder } from "./VoiceRecorder";
 
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
@@ -83,6 +84,12 @@ export function Chat() {
 
       <form onSubmit={handleSubmit} className="p-2 border-t border-border">
         <div className="flex gap-2">
+          <VoiceRecorder
+            onTranscription={(text) => {
+              setInput((prev) => (prev ? `${prev} ${text}` : text));
+            }}
+            disabled={isStreaming}
+          />
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}

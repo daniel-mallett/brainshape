@@ -18,9 +18,10 @@ def server_db():
 
 
 @pytest.fixture
-def client(tmp_notes, monkeypatch, mock_agent, server_db):
+def client(tmp_notes, tmp_path, monkeypatch, mock_agent, server_db):
     """Create a test client with mocked agent/db/pipeline and tmp notes."""
     monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
+    monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
 
     # Bypass lifespan entirely by replacing it with a no-op
     from contextlib import asynccontextmanager
@@ -303,6 +304,49 @@ class TestNoteTags:
         resp = client.get("/notes/tags")
         assert resp.status_code == 200
         assert resp.json()["tags"] == ["python", "project"]
+
+
+class TestTranscription:
+    def test_transcribe_audio(self, client, monkeypatch):
+        mock_transcribe = MagicMock(return_value={"text": "Hello world", "segments": []})
+        monkeypatch.setattr("brain.transcribe.transcribe_audio", mock_transcribe)
+
+        resp = client.post(
+            "/transcribe",
+            files={"audio": ("test.wav", b"fake audio data", "audio/wav")},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["text"] == "Hello world"
+
+
+class TestSettings:
+    def test_get_settings(self, client):
+        resp = client.get("/settings")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "llm_provider" in data
+        assert "llm_model" in data
+        # API keys should not be exposed
+        assert "openai_api_key" not in data
+        assert "openai_api_key_set" in data
+
+    def test_update_settings(self, client):
+        resp = client.put("/settings", json={"llm_provider": "ollama", "llm_model": "llama3.3"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["llm_provider"] == "ollama"
+        assert data["llm_model"] == "llama3.3"
+
+    def test_update_invalid_provider(self, client):
+        resp = client.put("/settings", json={"llm_provider": "invalid"})
+        assert resp.status_code == 400
+
+    def test_partial_update(self, client):
+        resp = client.put("/settings", json={"llm_model": "gpt-4o"})
+        assert resp.status_code == 200
+        assert resp.json()["llm_model"] == "gpt-4o"
 
 
 class TestSync:

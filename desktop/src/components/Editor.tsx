@@ -7,13 +7,16 @@ import { languages } from "@codemirror/language-data";
 import { vim } from "@replit/codemirror-vim";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { updateNoteFile } from "../lib/api";
+import { brainAutocompletion, prefetchCompletions } from "../lib/completions";
+import { wikilinkExtension, setWikilinkNavigate } from "../lib/wikilinks";
 
 interface EditorProps {
   filePath: string | null;
   content: string;
+  onNavigateToNote?: (title: string) => void;
 }
 
-export function Editor({ filePath, content }: EditorProps) {
+export function Editor({ filePath, content, onNavigateToNote }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -29,6 +32,18 @@ export function Editor({ filePath, content }: EditorProps) {
     }, 1000);
   }
 
+  // Pre-fetch completions cache on mount so first keystroke has data
+  useEffect(() => {
+    prefetchCompletions();
+  }, []);
+
+  // Set up wikilink navigation callback
+  useEffect(() => {
+    if (onNavigateToNote) {
+      setWikilinkNavigate(onNavigateToNote);
+    }
+  }, [onNavigateToNote]);
+
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -40,6 +55,8 @@ export function Editor({ filePath, content }: EditorProps) {
         keymap.of([...defaultKeymap, ...historyKeymap]),
         markdown({ codeLanguages: languages }),
         oneDark,
+        brainAutocompletion,
+        wikilinkExtension,
         EditorView.lineWrapping,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {

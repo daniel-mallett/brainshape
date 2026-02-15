@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { health, getConfig, getNoteFile, type Config } from "./lib/api";
+import { health, getConfig, getNoteFile, getNoteFiles, syncStructural, type Config } from "./lib/api";
 import { Sidebar } from "./components/Sidebar";
 import { Editor } from "./components/Editor";
 import { Chat } from "./components/Chat";
 import { GraphPanel } from "./components/GraphPanel";
 import { MemoryPanel } from "./components/MemoryPanel";
+import { SettingsPanel } from "./components/SettingsPanel";
+import { CommandPalette } from "./components/CommandPalette";
 import { Button } from "@/components/ui/button";
 import "./App.css";
 
-type ActiveView = "editor" | "graph" | "memory";
+type ActiveView = "editor" | "graph" | "memory" | "settings";
 
 function App() {
   const [connected, setConnected] = useState(false);
@@ -17,6 +19,7 @@ function App() {
   const [fileContent, setFileContent] = useState("");
   const [chatOpen, setChatOpen] = useState(true);
   const [activeView, setActiveView] = useState<ActiveView>("editor");
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
     async function checkConnection() {
@@ -58,6 +61,44 @@ function App() {
     },
     [handleSelectFile]
   );
+
+  // Navigate by note title (for wikilinks in editor)
+  const handleNavigateByTitle = useCallback(
+    async (title: string) => {
+      try {
+        const { files } = await getNoteFiles();
+        const match = files.find((f) => f.title === title);
+        if (match) {
+          handleSelectFile(match.path);
+        }
+      } catch (err) {
+        console.error("Failed to navigate to note:", err);
+      }
+    },
+    [handleSelectFile]
+  );
+
+  // Cmd+K to open command palette
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setPaletteOpen((prev) => !prev);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const handleCreateNote = useCallback(() => {
+    // Trigger the sidebar's create flow by programmatically focusing
+    // For now, we'll just switch to editor view — the sidebar has the + button
+    setActiveView("editor");
+  }, []);
+
+  const handleSync = useCallback(() => {
+    syncStructural().catch(console.error);
+  }, []);
 
   if (!connected) {
     return (
@@ -109,6 +150,14 @@ function App() {
           >
             Memory
           </Button>
+          <Button
+            variant={activeView === "settings" ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setActiveView("settings")}
+            className="h-6 text-xs"
+          >
+            Settings
+          </Button>
           <div className="border-l border-border h-4 mx-1" />
           <Button
             variant={chatOpen ? "secondary" : "ghost"}
@@ -126,15 +175,25 @@ function App() {
         <Sidebar selectedPath={selectedPath} onSelectFile={handleSelectFile} />
 
         {activeView === "editor" && (
-          <Editor filePath={selectedPath} content={fileContent} />
+          <Editor filePath={selectedPath} content={fileContent} onNavigateToNote={handleNavigateByTitle} />
         )}
         {activeView === "graph" && (
           <GraphPanel onNavigateToNote={handleNavigateToNote} />
         )}
         {activeView === "memory" && <MemoryPanel />}
+        {activeView === "settings" && <SettingsPanel />}
 
         {chatOpen && <Chat />}
       </div>
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onSelectNote={handleSelectFile}
+        onCreateNote={handleCreateNote}
+        onSwitchView={(v) => setActiveView(v as ActiveView)}
+        onSync={handleSync}
+      />
     </div>
   );
 }

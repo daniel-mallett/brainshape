@@ -86,6 +86,74 @@ export function syncStructural(): Promise<{ status: string; stats: Record<string
   return request("/sync/structural", { method: "POST" });
 }
 
+// --- Settings ---
+
+export interface MCPServer {
+  name: string;
+  transport: "stdio" | "http" | "sse";
+  command?: string;
+  args?: string[];
+  url?: string;
+}
+
+export interface Settings {
+  llm_provider: string;
+  llm_model: string;
+  ollama_base_url: string;
+  openai_api_key_set: boolean;
+  whisper_model: string;
+  mcp_servers: MCPServer[];
+}
+
+export function getSettings(): Promise<Settings> {
+  return request("/settings");
+}
+
+export function updateSettings(
+  updates: Partial<{
+    llm_provider: string;
+    llm_model: string;
+    ollama_base_url: string;
+    openai_api_key: string;
+    whisper_model: string;
+    mcp_servers: MCPServer[];
+  }>
+): Promise<Settings> {
+  return request("/settings", {
+    method: "PUT",
+    body: JSON.stringify(updates),
+  });
+}
+
+// --- Transcription ---
+
+export interface TranscriptionResult {
+  text: string;
+  segments: { start: number; end: number; text: string }[];
+}
+
+export async function transcribeAudio(
+  audioBlob: Blob
+): Promise<TranscriptionResult> {
+  const formData = new FormData();
+  formData.append("audio", audioBlob, "recording.wav");
+  const res = await fetch(`${BASE_URL}/transcribe`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`${res.status}: ${detail}`);
+  }
+  return res.json();
+}
+
+// --- Tags ---
+
+export function getTags(): Promise<{ tags: string[] }> {
+  return request("/notes/tags");
+}
+
 // --- Agent ---
 
 export function initSession(): Promise<{ session_id: string }> {

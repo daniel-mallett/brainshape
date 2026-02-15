@@ -1,0 +1,93 @@
+import json
+
+import pytest
+
+from brain.settings import (
+    DEFAULTS,
+    VALID_PROVIDERS,
+    get_llm_model_string,
+    load_settings,
+    save_settings,
+    update_settings,
+)
+
+
+@pytest.fixture(autouse=True)
+def tmp_settings_file(tmp_path, monkeypatch):
+    """Point settings file at a temp location."""
+    settings_file = tmp_path / "settings.json"
+    monkeypatch.setattr("brain.settings.SETTINGS_FILE", settings_file)
+    return settings_file
+
+
+class TestLoadSettings:
+    def test_returns_defaults_when_no_file(self, tmp_settings_file):
+        assert not tmp_settings_file.exists()
+        settings = load_settings()
+        assert settings == DEFAULTS
+
+    def test_loads_from_file(self, tmp_settings_file):
+        tmp_settings_file.write_text(json.dumps({"llm_provider": "ollama"}))
+        settings = load_settings()
+        assert settings["llm_provider"] == "ollama"
+        # Other defaults still present
+        assert settings["llm_model"] == DEFAULTS["llm_model"]
+
+    def test_handles_corrupt_file(self, tmp_settings_file):
+        tmp_settings_file.write_text("not json{{{")
+        settings = load_settings()
+        assert settings == DEFAULTS
+
+
+class TestSaveSettings:
+    def test_saves_known_keys(self, tmp_settings_file):
+        save_settings({"llm_provider": "openai", "unknown_key": "ignored"})
+        saved = json.loads(tmp_settings_file.read_text())
+        assert saved["llm_provider"] == "openai"
+        assert "unknown_key" not in saved
+
+    def test_creates_parent_dirs(self, tmp_path, monkeypatch):
+        deep_file = tmp_path / "a" / "b" / "settings.json"
+        monkeypatch.setattr("brain.settings.SETTINGS_FILE", deep_file)
+        save_settings(DEFAULTS)
+        assert deep_file.exists()
+
+
+class TestUpdateSettings:
+    def test_merges_and_persists(self, tmp_settings_file):
+        result = update_settings({"llm_provider": "ollama", "llm_model": "llama3.3"})
+        assert result["llm_provider"] == "ollama"
+        assert result["llm_model"] == "llama3.3"
+        # Verify persisted
+        saved = json.loads(tmp_settings_file.read_text())
+        assert saved["llm_provider"] == "ollama"
+
+    def test_ignores_unknown_keys(self):
+        result = update_settings({"unknown": "value"})
+        assert "unknown" not in result
+
+
+class TestGetLlmModelString:
+    def test_anthropic(self):
+        s = {"llm_provider": "anthropic", "llm_model": "claude-haiku-4-5-20251001"}
+        assert get_llm_model_string(s) == "anthropic:claude-haiku-4-5-20251001"
+
+    def test_openai(self):
+        s = {"llm_provider": "openai", "llm_model": "gpt-4o"}
+        assert get_llm_model_string(s) == "openai:gpt-4o"
+
+    def test_ollama(self):
+        s = {
+            "llm_provider": "ollama",
+            "llm_model": "llama3.3",
+            "ollama_base_url": "http://localhost:11434",
+        }
+        assert get_llm_model_string(s) == "ollama:llama3.3"
+
+    def test_defaults(self):
+        result = get_llm_model_string(DEFAULTS)
+        assert result == "anthropic:claude-haiku-4-5-20251001"
+
+
+def test_valid_providers():
+    assert VALID_PROVIDERS == {"anthropic", "openai", "ollama"}

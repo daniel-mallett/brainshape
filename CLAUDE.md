@@ -26,9 +26,13 @@ desktop/                  # Tauri 2 + React + TypeScript
 - `brain/server.py` — FastAPI server (HTTP + SSE) for desktop app
 - `brain/kg_pipeline.py` — component-based KG pipeline for entity/relationship extraction
 - `brain/sync.py` — orchestrates incremental structural + semantic sync from notes to graph
+- `brain/settings.py` — persistent user settings (JSON on disk), LLM provider config, MCP servers
+- `brain/mcp_client.py` — MCP server client, loads external tools via `langchain-mcp-adapters`
+- `brain/watcher.py` — watchdog file watcher for auto-sync on notes changes
+- `brain/transcribe.py` — local voice transcription via mlx-whisper
 - `brain/cli.py` — interactive CLI chat loop with `/sync` commands
 - `brain/batch.py` — standalone batch sync entry point for cron/launchd
-- `brain/config.py` — pydantic-settings from .env
+- `brain/config.py` — pydantic-settings from .env (secrets/infra)
 - `tests/` — unit tests (all external deps mocked, no Docker/Neo4j required)
 
 ## Development Environment

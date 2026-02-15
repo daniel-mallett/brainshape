@@ -7,6 +7,7 @@ from brain import tools
 from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline, create_kg_pipeline
+from brain.settings import get_llm_model_string
 
 SYSTEM_PROMPT = """\
 You are Brain, a personal knowledge management assistant.
@@ -57,10 +58,16 @@ Be concise but helpful. Use good markdown conventions (wikilinks, tags, clear he
 def create_brain_agent(
     db: GraphDB | None = None,
     pipeline: KGPipeline | None = None,
+    mcp_tools: list | None = None,
 ):
     """Create and return the Brain agent + db + pipeline.
 
     This is the single entry point for any interface (CLI, Slack, web, etc.)
+
+    Args:
+        db: Optional pre-configured GraphDB instance.
+        pipeline: Optional pre-configured KGPipeline instance.
+        mcp_tools: Optional list of MCP tools to include alongside built-in tools.
     """
     if db is None:
         db = GraphDB()
@@ -75,13 +82,15 @@ def create_brain_agent(
 
     checkpointer = MemorySaver()
 
-    model = settings.model_name
-    if ":" not in model:
-        model = f"anthropic:{model}"
+    model = get_llm_model_string()
+
+    all_tools = list(tools.ALL_TOOLS)
+    if mcp_tools:
+        all_tools.extend(mcp_tools)
 
     agent = create_agent(
         model=model,
-        tools=tools.ALL_TOOLS,
+        tools=all_tools,
         system_prompt=SYSTEM_PROMPT,
         checkpointer=checkpointer,
     )

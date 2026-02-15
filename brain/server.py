@@ -1,11 +1,12 @@
 """FastAPI server exposing Brain agent, notes, and sync operations over HTTP + SSE."""
 
 import json
+import tempfile
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
@@ -14,13 +15,18 @@ from brain.agent import create_brain_agent
 from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline
+from brain.mcp_client import close_mcp_client
+from brain.mcp_client import load_mcp_tools as load_mcp
 from brain.notes import delete_note, init_notes, list_notes, parse_note, rewrite_note, write_note
+from brain.settings import VALID_PROVIDERS, load_settings, update_settings
 from brain.sync import sync_all, sync_semantic, sync_structural
+from brain.watcher import start_watcher
 
 # Module-level state set during lifespan
 _agent = None
 _db: GraphDB | None = None
 _pipeline: KGPipeline | None = None
+_observer = None  # watchdog observer
 
 # In-memory session store: session_id → LangGraph config
 _sessions: dict[str, dict] = {}
@@ -28,8 +34,12 @@ _sessions: dict[str, dict] = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _agent, _db, _pipeline
-    _agent, _db, _pipeline = create_brain_agent()
+    global _agent, _db, _pipeline, _observer
+
+    # Load MCP tools (async, may be empty if none configured)
+    mcp_tools = await load_mcp()
+
+    _agent, _db, _pipeline = create_brain_agent(mcp_tools=mcp_tools or None)
 
     notes_path = Path(settings.notes_path).expanduser()
     init_notes(notes_path)
@@ -38,8 +48,19 @@ async def lifespan(app: FastAPI):
         if notes:
             sync_structural(_db, notes_path)
 
+    # Start file watcher for auto-sync
+    if notes_path.exists() and _db is not None:
+
+        def on_notes_changed():
+            sync_structural(_db, notes_path)
+
+        _observer = start_watcher(notes_path, on_notes_changed)
+
     yield
 
+    if _observer is not None:
+        _observer.stop()
+    await close_mcp_client()
     if _db is not None:
         _db.close()
 
@@ -82,6 +103,15 @@ class UpdateNoteRequest(BaseModel):
 
 class UpdateMemoryRequest(BaseModel):
     content: str
+
+
+class UpdateSettingsRequest(BaseModel):
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    ollama_base_url: str | None = None
+    openai_api_key: str | None = None
+    whisper_model: str | None = None
+    mcp_servers: list[dict] | None = None
 
 
 # --- Health ---
@@ -437,6 +467,71 @@ def _truncate(text: str | None, max_len: int) -> str | None:
     if text and len(text) > max_len:
         return text[:max_len] + "..."
     return text
+
+
+# --- Transcription ---
+
+
+@app.post("/transcribe")
+async def transcribe(audio: UploadFile = File(...)):
+    """Transcribe an uploaded audio file using local Whisper model."""
+    from brain.transcribe import transcribe_audio
+
+    suffix = Path(audio.filename or "audio.wav").suffix or ".wav"
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp_path = tmp.name
+            content = await audio.read()
+            tmp.write(content)
+        result = transcribe_audio(tmp_path)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {e}")
+    finally:
+        if tmp_path:
+            Path(tmp_path).unlink(missing_ok=True)
+
+
+# --- Settings ---
+
+
+@app.get("/settings")
+def get_settings():
+    s = load_settings()
+    # Never expose API keys to the frontend
+    safe = {k: v for k, v in s.items() if "api_key" not in k}
+    safe["openai_api_key_set"] = bool(s.get("openai_api_key"))
+    return safe
+
+
+@app.put("/settings")
+def put_settings(req: UpdateSettingsRequest):
+    updates = {}
+    if req.llm_provider is not None:
+        if req.llm_provider not in VALID_PROVIDERS:
+            raise HTTPException(status_code=400, detail=f"Invalid provider: {req.llm_provider}")
+        updates["llm_provider"] = req.llm_provider
+    if req.llm_model is not None:
+        updates["llm_model"] = req.llm_model
+    if req.ollama_base_url is not None:
+        updates["ollama_base_url"] = req.ollama_base_url
+    if req.openai_api_key is not None:
+        updates["openai_api_key"] = req.openai_api_key
+    if req.whisper_model is not None:
+        updates["whisper_model"] = req.whisper_model
+        from brain.transcribe import reset_model
+
+        reset_model()
+    if req.mcp_servers is not None:
+        updates["mcp_servers"] = req.mcp_servers
+
+    updated = update_settings(updates)
+    safe = {k: v for k, v in updated.items() if "api_key" not in k}
+    safe["openai_api_key_set"] = bool(updated.get("openai_api_key"))
+    return safe
 
 
 # --- Sync ---
