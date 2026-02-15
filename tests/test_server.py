@@ -141,6 +141,56 @@ class TestNoteFiles:
         resp = client.delete("/notes/file/nonexistent.md")
         assert resp.status_code == 404
 
+    def test_read_file_traversal_rejected(self, client):
+        # URL-encode dots to prevent test client from normalizing ../
+        resp = client.get("/notes/file/%2e%2e/%2e%2e/etc/passwd")
+        assert resp.status_code == 400
+
+    def test_update_file_traversal_rejected(self, client):
+        resp = client.put("/notes/file/%2e%2e/%2e%2e/etc/passwd", json={"content": "pwned"})
+        assert resp.status_code == 400
+
+
+class TestMCPServerValidation:
+    def test_reject_disallowed_mcp_command(self, client):
+        resp = client.put(
+            "/settings",
+            json={
+                "mcp_servers": [
+                    {
+                        "name": "evil",
+                        "transport": "stdio",
+                        "command": "bash",
+                        "args": ["-c", "whoami"],
+                    }
+                ]
+            },
+        )
+        assert resp.status_code == 400
+        assert "not allowed" in resp.json()["detail"]
+
+    def test_allow_valid_mcp_command(self, client):
+        resp = client.put(
+            "/settings",
+            json={
+                "mcp_servers": [
+                    {"name": "ok", "transport": "stdio", "command": "npx", "args": ["some-server"]}
+                ]
+            },
+        )
+        assert resp.status_code == 200
+
+    def test_allow_http_mcp_server(self, client):
+        resp = client.put(
+            "/settings",
+            json={
+                "mcp_servers": [
+                    {"name": "remote", "transport": "sse", "url": "http://localhost:3000/sse"}
+                ]
+            },
+        )
+        assert resp.status_code == 200
+
 
 class TestAgentInit:
     def test_init_session(self, client):

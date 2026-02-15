@@ -17,7 +17,15 @@ from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline
 from brain.mcp_client import close_mcp_client
 from brain.mcp_client import load_mcp_tools as load_mcp
-from brain.notes import delete_note, init_notes, list_notes, parse_note, rewrite_note, write_note
+from brain.notes import (
+    _ensure_within_notes_dir,
+    delete_note,
+    init_notes,
+    list_notes,
+    parse_note,
+    rewrite_note,
+    write_note,
+)
 from brain.settings import VALID_PROVIDERS, load_settings, update_settings
 from brain.sync import sync_all, sync_semantic, sync_structural
 from brain.watcher import start_watcher
@@ -210,6 +218,10 @@ def notes_files():
 def notes_read(path: str):
     notes_path = _notes_path()
     file_path = notes_path / path
+    try:
+        file_path = _ensure_within_notes_dir(notes_path, file_path)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path")
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Note not found")
     note = parse_note(file_path, notes_path)
@@ -260,6 +272,10 @@ def notes_delete(path: str):
 def notes_update(path: str, req: UpdateNoteRequest):
     notes_path = _notes_path()
     file_path = notes_path / path
+    try:
+        file_path = _ensure_within_notes_dir(notes_path, file_path)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path")
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Note not found")
     title = file_path.stem
@@ -498,6 +514,27 @@ async def transcribe(audio: UploadFile = File(...)):
 # --- Settings ---
 
 
+_ALLOWED_MCP_COMMANDS = {"npx", "uvx", "node", "python", "python3", "deno", "bun"}
+
+
+def _validate_mcp_servers(servers: list[dict]) -> None:
+    """Validate MCP server configs to prevent command injection."""
+    for server in servers:
+        transport = server.get("transport", "stdio")
+        if transport == "stdio":
+            command = server.get("command", "")
+            if not command:
+                continue
+            # Only allow known safe command basenames
+            basename = Path(command).name
+            if basename not in _ALLOWED_MCP_COMMANDS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"MCP command not allowed: {command!r}. "
+                    f"Allowed: {', '.join(sorted(_ALLOWED_MCP_COMMANDS))}",
+                )
+
+
 @app.get("/settings")
 def get_settings():
     s = load_settings()
@@ -526,6 +563,7 @@ def put_settings(req: UpdateSettingsRequest):
 
         reset_model()
     if req.mcp_servers is not None:
+        _validate_mcp_servers(req.mcp_servers)
         updates["mcp_servers"] = req.mcp_servers
 
     updated = update_settings(updates)
