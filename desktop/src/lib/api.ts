@@ -102,7 +102,9 @@ export interface Settings {
   ollama_base_url: string;
   anthropic_api_key_set: boolean;
   openai_api_key_set: boolean;
-  whisper_model: string;
+  mistral_api_key_set: boolean;
+  transcription_provider: string;
+  transcription_model: string;
   mcp_servers: MCPServer[];
 }
 
@@ -117,7 +119,9 @@ export function updateSettings(
     ollama_base_url: string;
     anthropic_api_key: string;
     openai_api_key: string;
-    whisper_model: string;
+    mistral_api_key: string;
+    transcription_provider: string;
+    transcription_model: string;
     mcp_servers: MCPServer[];
   }>
 ): Promise<Settings> {

@@ -24,6 +24,18 @@ const SUGGESTED_MODELS: Record<string, string[]> = {
   ollama: ["llama3.3", "mistral", "deepseek-r1"],
 };
 
+const TRANSCRIPTION_PROVIDERS = [
+  { value: "local", label: "Local (mlx-whisper)" },
+  { value: "openai", label: "OpenAI Whisper" },
+  { value: "mistral", label: "Mistral Voxtral" },
+] as const;
+
+const SUGGESTED_TRANSCRIPTION_MODELS: Record<string, string[]> = {
+  local: ["mlx-community/whisper-small", "mlx-community/whisper-large-v3-turbo"],
+  openai: ["gpt-4o-mini-transcribe", "gpt-4o-transcribe", "whisper-1"],
+  mistral: ["voxtral-mini-latest"],
+};
+
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground pb-1 border-b border-border">
@@ -52,7 +64,9 @@ export function SettingsPanel() {
   const [ollamaUrl, setOllamaUrl] = useState("");
   const [anthropicKey, setAnthropicKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
-  const [whisperModel, setWhisperModel] = useState("");
+  const [mistralKey, setMistralKey] = useState("");
+  const [txProvider, setTxProvider] = useState("local");
+  const [txModel, setTxModel] = useState("");
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
 
   const fetchSettings = useCallback(async () => {
@@ -63,10 +77,12 @@ export function SettingsPanel() {
       setProvider(s.llm_provider);
       setModel(s.llm_model);
       setOllamaUrl(s.ollama_base_url);
-      setWhisperModel(s.whisper_model);
+      setTxProvider(s.transcription_provider || "local");
+      setTxModel(s.transcription_model || "");
       setMcpServers(s.mcp_servers || []);
       setAnthropicKey("");
       setOpenaiKey("");
+      setMistralKey("");
     } catch (err) {
       console.error("Failed to load settings:", err);
     } finally {
@@ -85,11 +101,13 @@ export function SettingsPanel() {
         llm_provider: provider,
         llm_model: model,
         ollama_base_url: ollamaUrl,
-        whisper_model: whisperModel,
+        transcription_provider: txProvider,
+        transcription_model: txModel,
         mcp_servers: mcpServers,
       };
       if (anthropicKey) updates.anthropic_api_key = anthropicKey;
       if (openaiKey) updates.openai_api_key = openaiKey;
+      if (mistralKey) updates.mistral_api_key = mistralKey;
       const s = await updateSettings(
         updates as Parameters<typeof updateSettings>[0]
       );
@@ -97,6 +115,7 @@ export function SettingsPanel() {
       setDirty(false);
       setAnthropicKey("");
       setOpenaiKey("");
+      setMistralKey("");
     } catch (err) {
       console.error("Failed to save settings:", err);
     } finally {
@@ -256,20 +275,126 @@ export function SettingsPanel() {
             <SectionHeading>Voice Transcription</SectionHeading>
 
             <section className="space-y-1.5">
-              <FieldLabel>Whisper Model</FieldLabel>
-              <Input
-                value={whisperModel}
+              <FieldLabel>Provider</FieldLabel>
+              <select
+                value={txProvider}
                 onChange={(e) => {
-                  setWhisperModel(e.target.value);
+                  setTxProvider(e.target.value);
+                  setTxModel("");
                   markDirty();
                 }}
-                placeholder="mlx-community/whisper-large-v3-turbo"
-                className="h-8 text-sm"
-              />
+                className="w-full h-8 text-sm rounded-md border border-input bg-background px-3 text-foreground"
+              >
+                {TRANSCRIPTION_PROVIDERS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+              {txProvider === "local" && (
+                <FieldHint>
+                  Runs locally via mlx-whisper. Requires Apple Silicon.
+                </FieldHint>
+              )}
+            </section>
+
+            <section className="space-y-1.5">
+              <FieldLabel>Model</FieldLabel>
+              {(() => {
+                const txSuggestions =
+                  SUGGESTED_TRANSCRIPTION_MODELS[txProvider] || [];
+                return (
+                  <>
+                    <select
+                      value={
+                        txSuggestions.includes(txModel) ? txModel : "__custom__"
+                      }
+                      onChange={(e) => {
+                        if (e.target.value !== "__custom__") {
+                          setTxModel(e.target.value);
+                          markDirty();
+                        }
+                      }}
+                      className="w-full h-8 text-sm rounded-md border border-input bg-background px-3 text-foreground"
+                    >
+                      <option value="">Provider default</option>
+                      {txSuggestions.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                      {txModel && !txSuggestions.includes(txModel) && (
+                        <option value="__custom__">{txModel}</option>
+                      )}
+                      {(txModel === "" || txSuggestions.includes(txModel)) && (
+                        <option value="__custom__">Custom...</option>
+                      )}
+                    </select>
+                    {txModel !== "" &&
+                      !txSuggestions.includes(txModel) && (
+                        <Input
+                          value={txModel === "__custom__" ? "" : txModel}
+                          onChange={(e) => {
+                            setTxModel(e.target.value);
+                            markDirty();
+                          }}
+                          placeholder="Enter custom model name..."
+                          className="h-8 text-sm"
+                        />
+                      )}
+                  </>
+                );
+              })()}
               <FieldHint>
-                Local transcription via mlx-whisper. Requires Apple Silicon.
+                Leave empty to use the provider's default model.
               </FieldHint>
             </section>
+
+            {txProvider === "openai" && (
+              <section className="space-y-1.5">
+                <FieldLabel>OpenAI API Key</FieldLabel>
+                <Input
+                  type="password"
+                  value={openaiKey}
+                  onChange={(e) => {
+                    setOpenaiKey(e.target.value);
+                    markDirty();
+                  }}
+                  placeholder={
+                    settings?.openai_api_key_set
+                      ? "Key is set (enter new to update)"
+                      : "sk-..."
+                  }
+                  className="h-8 text-sm"
+                />
+                <FieldHint>
+                  Shared with the OpenAI LLM provider above.
+                </FieldHint>
+              </section>
+            )}
+
+            {txProvider === "mistral" && (
+              <section className="space-y-1.5">
+                <FieldLabel>Mistral API Key</FieldLabel>
+                <Input
+                  type="password"
+                  value={mistralKey}
+                  onChange={(e) => {
+                    setMistralKey(e.target.value);
+                    markDirty();
+                  }}
+                  placeholder={
+                    settings?.mistral_api_key_set
+                      ? "Key is set (enter new to update)"
+                      : "mk-..."
+                  }
+                  className="h-8 text-sm"
+                />
+                <FieldHint>
+                  Can also be set via MISTRAL_API_KEY environment variable.
+                </FieldHint>
+              </section>
+            )}
           </div>
 
           {/* ── MCP Servers ── */}
