@@ -105,7 +105,7 @@ Copy `.env.example` to `.env` and fill in `ANTHROPIC_API_KEY` and `NOTES_PATH`.
 
 **Known issue:** `.env` loading doesn't work for all dependencies — the Anthropic API key may need to be exported in your shell profile (e.g. `~/.zshrc`) as well.
 
-**HuggingFace auth:** The embedding model (`google/embeddinggemma-300m`) is gated. Users must accept the license at https://huggingface.co/google/embeddinggemma-300m and run `huggingface-cli login` once. This is a known friction point — switching to an ungated model or Ollama is planned.
+**Embedding model:** The default embedding model is `sentence-transformers/all-mpnet-base-v2` (ungated, no login required). This can be changed via the settings UI or `~/.config/brain/settings.json` (`embedding_model` and `embedding_dimensions` keys). Changing the model triggers automatic vector index migration on next sync.
 
 ## Testing
 

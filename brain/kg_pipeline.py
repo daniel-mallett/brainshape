@@ -1,4 +1,3 @@
-import asyncio
 from pathlib import Path
 
 import neo4j
@@ -15,9 +14,6 @@ from neo4j_graphrag.experimental.components.text_splitters.fixed_size_splitter i
     FixedSizeSplitter,
 )
 from neo4j_graphrag.indexes import create_vector_index
-
-EMBEDDING_MODEL = "google/embeddinggemma-300m"
-EMBEDDING_DIMENSIONS = 768
 
 
 class NotesLoader(DataLoader):
@@ -59,25 +55,46 @@ class KGPipeline:
     through structural sync (tags, wikilinks) and agent-driven memory.
     """
 
-    def __init__(self, driver: neo4j.Driver, notes_path: Path):
+    def __init__(
+        self,
+        driver: neo4j.Driver,
+        notes_path: Path,
+        embedding_model: str = "sentence-transformers/all-mpnet-base-v2",
+        embedding_dimensions: int = 768,
+    ):
         self.driver = driver
         self.notes_path = notes_path
 
-        self._embedder = SentenceTransformerEmbeddings(model=EMBEDDING_MODEL)
+        self._embedder = SentenceTransformerEmbeddings(model=embedding_model)
 
         self.loader = NotesLoader(notes_path)
         self.splitter = FixedSizeSplitter(chunk_size=4000, chunk_overlap=200)
         self.embedder = TextChunkEmbedder(embedder=self._embedder)
 
-        # Ensure the vector index exists for semantic search over chunks
-        create_vector_index(
-            driver=driver,
-            name="chunk_embeddings",
-            label="Chunk",
-            embedding_property="embedding",
-            dimensions=EMBEDDING_DIMENSIONS,
-            similarity_fn="cosine",
-        )
+        # Ensure the vector index exists for semantic search over chunks.
+        # If the index exists with different dimensions (model change), drop and recreate.
+        try:
+            create_vector_index(
+                driver=driver,
+                name="chunk_embeddings",
+                label="Chunk",
+                embedding_property="embedding",
+                dimensions=embedding_dimensions,
+                similarity_fn="cosine",
+            )
+        except Exception:
+            with driver.session() as session:
+                session.run("DROP INDEX chunk_embeddings IF EXISTS")
+                session.run("MATCH (c:Chunk) DETACH DELETE c")
+                session.run("MATCH (n:Document) REMOVE n.content_hash")
+            create_vector_index(
+                driver=driver,
+                name="chunk_embeddings",
+                label="Chunk",
+                embedding_property="embedding",
+                dimensions=embedding_dimensions,
+                similarity_fn="cosine",
+            )
 
     def embed_query(self, text: str) -> list[float]:
         """Embed a text string using the pipeline's embedding model."""
@@ -130,11 +147,18 @@ class KGPipeline:
         # 4. Write Document + Chunk nodes to Neo4j
         self._write_chunks(doc.document_info.path, embedded_chunks.chunks)
 
-    def run(self, file_path: str) -> None:
-        """Synchronous wrapper for processing a single note."""
-        asyncio.run(self.run_async(file_path))
-
 
 def create_kg_pipeline(driver: neo4j.Driver, notes_path: Path) -> KGPipeline:
-    """Create a KG pipeline for processing notes."""
-    return KGPipeline(driver, notes_path)
+    """Create a KG pipeline for processing notes.
+
+    Reads embedding model config from user settings.
+    """
+    from brain.settings import load_settings
+
+    s = load_settings()
+    return KGPipeline(
+        driver,
+        notes_path,
+        embedding_model=s.get("embedding_model", "sentence-transformers/all-mpnet-base-v2"),
+        embedding_dimensions=s.get("embedding_dimensions", 768),
+    )

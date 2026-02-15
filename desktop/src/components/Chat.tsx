@@ -4,8 +4,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { VoiceRecorder } from "./VoiceRecorder";
+import { Streamdown } from "streamdown";
+import { code } from "@streamdown/code";
 
-function MessageBubble({ message }: { message: Message }) {
+const streamdownPlugins = { code };
+
+function MessageBubble({
+  message,
+  isAnimating,
+}: {
+  message: Message;
+  isAnimating: boolean;
+}) {
   const isUser = message.role === "user";
 
   return (
@@ -29,16 +39,26 @@ function MessageBubble({ message }: { message: Message }) {
             ))}
           </div>
         )}
-        {message.content && (
-          <div className="whitespace-pre-wrap">{message.content}</div>
-        )}
+        {message.content &&
+          (isUser ? (
+            <div className="whitespace-pre-wrap">{message.content}</div>
+          ) : (
+            <Streamdown
+              animated
+              plugins={streamdownPlugins}
+              isAnimating={isAnimating}
+            >
+              {message.content}
+            </Streamdown>
+          ))}
       </div>
     </div>
   );
 }
 
 export function Chat() {
-  const { messages, isStreaming, sendMessage } = useAgentStream();
+  const { messages, isStreaming, streamingMessageIndex, sendMessage } =
+    useAgentStream();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -57,12 +77,12 @@ export function Chat() {
   };
 
   return (
-    <div className="w-80 flex-shrink-0 border-l border-border bg-card/30 flex flex-col">
+    <div className="w-80 flex-shrink-0 border-l border-border bg-card/30 flex flex-col min-h-0">
       <div className="px-3 py-2 border-b border-border">
         <span className="text-sm font-medium">Chat</span>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 overflow-hidden">
         <div ref={scrollRef} className="p-3 space-y-3">
           {messages.length === 0 && (
             <p className="text-sm text-muted-foreground text-center mt-8">
@@ -70,7 +90,11 @@ export function Chat() {
             </p>
           )}
           {messages.map((msg, i) => (
-            <MessageBubble key={i} message={msg} />
+            <MessageBubble
+              key={i}
+              message={msg}
+              isAnimating={i === streamingMessageIndex}
+            />
           ))}
           {isStreaming && (
             <div className="flex justify-start">

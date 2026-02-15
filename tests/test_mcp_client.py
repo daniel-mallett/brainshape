@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from brain.mcp_client import _build_mcp_config, close_mcp_client, load_mcp_tools
+from brain.mcp_client import _build_mcp_config, close_mcp_client, load_mcp_tools, reload_mcp_tools
 
 
 class TestBuildMcpConfig:
@@ -184,6 +184,25 @@ async def test_load_mcp_tools_failure(monkeypatch, tmp_path):
 
     brain.mcp_client._active_client = None
     result = await load_mcp_tools()
+    assert result == []
+    assert brain.mcp_client._active_client is None
+
+
+@pytest.mark.asyncio
+async def test_reload_mcp_tools(monkeypatch, tmp_path):
+    """reload_mcp_tools closes old client then loads fresh tools."""
+    import brain.mcp_client
+
+    monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
+
+    # Set up an existing active client
+    old_client = AsyncMock()
+    brain.mcp_client._active_client = old_client
+
+    # No servers configured → reload returns empty list
+    result = await reload_mcp_tools()
+
+    old_client.close.assert_awaited_once()
     assert result == []
     assert brain.mcp_client._active_client is None
 

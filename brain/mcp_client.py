@@ -72,6 +72,12 @@ async def load_mcp_tools() -> list:
         return []
 
 
+async def reload_mcp_tools() -> list:
+    """Close existing client and load fresh MCP tools from settings."""
+    await close_mcp_client()
+    return await load_mcp_tools()
+
+
 async def close_mcp_client() -> None:
     """Close the active MCP client session, if any."""
     global _active_client

@@ -24,6 +24,10 @@ DEFAULTS: dict[str, Any] = {
     "openai_api_key": "",
     # Whisper model for transcription
     "whisper_model": "mlx-community/whisper-large-v3-turbo",
+    # Embedding model for semantic search (must be a sentence-transformers model)
+    "embedding_model": "sentence-transformers/all-mpnet-base-v2",
+    # Embedding dimensions (must match the model's output dimensions)
+    "embedding_dimensions": 768,
     # MCP servers: list of server configs
     # Each: {"name", "transport": "stdio"|"http", "command", "args", "url"}
     "mcp_servers": [],

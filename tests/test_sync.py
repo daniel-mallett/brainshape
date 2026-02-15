@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from brain.sync import _get_stored_hashes, sync_all, sync_semantic, sync_structural
 
@@ -46,6 +46,7 @@ class TestSyncSemantic:
     def test_skips_unchanged_files(self, tmp_notes):
         db = MagicMock()
         pipeline = MagicMock()
+        pipeline.run_async = AsyncMock(return_value=None)
         # Precompute hashes so everything appears unchanged
         from brain.notes import compute_file_hash, list_notes
 
@@ -57,20 +58,22 @@ class TestSyncSemantic:
         stats = sync_semantic(db, pipeline, tmp_notes)
         assert stats["processed"] == 0
         assert stats["skipped"] == 5
-        pipeline.run.assert_not_called()
+        pipeline.run_async.assert_not_called()
 
     def test_processes_changed_files(self, tmp_notes):
         db = MagicMock()
         pipeline = MagicMock()
+        pipeline.run_async = AsyncMock(return_value=None)
         db.query.return_value = []  # No stored hashes → all files are new
         stats = sync_semantic(db, pipeline, tmp_notes)
         assert stats["processed"] == 5
-        assert pipeline.run.call_count == 5
+        assert pipeline.run_async.call_count == 5
 
     def test_skips_empty_files(self, tmp_path):
         (tmp_path / "empty.md").write_text("")
         db = MagicMock()
         pipeline = MagicMock()
+        pipeline.run_async = AsyncMock(return_value=None)
         db.query.return_value = []
         stats = sync_semantic(db, pipeline, tmp_path)
         assert stats["skipped"] == 1
@@ -80,7 +83,7 @@ class TestSyncSemantic:
         (tmp_path / "bad.md").write_text("Some content")
         db = MagicMock()
         pipeline = MagicMock()
-        pipeline.run.side_effect = RuntimeError("LLM error")
+        pipeline.run_async = AsyncMock(side_effect=RuntimeError("LLM error"))
         db.query.return_value = []
         stats = sync_semantic(db, pipeline, tmp_path)
         assert stats["skipped"] == 1
@@ -91,6 +94,7 @@ class TestSyncAll:
     def test_combines_stats(self, tmp_notes):
         db = MagicMock()
         pipeline = MagicMock()
+        pipeline.run_async = AsyncMock(return_value=None)
         db.query.return_value = []
         stats = sync_all(db, pipeline, tmp_notes)
         assert "structural" in stats

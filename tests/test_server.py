@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -35,6 +35,7 @@ def client(tmp_notes, tmp_path, monkeypatch, mock_agent, server_db):
 
     # Set module-level state directly
     mock_pipeline = MagicMock()
+    mock_pipeline.run_async = AsyncMock(return_value=None)
 
     server._agent = mock_agent
     server._db = server_db
@@ -378,11 +379,18 @@ class TestSettings:
         data = resp.json()
         assert "llm_provider" in data
         assert "llm_model" in data
+        assert "embedding_model" in data
+        assert "embedding_dimensions" in data
         # API keys should not be exposed
         assert "openai_api_key" not in data
         assert "openai_api_key_set" in data
 
-    def test_update_settings(self, client):
+    def test_update_settings(self, client, monkeypatch):
+        mock_reload = AsyncMock(return_value=[])
+        mock_recreate = MagicMock(return_value=MagicMock())
+        monkeypatch.setattr("brain.mcp_client.reload_mcp_tools", mock_reload)
+        monkeypatch.setattr("brain.agent.recreate_agent", mock_recreate)
+
         resp = client.put("/settings", json={"llm_provider": "ollama", "llm_model": "llama3.3"})
         assert resp.status_code == 200
         data = resp.json()
@@ -397,6 +405,47 @@ class TestSettings:
         resp = client.put("/settings", json={"llm_model": "gpt-4o"})
         assert resp.status_code == 200
         assert resp.json()["llm_model"] == "gpt-4o"
+
+    def test_update_embedding_model(self, client):
+        resp = client.put(
+            "/settings",
+            json={
+                "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+                "embedding_dimensions": 384,
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["embedding_model"] == "sentence-transformers/all-MiniLM-L6-v2"
+        assert resp.json()["embedding_dimensions"] == 384
+
+    def test_mcp_change_triggers_reload(self, client, monkeypatch):
+        """PUT /settings with mcp_servers triggers agent reload."""
+        mock_reload = AsyncMock(return_value=[])
+        mock_recreate = MagicMock(return_value=MagicMock())
+        monkeypatch.setattr("brain.mcp_client.reload_mcp_tools", mock_reload)
+        monkeypatch.setattr("brain.agent.recreate_agent", mock_recreate)
+
+        resp = client.put(
+            "/settings",
+            json={
+                "mcp_servers": [{"name": "test", "transport": "http", "url": "http://localhost"}]
+            },
+        )
+        assert resp.status_code == 200
+        mock_reload.assert_awaited_once()
+        mock_recreate.assert_called_once()
+
+    def test_llm_change_triggers_reload(self, client, monkeypatch):
+        """PUT /settings with llm_provider triggers agent reload."""
+        mock_reload = AsyncMock(return_value=[])
+        mock_recreate = MagicMock(return_value=MagicMock())
+        monkeypatch.setattr("brain.mcp_client.reload_mcp_tools", mock_reload)
+        monkeypatch.setattr("brain.agent.recreate_agent", mock_recreate)
+
+        resp = client.put("/settings", json={"llm_provider": "ollama"})
+        assert resp.status_code == 200
+        mock_reload.assert_awaited_once()
+        mock_recreate.assert_called_once()
 
 
 class TestTranscriptionErrors:

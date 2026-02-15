@@ -55,7 +55,8 @@ export function useAgentStream() {
 
           buffer += decoder.decode(value, { stream: true });
 
-          const lines = buffer.split("\n");
+          // SSE uses \r\n line endings; normalize to \n before splitting
+          const lines = buffer.replace(/\r\n/g, "\n").split("\n");
           buffer = lines.pop() || "";
 
           for (const line of lines) {
@@ -78,19 +79,21 @@ export function useAgentStream() {
                   return updated;
                 }
 
-                // Try to parse as JSON (tool_call events)
+                // All data is JSON-encoded by the server
                 try {
                   const parsed = JSON.parse(data);
-                  if (parsed.name) {
+                  if (typeof parsed === "string") {
+                    // Text token
+                    last.content += parsed;
+                  } else if (parsed.name) {
+                    // Tool call
                     last.toolCalls = [...(last.toolCalls || []), parsed];
-                    updated[updated.length - 1] = last;
-                    return updated;
                   }
                 } catch {
-                  // not JSON, treat as text
+                  // Fallback: treat as raw text
+                  last.content += data;
                 }
 
-                last.content += data;
                 updated[updated.length - 1] = last;
                 return updated;
               });
@@ -117,5 +120,8 @@ export function useAgentStream() {
     setMessages([]);
   }, []);
 
-  return { messages, isStreaming, sendMessage, resetSession };
+  // Index of the message currently being streamed (last assistant message during streaming)
+  const streamingMessageIndex = isStreaming ? messages.length - 1 : -1;
+
+  return { messages, isStreaming, streamingMessageIndex, sendMessage, resetSession };
 }

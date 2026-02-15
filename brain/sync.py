@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 from brain.graph_db import GraphDB
@@ -14,49 +15,10 @@ def _get_stored_hashes(db: GraphDB) -> dict[str, str]:
 def sync_semantic(db: GraphDB, pipeline: KGPipeline, notes_path: Path) -> dict:
     """Run KG pipeline to extract entities and relationships from note content.
 
-    Only processes files whose content has changed since last processing
-    (compared via SHA-256 content hash). For changed notes, clears old
-    Chunks and extracted entities before re-processing to avoid duplicates.
+    Delegates to sync_semantic_async() inside a single event loop,
+    avoiding the overhead of creating a new event loop per file.
     """
-    note_files = list_notes(notes_path)
-    hash_map = _get_stored_hashes(db)
-    stats = {"processed": 0, "skipped": 0}
-
-    for file_path in note_files:
-        content = file_path.read_text(encoding="utf-8").strip()
-        if not content:
-            stats["skipped"] += 1
-            continue
-
-        relative_path = str(file_path.relative_to(notes_path))
-        file_hash = compute_file_hash(file_path)
-
-        if hash_map.get(relative_path) == file_hash:
-            stats["skipped"] += 1
-            continue
-
-        # Clear old chunks for this note before re-processing
-        db.query(
-            """
-            MATCH (d:Document {path: $path})<-[:FROM_DOCUMENT]-(c:Chunk)
-            DETACH DELETE c
-            """,
-            {"path": relative_path},
-        )
-
-        try:
-            pipeline.run(str(file_path))
-            # Store the content hash on the Document node
-            db.query(
-                "MATCH (n:Document {path: $path}) SET n.content_hash = $hash",
-                {"path": relative_path, "hash": file_hash},
-            )
-            stats["processed"] += 1
-        except Exception as e:
-            print(f"  Warning: failed to process '{file_path.stem}': {e}")
-            stats["skipped"] += 1
-
-    return stats
+    return asyncio.run(sync_semantic_async(db, pipeline, notes_path))
 
 
 async def sync_semantic_async(db: GraphDB, pipeline: KGPipeline, notes_path: Path) -> dict:

@@ -89,5 +89,23 @@ class TestGetLlmModelString:
         assert result == "anthropic:claude-haiku-4-5-20251001"
 
 
+class TestEmbeddingSettings:
+    def test_defaults_include_embedding_model(self):
+        assert "embedding_model" in DEFAULTS
+        assert DEFAULTS["embedding_model"] == "sentence-transformers/all-mpnet-base-v2"
+
+    def test_defaults_include_embedding_dimensions(self):
+        assert "embedding_dimensions" in DEFAULTS
+        assert DEFAULTS["embedding_dimensions"] == 768
+
+    def test_update_embedding_model(self):
+        result = update_settings({"embedding_model": "sentence-transformers/all-MiniLM-L6-v2"})
+        assert result["embedding_model"] == "sentence-transformers/all-MiniLM-L6-v2"
+
+    def test_update_embedding_dimensions(self):
+        result = update_settings({"embedding_dimensions": 384})
+        assert result["embedding_dimensions"] == 384
+
+
 def test_valid_providers():
     assert {"anthropic", "openai", "ollama"} == VALID_PROVIDERS

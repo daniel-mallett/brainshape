@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -17,7 +17,7 @@ def mock_db():
 def mock_pipeline():
     pipeline = MagicMock()
     pipeline.embed_query.return_value = [0.1] * 768
-    pipeline.run.return_value = None
+    pipeline.run_async = AsyncMock(return_value=None)
     return pipeline
 
 

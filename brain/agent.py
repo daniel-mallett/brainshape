@@ -98,3 +98,31 @@ def create_brain_agent(
     )
 
     return agent, db, pipeline
+
+
+def recreate_agent(
+    db: GraphDB,
+    pipeline: KGPipeline,
+    mcp_tools: list | None = None,
+):
+    """Recreate the agent with updated tools/model, reusing existing db and pipeline.
+
+    Returns the new agent. Creates a fresh checkpointer (conversation
+    history is session-scoped and in-memory, so this is acceptable).
+    """
+    tools.db = db
+    tools.pipeline = pipeline
+
+    checkpointer = MemorySaver()
+    model = get_llm_model_string()
+
+    all_tools = list(tools.ALL_TOOLS)
+    if mcp_tools:
+        all_tools.extend(mcp_tools)
+
+    return create_agent(
+        model=model,
+        tools=all_tools,
+        system_prompt=SYSTEM_PROMPT,
+        checkpointer=checkpointer,
+    )

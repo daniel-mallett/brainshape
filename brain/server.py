@@ -27,7 +27,7 @@ from brain.notes import (
     write_note,
 )
 from brain.settings import VALID_PROVIDERS, load_settings, update_settings
-from brain.sync import sync_all, sync_semantic, sync_semantic_async, sync_structural
+from brain.sync import sync_semantic, sync_semantic_async, sync_structural
 from brain.watcher import start_watcher
 
 # Module-level state set during lifespan
@@ -129,6 +129,8 @@ class UpdateSettingsRequest(BaseModel):
     ollama_base_url: str | None = None
     openai_api_key: str | None = None
     whisper_model: str | None = None
+    embedding_model: str | None = None
+    embedding_dimensions: int | None = None
     mcp_servers: list[dict] | None = None
 
 
@@ -175,28 +177,34 @@ async def agent_message(req: MessageRequest):
 
     async def event_generator():
         try:
-            for chunk in _agent.stream(messages, config=config, stream_mode="updates"):
-                node = chunk.get("model") or chunk.get("agent")
-                if node:
-                    for msg in node["messages"]:
-                        if hasattr(msg, "tool_calls") and msg.tool_calls:
-                            for tc in msg.tool_calls:
-                                yield {
-                                    "event": "tool_call",
-                                    "data": json.dumps({"name": tc["name"], "args": tc["args"]}),
-                                }
-                        elif hasattr(msg, "content") and msg.content:
-                            text = ""
-                            if isinstance(msg.content, str):
-                                text = msg.content
-                            elif isinstance(msg.content, list):
-                                for block in msg.content:
-                                    if isinstance(block, dict) and block.get("type") == "text":
-                                        text += block["text"]
-                                    elif isinstance(block, str):
-                                        text += block
-                            if text:
-                                yield {"event": "text", "data": text}
+            for event in _agent.stream(messages, config=config, stream_mode="messages"):
+                msg_chunk, metadata = event
+                # Only process AI message chunks (skip tool responses, human messages)
+                if msg_chunk.type != "AIMessageChunk":
+                    continue
+                # Tool call chunks
+                if hasattr(msg_chunk, "tool_call_chunks") and msg_chunk.tool_call_chunks:
+                    for tc in msg_chunk.tool_call_chunks:
+                        if tc.get("name"):
+                            # Only emit on first chunk (has name); args stream
+                            # incrementally and aren't needed for the UI indicator.
+                            yield {
+                                "event": "tool_call",
+                                "data": json.dumps({"name": tc["name"], "args": {}}),
+                            }
+                # Text content token
+                elif msg_chunk.content:
+                    text = ""
+                    if isinstance(msg_chunk.content, str):
+                        text = msg_chunk.content
+                    elif isinstance(msg_chunk.content, list):
+                        for block in msg_chunk.content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                text += block["text"]
+                            elif isinstance(block, str):
+                                text += block
+                    if text:
+                        yield {"event": "text", "data": json.dumps(text)}
         except Exception as e:
             yield {"event": "error", "data": str(e)}
         yield {"event": "done", "data": ""}
@@ -553,7 +561,7 @@ def get_settings():
 
 
 @app.put("/settings")
-def put_settings(req: UpdateSettingsRequest):
+async def put_settings(req: UpdateSettingsRequest):
     updates = {}
     if req.llm_provider is not None:
         if req.llm_provider not in VALID_PROVIDERS:
@@ -570,11 +578,33 @@ def put_settings(req: UpdateSettingsRequest):
         from brain.transcribe import reset_model
 
         reset_model()
+    if req.embedding_model is not None:
+        updates["embedding_model"] = req.embedding_model
+    if req.embedding_dimensions is not None:
+        updates["embedding_dimensions"] = req.embedding_dimensions
     if req.mcp_servers is not None:
         _validate_mcp_servers(req.mcp_servers)
         updates["mcp_servers"] = req.mcp_servers
 
     updated = update_settings(updates)
+
+    # Hot-reload agent when MCP servers or LLM config changes
+    needs_reload = any(
+        [
+            req.mcp_servers is not None,
+            req.llm_provider is not None,
+            req.llm_model is not None,
+        ]
+    )
+    if needs_reload and _db is not None and _pipeline is not None:
+        global _agent
+        from brain.agent import recreate_agent
+        from brain.mcp_client import reload_mcp_tools
+
+        mcp_tools = await reload_mcp_tools()
+        _agent = recreate_agent(_db, _pipeline, mcp_tools=mcp_tools or None)
+        _sessions.clear()  # Clear stale sessions since agent was recreated
+
     safe = {k: v for k, v in updated.items() if "api_key" not in k}
     safe["openai_api_key_set"] = bool(updated.get("openai_api_key"))
     return safe
@@ -595,25 +625,26 @@ def sync_structural_endpoint():
 
 
 @app.post("/sync/semantic")
-def sync_semantic_endpoint():
+async def sync_semantic_endpoint():
     if _db is None or _pipeline is None:
         raise HTTPException(status_code=503, detail="Server not initialized")
     notes_path = _notes_path()
     if not notes_path.exists():
         raise HTTPException(status_code=400, detail="Notes path not found")
-    stats = sync_semantic(_db, _pipeline, notes_path)
+    stats = await sync_semantic_async(_db, _pipeline, notes_path)
     return {"status": "ok", "stats": stats}
 
 
 @app.post("/sync/full")
-def sync_full_endpoint():
+async def sync_full_endpoint():
     if _db is None or _pipeline is None:
         raise HTTPException(status_code=503, detail="Server not initialized")
     notes_path = _notes_path()
     if not notes_path.exists():
         raise HTTPException(status_code=400, detail="Notes path not found")
-    stats = sync_all(_db, _pipeline, notes_path)
-    return {"status": "ok", "stats": stats}
+    structural_stats = sync_structural(_db, notes_path)
+    semantic_stats = await sync_semantic_async(_db, _pipeline, notes_path)
+    return {"status": "ok", "stats": {"structural": structural_stats, "semantic": semantic_stats}}
 
 
 # --- Entry point ---
