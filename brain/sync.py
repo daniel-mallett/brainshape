@@ -35,12 +35,11 @@ def sync_semantic(db: GraphDB, pipeline: KGPipeline, vault_path: Path) -> dict:
             stats["skipped"] += 1
             continue
 
-        # Clear old semantic data for this note before re-processing
+        # Clear old chunks for this note before re-processing
         db.query(
             """
             MATCH (d:Document {path: $path})<-[:FROM_DOCUMENT]-(c:Chunk)
-            OPTIONAL MATCH (c)<-[:FROM_CHUNK]-(e)
-            DETACH DELETE c, e
+            DETACH DELETE c
             """,
             {"path": relative_path},
         )

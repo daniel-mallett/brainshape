@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from brain.kg_pipeline import MergingNeo4jWriter, VaultLoader
+from brain.kg_pipeline import KGPipeline, VaultLoader
 
 
 class TestVaultLoader:
@@ -33,40 +33,56 @@ class TestVaultLoader:
         assert doc.document_info.path == "folder/Deep.md"
 
 
-class TestMergingNeo4jWriter:
-    def test_upsert_splits_doc_from_other_nodes(self):
+class TestKGPipelineWriteChunks:
+    def test_writes_document_and_chunks(self):
+        """Verify _write_chunks MERGEs a Document node and CREATEs Chunk nodes."""
         mock_driver = MagicMock()
-        writer = MergingNeo4jWriter.__new__(MergingNeo4jWriter)
-        writer.driver = mock_driver
-        writer.neo4j_database = None
-        writer.is_version_5_23_or_above = False
+        mock_session = MagicMock()
+        mock_driver.session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_driver.session.return_value.__exit__ = MagicMock(return_value=False)
 
-        from neo4j_graphrag.experimental.components.types import (
-            LexicalGraphConfig,
-            Neo4jNode,
-        )
+        pipeline = KGPipeline.__new__(KGPipeline)
+        pipeline.driver = mock_driver
 
-        config = LexicalGraphConfig()
+        # Simulate embedded chunks with text and metadata
+        chunk1 = MagicMock()
+        chunk1.text = "Hello world"
+        chunk1.metadata = {"embedding": [0.1, 0.2, 0.3]}
 
-        doc_node = Neo4jNode(
-            id="doc1",
-            label=config.document_node_label,
-            properties={"path": "test.md", "title": "Test"},
-        )
-        chunk_node = Neo4jNode(
-            id="chunk1",
-            label=config.chunk_node_label,
-            properties={"text": "hello", "index": 0},
-        )
+        chunk2 = MagicMock()
+        chunk2.text = "Second chunk"
+        chunk2.metadata = {"embedding": [0.4, 0.5, 0.6]}
 
-        writer._upsert_nodes([doc_node, chunk_node], config)
+        pipeline._write_chunks("test.md", [chunk1, chunk2])
 
-        # Document node should be MERGE'd via execute_query
-        merge_calls = [c for c in mock_driver.execute_query.call_args_list if "MERGE" in str(c)]
-        assert len(merge_calls) == 1
+        # Should have 3 calls: MERGE doc, DELETE old chunks, batched CREATE chunks
+        assert mock_session.run.call_count == 3
 
-        # Chunk node should go through standard CREATE path
-        create_calls = [
-            c for c in mock_driver.execute_query.call_args_list if "MERGE" not in str(c)
-        ]
-        assert len(create_calls) == 1
+        # First call: MERGE Document
+        merge_call = mock_session.run.call_args_list[0]
+        assert "MERGE" in merge_call[0][0]
+        assert merge_call[0][1]["path"] == "test.md"
+
+        # Second call: DELETE old chunks
+        delete_call = mock_session.run.call_args_list[1]
+        assert "DELETE" in delete_call[0][0]
+
+        # Third call: batched CREATE via UNWIND
+        create_call = mock_session.run.call_args_list[2]
+        assert "UNWIND" in create_call[0][0]
+        assert "CREATE" in create_call[0][0]
+        chunks_param = create_call[0][1]["chunks"]
+        assert len(chunks_param) == 2
+        assert chunks_param[0]["text"] == "Hello world"
+        assert chunks_param[0]["index"] == 0
+        assert chunks_param[1]["text"] == "Second chunk"
+        assert chunks_param[1]["index"] == 1
+
+    def test_no_llm_dependencies(self):
+        """Verify the pipeline doesn't use any LLM for extraction."""
+        import inspect
+
+        source = inspect.getsource(KGPipeline)
+        assert "AnthropicLLM" not in source
+        assert "EntityRelationExtractor" not in source
+        assert "Resolver" not in source

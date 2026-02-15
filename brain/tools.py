@@ -126,13 +126,7 @@ def create_note(title: str, content: str, tags: str = "", folder: str = "") -> s
     file_path = write_note(vault_path, title, content, folder=folder, tags=tag_list)
     rel_path = file_path.relative_to(vault_path)
 
-    # Semantic extraction first (creates Document + Chunk + Entity nodes)
-    try:
-        pipeline.run(str(file_path))
-    except Exception as e:
-        return f"Created note '{title}' at {rel_path} (semantic extraction failed: {e})"
-
-    # Then structural sync (adds :Note label, tags, wikilinks to Document node)
+    # Structural sync (adds :Note:Document label, tags, wikilinks)
     note_data = parse_note(file_path, vault_path)
     _sync_note_structural(note_data)
 
@@ -159,12 +153,6 @@ def edit_note(title: str, new_content: str) -> str:
     except FileNotFoundError as e:
         return str(e)
 
-    # Re-run semantic extraction
-    try:
-        pipeline.run(str(file_path))
-    except Exception:
-        pass
-
     # Clear old structural relationships and re-sync
     note_data = parse_note(file_path, vault_path)
     db.query(
@@ -184,14 +172,18 @@ def edit_note(title: str, new_content: str) -> str:
 @tool
 def query_graph(cypher: str) -> str:
     """Run a Cypher query against the knowledge graph. Use this to explore
-    relationships between notes, find notes by tag, trace link paths, etc.
+    relationships between notes, find notes by tag, trace link paths,
+    store memories, and create custom entities and relationships.
 
-    The graph has unified :Document:Note nodes connected to both:
-    - Structural: (:Tag) via TAGGED_WITH, other notes via LINKS_TO
-    - Semantic: (:Chunk) via FROM_DOCUMENT, entities via FROM_CHUNK
-    - Entity types: Person, Concept, Project, Location, Event, Tool, Organization
-    - Entity relationships: RELATED_TO, WORKS_ON, USES, PART_OF, etc.
-    - Memory: (:Memory {type, content}) with ABOUT relationships"""
+    Graph schema:
+    - (:Note:Document {path, title, content}) — one per vault file
+    - (:Tag {name}) — connected via TAGGED_WITH
+    - (:Note) -[:LINKS_TO]-> (:Note) — wikilink connections
+    - (:Chunk {text, embedding}) -[:FROM_DOCUMENT]-> (:Note) — text chunks
+    - (:Memory {id, type, content, created_at}) — agent-created knowledge
+
+    You can CREATE any custom node types and relationships to build
+    the user's personal knowledge graph over time."""
     try:
         results = db.query(cypher)
         if not results:
@@ -205,36 +197,38 @@ def query_graph(cypher: str) -> str:
 
 
 @tool
-def find_related(entity_name: str) -> str:
-    """Find entities and notes related to a given concept, person, project, etc.
-    Searches the semantic knowledge graph for connections."""
+def find_related(title: str) -> str:
+    """Find notes and knowledge related to a given note title.
+    Shows wikilink connections, shared tags, and any agent-created relationships."""
+    # Direct relationships: wikilinks, tags, memories
     results = db.query(
         """
-        MATCH (e {name: $name})-[r]-(related)
-        RETURN labels(e) AS source_labels, e.name AS source,
+        MATCH (n:Note {title: $title})-[r]-(related)
+        WHERE NOT related:Chunk
+        RETURN labels(n) AS source_labels, n.title AS source,
                type(r) AS relationship,
                labels(related) AS target_labels,
-               coalesce(related.name, related.title, related.text) AS target
+               coalesce(related.name, related.title, related.content) AS target
         LIMIT 20
         """,
-        {"name": entity_name},
+        {"title": title},
     )
     if not results:
-        # Try fuzzy match
+        # Try fuzzy match on title
         results = db.query(
             """
-            MATCH (e)-[r]-(related)
-            WHERE toLower(e.name) CONTAINS toLower($name)
-            RETURN labels(e) AS source_labels, e.name AS source,
+            MATCH (n:Note)-[r]-(related)
+            WHERE toLower(n.title) CONTAINS toLower($title) AND NOT related:Chunk
+            RETURN labels(n) AS source_labels, n.title AS source,
                    type(r) AS relationship,
                    labels(related) AS target_labels,
-                   coalesce(related.name, related.title, related.text) AS target
+                   coalesce(related.name, related.title, related.content) AS target
             LIMIT 20
             """,
-            {"name": entity_name},
+            {"title": title},
         )
     if not results:
-        return f"No entities found related to '{entity_name}'."
+        return f"No connections found for '{title}'."
     lines = []
     for r in results:
         src = f"{':'.join(r['source_labels'])}({r['source']})"

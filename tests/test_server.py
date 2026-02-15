@@ -12,16 +12,31 @@ def mock_agent():
 
 
 @pytest.fixture
-def client(tmp_vault, monkeypatch, mock_agent):
+def server_db():
+    """Dedicated mock for server._db so tests can configure query responses."""
+    return MagicMock()
+
+
+@pytest.fixture
+def client(tmp_vault, monkeypatch, mock_agent, server_db):
     """Create a test client with mocked agent/db/pipeline and tmp vault."""
     monkeypatch.setattr("brain.config.settings.vault_path", str(tmp_vault))
 
-    # Bypass lifespan by setting module-level state directly
-    mock_db = MagicMock()
+    # Bypass lifespan entirely by replacing it with a no-op
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def noop_lifespan(app):
+        yield
+
+    original_lifespan = server.app.router.lifespan_context
+    server.app.router.lifespan_context = noop_lifespan
+
+    # Set module-level state directly
     mock_pipeline = MagicMock()
 
     server._agent = mock_agent
-    server._db = mock_db
+    server._db = server_db
     server._pipeline = mock_pipeline
     server._sessions = {}
 
@@ -32,6 +47,7 @@ def client(tmp_vault, monkeypatch, mock_agent):
     server._db = None
     server._pipeline = None
     server._sessions = {}
+    server.app.router.lifespan_context = original_lifespan
 
 
 class TestHealth:
@@ -129,6 +145,152 @@ class TestAgentMessage:
             json={"session_id": "nonexistent", "message": "hello"},
         )
         assert resp.status_code == 404
+
+
+class TestGraphStats:
+    def test_returns_counts(self, client, server_db):
+        def route_query(cypher, params=None):
+            if "labels(n)" in cypher:
+                return [{"label": "Note", "count": 10}, {"label": "Tag", "count": 5}]
+            if "type(r)" in cypher:
+                return [{"type": "TAGGED_WITH", "count": 15}]
+            return []
+
+        server_db.query.side_effect = route_query
+        resp = client.get("/graph/stats")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["nodes"]["Note"] == 10
+        assert data["nodes"]["Tag"] == 5
+        assert data["relationships"]["TAGGED_WITH"] == 15
+
+
+class TestGraphOverview:
+    def test_returns_nodes_and_edges(self, client, server_db):
+        def route_query(cypher, params=None):
+            if "elementId(n)" in cypher:
+                return [
+                    {
+                        "id": "n1",
+                        "labels": ["Note", "Document"],
+                        "name": "My Note",
+                        "path": "My Note.md",
+                        "type": None,
+                    },
+                    {
+                        "id": "n2",
+                        "labels": ["Tag"],
+                        "name": "python",
+                        "path": None,
+                        "type": None,
+                    },
+                ]
+            if "elementId(a)" in cypher:
+                return [{"source": "n1", "target": "n2", "type": "TAGGED_WITH"}]
+            return []
+
+        server_db.query.side_effect = route_query
+        resp = client.get("/graph/overview")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["nodes"]) == 2
+        assert data["nodes"][0]["label"] == "Note"
+        assert len(data["edges"]) == 1
+        assert data["edges"][0]["type"] == "TAGGED_WITH"
+
+    def test_rejects_invalid_label(self, client, server_db):
+        resp = client.get("/graph/overview?label=INVALID")
+        assert resp.status_code == 400
+
+
+class TestGraphNeighborhood:
+    def test_returns_neighborhood(self, client, server_db):
+        server_db.query.return_value = [
+            {
+                "center_id": "c1",
+                "center_labels": ["Note", "Document"],
+                "center_name": "Hub Note",
+                "center_path": "Hub.md",
+                "conn_id": "t1",
+                "conn_labels": ["Tag"],
+                "conn_name": "python",
+                "conn_path": None,
+                "conn_type": None,
+                "rel_source": "c1",
+                "rel_target": "t1",
+                "rel_type": "TAGGED_WITH",
+            },
+        ]
+        resp = client.get("/graph/neighborhood/Hub.md")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["nodes"]) == 2
+        assert len(data["edges"]) == 1
+
+    def test_caps_depth(self, client, server_db):
+        server_db.query.return_value = []
+        resp = client.get("/graph/neighborhood/test.md?depth=10")
+        assert resp.status_code == 200
+        # Verify the query used depth 3 (capped)
+        query_str = server_db.query.call_args[0][0]
+        assert "*1..3" in query_str
+
+
+class TestGraphMemories:
+    def test_list_memories(self, client, server_db):
+        server_db.query.return_value = [
+            {
+                "id": "m1",
+                "type": "preference",
+                "content": "User likes dark mode",
+                "created_at": 1700000000,
+                "connections": [{"name": None, "relationship": None}],
+            },
+        ]
+        resp = client.get("/graph/memories")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["memories"]) == 1
+        assert data["memories"][0]["content"] == "User likes dark mode"
+        # Null connections should be filtered out
+        assert len(data["memories"][0]["connections"]) == 0
+
+    def test_delete_memory(self, client, server_db):
+        server_db.query.return_value = [{"deleted": 1}]
+        resp = client.delete("/graph/memory/m1")
+        assert resp.status_code == 200
+
+    def test_delete_memory_not_found(self, client, server_db):
+        server_db.query.return_value = [{"deleted": 0}]
+        resp = client.delete("/graph/memory/nonexistent")
+        assert resp.status_code == 404
+
+    def test_update_memory(self, client, server_db):
+        server_db.query.return_value = [{"id": "m1"}]
+        resp = client.put(
+            "/graph/memory/m1",
+            json={"content": "Updated preference"},
+        )
+        assert resp.status_code == 200
+
+    def test_update_memory_not_found(self, client, server_db):
+        server_db.query.return_value = []
+        resp = client.put(
+            "/graph/memory/nonexistent",
+            json={"content": "x"},
+        )
+        assert resp.status_code == 404
+
+
+class TestVaultTags:
+    def test_list_tags(self, client, server_db):
+        server_db.query.return_value = [
+            {"name": "python"},
+            {"name": "project"},
+        ]
+        resp = client.get("/vault/tags")
+        assert resp.status_code == 200
+        assert resp.json()["tags"] == ["python", "project"]
 
 
 class TestSync:

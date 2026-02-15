@@ -79,6 +79,10 @@ class UpdateNoteRequest(BaseModel):
     content: str
 
 
+class UpdateMemoryRequest(BaseModel):
+    content: str
+
+
 # --- Health ---
 
 
@@ -211,6 +215,205 @@ def vault_update(path: str, req: UpdateNoteRequest):
         return {"path": path, "title": title}
     except (FileNotFoundError, ValueError) as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- Graph ---
+
+
+def _require_db() -> GraphDB:
+    if _db is None:
+        raise HTTPException(status_code=503, detail="Server not initialized")
+    return _db
+
+
+@app.get("/graph/stats")
+def graph_stats():
+    db = _require_db()
+    node_rows = db.query(
+        "MATCH (n) WHERE n:Note OR n:Tag OR n:Memory OR n:Chunk "
+        "UNWIND labels(n) AS label "
+        "WITH label WHERE label IN ['Note', 'Tag', 'Memory', 'Chunk'] "
+        "RETURN label, count(*) AS count"
+    )
+    rel_rows = db.query("MATCH ()-[r]->() RETURN type(r) AS type, count(*) AS count")
+    return {
+        "nodes": {r["label"]: r["count"] for r in node_rows},
+        "relationships": {r["type"]: r["count"] for r in rel_rows},
+    }
+
+
+_ALLOWED_GRAPH_LABELS = {"Note", "Tag", "Memory", "Chunk"}
+
+
+@app.get("/graph/overview")
+def graph_overview(limit: int = 200, label: str = ""):
+    db = _require_db()
+    label_filter = ""
+    params: dict = {"limit": limit}
+    if label:
+        if label not in _ALLOWED_GRAPH_LABELS:
+            raise HTTPException(status_code=400, detail="Invalid label filter")
+        label_filter = f" AND n:{label}"
+
+    nodes = db.query(
+        "MATCH (n) WHERE (n:Note OR n:Tag OR n:Memory)" + label_filter + " "
+        "RETURN elementId(n) AS id, labels(n) AS labels, "
+        "coalesce(n.title, n.name, n.content) AS name, "
+        "n.path AS path, n.type AS type "
+        "LIMIT $limit",
+        params,
+    )
+    edges = db.query(
+        "MATCH (a)-[r]->(b) "
+        "WHERE (a:Note OR a:Tag OR a:Memory) AND (b:Note OR b:Tag OR b:Memory) "
+        "RETURN elementId(a) AS source, elementId(b) AS target, type(r) AS type "
+        "LIMIT $limit",
+        params,
+    )
+    return {
+        "nodes": [
+            {
+                "id": n["id"],
+                "label": _primary_label(n["labels"]),
+                "name": _truncate(n["name"], 60),
+                "path": n.get("path"),
+                "type": n.get("type"),
+            }
+            for n in nodes
+        ],
+        "edges": [{"source": e["source"], "target": e["target"], "type": e["type"]} for e in edges],
+    }
+
+
+@app.get("/graph/neighborhood/{path:path}")
+def graph_neighborhood(path: str, depth: int = 1):
+    db = _require_db()
+    depth = min(depth, 3)
+    rows = db.query(
+        "MATCH (center:Note {path: $path})-[r*1.." + str(depth) + "]-(connected) "
+        "WHERE NOT connected:Chunk "
+        "WITH center, connected, r "
+        "UNWIND r AS rel "
+        "RETURN DISTINCT "
+        "elementId(center) AS center_id, labels(center) AS center_labels, "
+        "center.title AS center_name, center.path AS center_path, "
+        "elementId(connected) AS conn_id, labels(connected) AS conn_labels, "
+        "coalesce(connected.title, connected.name, connected.content) AS conn_name, "
+        "connected.path AS conn_path, connected.type AS conn_type, "
+        "elementId(startNode(rel)) AS rel_source, "
+        "elementId(endNode(rel)) AS rel_target, "
+        "type(rel) AS rel_type "
+        "LIMIT 200",
+        {"path": path},
+    )
+
+    nodes_map: dict = {}
+    edges_set: set = set()
+    edges: list = []
+
+    for row in rows:
+        # Add center node
+        cid = row["center_id"]
+        if cid not in nodes_map:
+            nodes_map[cid] = {
+                "id": cid,
+                "label": _primary_label(row["center_labels"]),
+                "name": row["center_name"],
+                "path": row["center_path"],
+            }
+        # Add connected node
+        nid = row["conn_id"]
+        if nid not in nodes_map:
+            nodes_map[nid] = {
+                "id": nid,
+                "label": _primary_label(row["conn_labels"]),
+                "name": _truncate(row["conn_name"], 60),
+                "path": row.get("conn_path"),
+                "type": row.get("conn_type"),
+            }
+        # Add edge (deduplicated)
+        edge_key = (row["rel_source"], row["rel_target"], row["rel_type"])
+        if edge_key not in edges_set:
+            edges_set.add(edge_key)
+            edges.append(
+                {
+                    "source": row["rel_source"],
+                    "target": row["rel_target"],
+                    "type": row["rel_type"],
+                }
+            )
+
+    return {"nodes": list(nodes_map.values()), "edges": edges}
+
+
+@app.get("/graph/memories")
+def graph_memories():
+    db = _require_db()
+    rows = db.query(
+        "MATCH (m:Memory) "
+        "OPTIONAL MATCH (m)-[r]-(related) "
+        "RETURN m.id AS id, m.type AS type, m.content AS content, "
+        "m.created_at AS created_at, "
+        "collect(DISTINCT {name: coalesce(related.title, related.name), "
+        "relationship: type(r)}) AS connections"
+    )
+    return {
+        "memories": [
+            {
+                "id": r["id"],
+                "type": r["type"],
+                "content": r["content"],
+                "created_at": r["created_at"],
+                "connections": [c for c in r["connections"] if c.get("name")],
+            }
+            for r in rows
+        ]
+    }
+
+
+@app.delete("/graph/memory/{memory_id}")
+def delete_memory(memory_id: str):
+    db = _require_db()
+    result = db.query(
+        "MATCH (m:Memory {id: $id}) DETACH DELETE m RETURN count(*) AS deleted",
+        {"id": memory_id},
+    )
+    if not result or result[0].get("deleted", 0) == 0:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return {"status": "ok"}
+
+
+@app.put("/graph/memory/{memory_id}")
+def update_memory(memory_id: str, req: UpdateMemoryRequest):
+    db = _require_db()
+    result = db.query(
+        "MATCH (m:Memory {id: $id}) SET m.content = $content RETURN m.id AS id",
+        {"id": memory_id, "content": req.content},
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return {"status": "ok", "id": memory_id}
+
+
+@app.get("/vault/tags")
+def vault_tags():
+    db = _require_db()
+    results = db.query("MATCH (t:Tag) RETURN t.name AS name ORDER BY name")
+    return {"tags": [r["name"] for r in results]}
+
+
+def _primary_label(labels: list[str]) -> str:
+    """Pick the most meaningful label from a node's label list."""
+    for preferred in ("Note", "Tag", "Memory", "Chunk", "Document"):
+        if preferred in labels:
+            return preferred
+    return labels[0] if labels else "Unknown"
+
+
+def _truncate(text: str | None, max_len: int) -> str | None:
+    if text and len(text) > max_len:
+        return text[:max_len] + "..."
+    return text
 
 
 # --- Sync ---

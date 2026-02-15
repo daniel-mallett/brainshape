@@ -103,3 +103,75 @@ export function syncSemantic(): Promise<SyncStats> {
 export function syncFull(): Promise<SyncStats> {
   return request("/sync/full", { method: "POST" });
 }
+
+// --- Graph ---
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  name: string | null;
+  path?: string | null;
+  type?: string | null;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  type: string;
+}
+
+export interface GraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface GraphStats {
+  nodes: Record<string, number>;
+  relationships: Record<string, number>;
+}
+
+export interface Memory {
+  id: string;
+  type: string;
+  content: string;
+  created_at: number | null;
+  connections: { name: string; relationship: string }[];
+}
+
+export function getGraphStats(): Promise<GraphStats> {
+  return request("/graph/stats");
+}
+
+export function getGraphOverview(
+  limit = 200,
+  label = ""
+): Promise<GraphData> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (label) params.set("label", label);
+  return request(`/graph/overview?${params}`);
+}
+
+export function getGraphNeighborhood(
+  path: string,
+  depth = 1
+): Promise<GraphData> {
+  return request(`/graph/neighborhood/${path}?depth=${depth}`);
+}
+
+export function getMemories(): Promise<{ memories: Memory[] }> {
+  return request("/graph/memories");
+}
+
+export function deleteMemory(id: string): Promise<{ status: string }> {
+  return request(`/graph/memory/${id}`, { method: "DELETE" });
+}
+
+export function updateMemory(
+  id: string,
+  content: string
+): Promise<{ status: string }> {
+  return request(`/graph/memory/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+  });
+}

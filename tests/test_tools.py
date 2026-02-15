@@ -53,7 +53,7 @@ class TestReadNote:
 
 
 class TestCreateNote:
-    def test_creates_and_syncs(self, mock_db, mock_pipeline, vault_settings):
+    def test_creates_and_syncs(self, mock_db, vault_settings):
         result = create_note.invoke(
             {
                 "title": "Brand New",
@@ -64,23 +64,12 @@ class TestCreateNote:
         )
         assert "Created note 'Brand New'" in result
         assert (vault_settings / "Brand New.md").exists()
-        mock_pipeline.run.assert_called_once()
+        # Structural sync should run (MERGE note + tag queries)
         assert mock_db.query.call_count > 0
-
-    def test_pipeline_failure_graceful(self, mock_db, mock_pipeline, vault_settings):
-        mock_pipeline.run.side_effect = RuntimeError("LLM down")
-        result = create_note.invoke(
-            {
-                "title": "Fail Note",
-                "content": "Body",
-            }
-        )
-        assert "semantic extraction failed" in result
-        assert (vault_settings / "Fail Note.md").exists()
 
 
 class TestEditNote:
-    def test_updates_note(self, mock_db, mock_pipeline, vault_settings):
+    def test_updates_note(self, mock_db, vault_settings):
         # Create the note on disk first
         from brain.vault import write_note
 
@@ -120,17 +109,17 @@ class TestFindRelated:
     def test_exact_match(self, mock_db):
         mock_db.query.return_value = [
             {
-                "source_labels": ["Person"],
-                "source": "Alice",
-                "relationship": "WORKS_ON",
-                "target_labels": ["Project"],
-                "target": "Brain",
+                "source_labels": ["Note", "Document"],
+                "source": "My Note",
+                "relationship": "TAGGED_WITH",
+                "target_labels": ["Tag"],
+                "target": "python",
             }
         ]
-        result = find_related.invoke({"entity_name": "Alice"})
-        assert "Alice" in result
-        assert "WORKS_ON" in result
-        assert "Brain" in result
+        result = find_related.invoke({"title": "My Note"})
+        assert "My Note" in result
+        assert "TAGGED_WITH" in result
+        assert "python" in result
 
     def test_fuzzy_fallback(self, mock_db):
         # First call (exact) returns nothing, second (fuzzy) returns result
@@ -138,32 +127,32 @@ class TestFindRelated:
             [],
             [
                 {
-                    "source_labels": ["Concept"],
-                    "source": "Machine Learning",
-                    "relationship": "RELATED_TO",
-                    "target_labels": ["Concept"],
-                    "target": "AI",
+                    "source_labels": ["Note", "Document"],
+                    "source": "Machine Learning Notes",
+                    "relationship": "LINKS_TO",
+                    "target_labels": ["Note", "Document"],
+                    "target": "AI Overview",
                 }
             ],
         ]
-        result = find_related.invoke({"entity_name": "Machine"})
-        assert "Machine Learning" in result
+        result = find_related.invoke({"title": "Machine"})
+        assert "Machine Learning Notes" in result
         assert mock_db.query.call_count == 2
 
     def test_no_results(self, mock_db):
         mock_db.query.side_effect = [[], []]
-        result = find_related.invoke({"entity_name": "Nothing"})
-        assert "No entities found" in result
+        result = find_related.invoke({"title": "Nothing"})
+        assert "No connections found" in result
 
     def test_long_target_truncated(self, mock_db):
         mock_db.query.return_value = [
             {
                 "source_labels": ["Note"],
                 "source": "Doc",
-                "relationship": "FROM_DOCUMENT",
-                "target_labels": ["Chunk"],
+                "relationship": "LINKS_TO",
+                "target_labels": ["Note"],
                 "target": "x" * 200,
             }
         ]
-        result = find_related.invoke({"entity_name": "Doc"})
+        result = find_related.invoke({"title": "Doc"})
         assert "..." in result
