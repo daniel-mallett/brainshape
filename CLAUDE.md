@@ -4,17 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-"Brain" is a personal second-brain agent with knowledge graph memory. It connects a markdown note vault to a Neo4j knowledge graph, allowing an AI agent to read/search/create/edit notes and maintain its own long-term memory. It includes a standalone desktop app (Tauri 2 + React) and a FastAPI backend server.
+"Brain" is a personal second-brain agent with knowledge graph memory. It connects a markdown notes directory to a Neo4j knowledge graph, allowing an AI agent to read/search/create/edit notes and maintain its own long-term memory. It includes a standalone desktop app (Tauri 2 + React) and a FastAPI backend server.
 
 ## Architecture
 
 ```
 brain/                    # Python backend
 ├── server.py             # FastAPI (HTTP + SSE) — desktop app backend
-├── agent.py → tools → graph_db / vault / kg_pipeline
+├── agent.py → tools → graph_db / notes / kg_pipeline
 
 desktop/                  # Tauri 2 + React + TypeScript
-├── src/components/       # Editor (CodeMirror 6 + vim), Chat (SSE), Sidebar, SyncStatus
+├── src/components/       # Editor (CodeMirror 6 + vim), Chat (SSE), Sidebar
 ├── src/lib/              # API client, useAgentStream hook
 └── src-tauri/            # Rust shell
 ```
@@ -22,10 +22,10 @@ desktop/                  # Tauri 2 + React + TypeScript
 - `brain/agent.py` — agent factory (`create_brain_agent()`), interface-agnostic
 - `brain/tools.py` — 7 LangChain tools (search, semantic search, read, create, edit notes; query graph; find related)
 - `brain/graph_db.py` — Neo4j connection wrapper
-- `brain/vault.py` — vault reader/writer/parser (wikilinks, tags, frontmatter)
+- `brain/notes.py` — notes reader/writer/parser (wikilinks, tags, frontmatter)
 - `brain/server.py` — FastAPI server (HTTP + SSE) for desktop app
 - `brain/kg_pipeline.py` — component-based KG pipeline for entity/relationship extraction
-- `brain/sync.py` — orchestrates incremental structural + semantic sync from vault to graph
+- `brain/sync.py` — orchestrates incremental structural + semantic sync from notes to graph
 - `brain/cli.py` — interactive CLI chat loop with `/sync` commands
 - `brain/batch.py` — standalone batch sync entry point for cron/launchd
 - `brain/config.py` — pydantic-settings from .env
@@ -51,7 +51,7 @@ desktop/                  # Tauri 2 + React + TypeScript
 - **Start Neo4j**: `docker compose up -d`
 - **Neo4j browser**: http://localhost:7474
 - **Batch sync**: `uv run python -m brain.batch` (semantic), `--structural`, or `--full`
-- **Test**: `uv run pytest` (all tests), `uv run pytest -v` (verbose), `uv run pytest tests/test_vault.py` (single file)
+- **Test**: `uv run pytest` (all tests), `uv run pytest -v` (verbose), `uv run pytest tests/test_notes.py` (single file)
 - **Lint**: `uv run ruff check`
 - **Lint fix**: `uv run ruff check --fix`
 - **Type check**: `uv run ty check`
@@ -97,7 +97,7 @@ There is no `[build-system]` table in `pyproject.toml` — the project is not an
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in `ANTHROPIC_API_KEY` and `VAULT_PATH`.
+Copy `.env.example` to `.env` and fill in `ANTHROPIC_API_KEY` and `NOTES_PATH`.
 
 **Known issue:** `.env` loading doesn't work for all dependencies — the Anthropic API key may need to be exported in your shell profile (e.g. `~/.zshrc`) as well.
 
@@ -107,8 +107,8 @@ Copy `.env.example` to `.env` and fill in `ANTHROPIC_API_KEY` and `VAULT_PATH`.
 
 Unit tests live in `tests/`. All external dependencies (Neo4j, Anthropic, HuggingFace) are mocked — no Docker or network access required to run tests.
 
-- `tests/conftest.py` — shared fixtures (`mock_db`, `mock_pipeline`, `tmp_vault`, `vault_settings`)
-- Tests cover: vault parsing/writing, config, graph_db, all 7 tools, sync logic, kg_pipeline components, server endpoints
+- `tests/conftest.py` — shared fixtures (`mock_db`, `mock_pipeline`, `tmp_notes`, `notes_settings`)
+- Tests cover: notes parsing/writing, config, graph_db, all 7 tools, sync logic, kg_pipeline components, server endpoints
 
 When adding new functionality, add corresponding tests. When fixing bugs, add a regression test.
 
@@ -119,5 +119,5 @@ Documentation lives in `docs/`, `CLAUDE.md`, and `PLAN.md`. When making changes 
 ## Security Principles
 
 - **The agent must never have access to raw credentials.** API keys and secrets live in `.env` and are loaded by `config.py` into pre-authenticated clients (Neo4j driver, Anthropic SDK). Agent tools use those clients — they never see the keys themselves.
-- **Any future tool that accesses the internet or file system must go through a service layer** that prevents the agent from exfiltrating secrets (e.g., no arbitrary HTTP requests, no reading outside the vault directory).
-- **The vault path must never overlap with the project directory** to prevent the agent from reading `.env` or source code through note-reading tools.
+- **Any future tool that accesses the internet or file system must go through a service layer** that prevents the agent from exfiltrating secrets (e.g., no arbitrary HTTP requests, no reading outside the notes directory).
+- **The notes path must never overlap with the project directory** to prevent the agent from reading `.env` or source code through note-reading tools.

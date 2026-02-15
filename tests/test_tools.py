@@ -53,7 +53,7 @@ class TestReadNote:
 
 
 class TestCreateNote:
-    def test_creates_and_syncs(self, mock_db, vault_settings):
+    def test_creates_and_syncs(self, mock_db, notes_settings):
         result = create_note.invoke(
             {
                 "title": "Brand New",
@@ -63,22 +63,22 @@ class TestCreateNote:
             }
         )
         assert "Created note 'Brand New'" in result
-        assert (vault_settings / "Brand New.md").exists()
+        assert (notes_settings / "Brand New.md").exists()
         # Structural sync should run (MERGE note + tag queries)
         assert mock_db.query.call_count > 0
 
 
 class TestEditNote:
-    def test_updates_note(self, mock_db, vault_settings):
+    def test_updates_note(self, mock_db, notes_settings):
         # Create the note on disk first
-        from brain.vault import write_note
+        from brain.notes import write_note
 
-        write_note(vault_settings, "Editable", "Old content")
+        write_note(notes_settings, "Editable", "Old content")
         mock_db.query.return_value = [{"path": "Editable.md"}]
         result = edit_note.invoke({"title": "Editable", "new_content": "New content"})
         assert "Updated note 'Editable'" in result
 
-    def test_not_found(self, mock_db, vault_settings):
+    def test_not_found(self, mock_db, notes_settings):
         mock_db.query.return_value = []
         result = edit_note.invoke({"title": "Ghost", "new_content": "x"})
         assert "not found" in result

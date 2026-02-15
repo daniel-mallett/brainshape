@@ -18,9 +18,9 @@ def server_db():
 
 
 @pytest.fixture
-def client(tmp_vault, monkeypatch, mock_agent, server_db):
-    """Create a test client with mocked agent/db/pipeline and tmp vault."""
-    monkeypatch.setattr("brain.config.settings.vault_path", str(tmp_vault))
+def client(tmp_notes, monkeypatch, mock_agent, server_db):
+    """Create a test client with mocked agent/db/pipeline and tmp notes."""
+    monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
 
     # Bypass lifespan entirely by replacing it with a no-op
     from contextlib import asynccontextmanager
@@ -62,70 +62,70 @@ class TestConfig:
         resp = client.get("/config")
         assert resp.status_code == 200
         data = resp.json()
-        assert "vault_path" in data
+        assert "notes_path" in data
         assert "model_name" in data
         assert "neo4j_uri" in data
 
 
-class TestVaultFiles:
+class TestNoteFiles:
     def test_list_files(self, client):
-        resp = client.get("/vault/files")
+        resp = client.get("/notes/files")
         assert resp.status_code == 200
         files = resp.json()["files"]
         titles = [f["title"] for f in files]
-        assert "Simple" in titles
-        assert "Tagged" in titles
-        assert "Deep" in titles
+        assert "Welcome" in titles
+        assert "About Me" in titles
+        assert "Getting Started" in titles
 
     def test_read_file(self, client):
-        resp = client.get("/vault/file/Simple.md")
+        resp = client.get("/notes/file/Welcome.md")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["title"] == "Simple"
-        assert "Just some content" in data["content"]
+        assert data["title"] == "Welcome"
+        assert "second-brain" in data["content"]
 
     def test_read_file_subfolder(self, client):
-        resp = client.get("/vault/file/Projects/Deep.md")
+        resp = client.get("/notes/file/Tutorials/Getting%20Started.md")
         assert resp.status_code == 200
-        assert resp.json()["path"] == "Projects/Deep.md"
+        assert resp.json()["path"] == "Tutorials/Getting Started.md"
 
     def test_read_missing_file(self, client):
-        resp = client.get("/vault/file/nonexistent.md")
+        resp = client.get("/notes/file/nonexistent.md")
         assert resp.status_code == 404
 
-    def test_create_file(self, client, tmp_vault):
+    def test_create_file(self, client, tmp_notes):
         resp = client.post(
-            "/vault/file",
+            "/notes/file",
             json={"title": "New Note", "content": "Hello world", "tags": ["test"]},
         )
         assert resp.status_code == 200
         data = resp.json()
         assert data["title"] == "New Note"
-        assert (tmp_vault / "New Note.md").exists()
+        assert (tmp_notes / "New Note.md").exists()
 
-    def test_create_file_in_folder(self, client, tmp_vault):
+    def test_create_file_in_folder(self, client, tmp_notes):
         resp = client.post(
-            "/vault/file",
+            "/notes/file",
             json={"title": "Sub Note", "content": "In folder", "folder": "Notes"},
         )
         assert resp.status_code == 200
-        assert (tmp_vault / "Notes" / "Sub Note.md").exists()
+        assert (tmp_notes / "Notes" / "Sub Note.md").exists()
 
     def test_create_file_traversal_rejected(self, client):
         resp = client.post(
-            "/vault/file",
+            "/notes/file",
             json={"title": "../../evil", "content": "pwned"},
         )
         assert resp.status_code == 400
 
-    def test_update_file(self, client, tmp_vault):
-        resp = client.put("/vault/file/Simple.md", json={"content": "Updated content"})
+    def test_update_file(self, client, tmp_notes):
+        resp = client.put("/notes/file/Welcome.md", json={"content": "Updated content"})
         assert resp.status_code == 200
-        text = (tmp_vault / "Simple.md").read_text()
+        text = (tmp_notes / "Welcome.md").read_text()
         assert "Updated content" in text
 
     def test_update_missing_file(self, client):
-        resp = client.put("/vault/file/missing.md", json={"content": "nope"})
+        resp = client.put("/notes/file/missing.md", json={"content": "nope"})
         assert resp.status_code == 404
 
 
@@ -282,13 +282,13 @@ class TestGraphMemories:
         assert resp.status_code == 404
 
 
-class TestVaultTags:
+class TestNoteTags:
     def test_list_tags(self, client, server_db):
         server_db.query.return_value = [
             {"name": "python"},
             {"name": "project"},
         ]
-        resp = client.get("/vault/tags")
+        resp = client.get("/notes/tags")
         assert resp.status_code == 200
         assert resp.json()["tags"] == ["python", "project"]
 

@@ -12,8 +12,8 @@ The `KGPipeline` orchestrates 6 components called sequentially:
 
 ```python
 class KGPipeline:
-    def __init__(self, driver, vault_path):
-        self.loader = VaultLoader(vault_path)
+    def __init__(self, driver, notes_path):
+        self.loader = NotesLoader(notes_path)
         self.splitter = FixedSizeSplitter(chunk_size=4000, chunk_overlap=200)
         self.embedder = TextChunkEmbedder(embedder=SentenceTransformerEmbeddings(...))
         self.extractor = LLMEntityRelationExtractor(llm=llm, on_error=OnError.IGNORE)
@@ -24,7 +24,7 @@ class KGPipeline:
 ### Pipeline Flow
 
 ```
-1. VaultLoader (reads .md file, provides vault-relative path as document_info)
+1. NotesLoader (reads .md file, provides notes-relative path as document_info)
     ↓ PdfDocument (text + document_info)
 2. FixedSizeSplitter (splits text into 4000-char chunks with 200-char overlap)
     ↓ TextChunks
@@ -37,14 +37,14 @@ class KGPipeline:
 6. SinglePropertyExactMatchResolver (merges duplicate entities by name)
 ```
 
-### VaultLoader (custom DataLoader)
+### NotesLoader (custom DataLoader)
 
-Reads markdown files from the vault and returns `PdfDocument` with:
+Reads markdown files from the notes directory and returns `PdfDocument` with:
 - `text`: the markdown file content
-- `document_info.path`: vault-relative path (e.g., `notes/meeting.md`)
+- `document_info.path`: notes-relative path (e.g., `notes/meeting.md`)
 - `document_info.metadata`: includes the note title
 
-The vault-relative `document_info.path` becomes the Document node's `path` property, which the structural sync uses to merge the `:Note` label onto the same node.
+The notes-relative `document_info.path` becomes the Document node's `path` property, which the structural sync uses to merge the `:Note` label onto the same node.
 
 ### MergingNeo4jWriter (custom KG writer)
 

@@ -5,15 +5,15 @@ from langchain_core.tools import tool
 from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline
-from brain.vault import parse_note, rewrite_note, write_note
+from brain.notes import parse_note, rewrite_note, write_note
 
 # Set by create_brain_agent() before tools are used
 db: GraphDB = None  # type: ignore[assignment]
 pipeline: KGPipeline = None  # type: ignore[assignment]
 
 
-def _vault_path() -> Path:
-    return Path(settings.vault_path).expanduser()
+def _notes_path() -> Path:
+    return Path(settings.notes_path).expanduser()
 
 
 def _sync_note_structural(note_data: dict) -> None:
@@ -116,18 +116,18 @@ def read_note(title: str) -> str:
 
 @tool
 def create_note(title: str, content: str, tags: str = "", folder: str = "") -> str:
-    """Create a new note in the vault and sync it to the knowledge graph.
+    """Create a new note in the notes directory and sync it to the knowledge graph.
     Tags should be comma-separated (e.g., 'project,ideas,important').
-    Folder is the subdirectory within the vault (e.g., 'Notes', 'Projects/2026').
-    If empty, the note is created at the vault root."""
-    vault_path = _vault_path()
+    Folder is the subdirectory within the notes directory (e.g., 'Notes', 'Projects/2026').
+    If empty, the note is created at the notes directory root."""
+    notes_path = _notes_path()
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
 
-    file_path = write_note(vault_path, title, content, folder=folder, tags=tag_list)
-    rel_path = file_path.relative_to(vault_path)
+    file_path = write_note(notes_path, title, content, folder=folder, tags=tag_list)
+    rel_path = file_path.relative_to(notes_path)
 
     # Structural sync (adds :Note:Document label, tags, wikilinks)
-    note_data = parse_note(file_path, vault_path)
+    note_data = parse_note(file_path, notes_path)
     _sync_note_structural(note_data)
 
     return f"Created note '{title}' at {rel_path}"
@@ -135,11 +135,11 @@ def create_note(title: str, content: str, tags: str = "", folder: str = "") -> s
 
 @tool
 def edit_note(title: str, new_content: str) -> str:
-    """Edit an existing note in the vault. Rewrites the note content
+    """Edit an existing note in the notes directory. Rewrites the note content
     while preserving frontmatter. Use this to clean up rough notes, improve
     formatting, add wikilinks, or expand content with context from the
     knowledge graph."""
-    vault_path = _vault_path()
+    notes_path = _notes_path()
 
     # Look up the note's actual path from the graph
     results = db.query(
@@ -149,12 +149,12 @@ def edit_note(title: str, new_content: str) -> str:
     relative_path = results[0]["path"] if results else ""
 
     try:
-        file_path = rewrite_note(vault_path, title, new_content, relative_path=relative_path)
+        file_path = rewrite_note(notes_path, title, new_content, relative_path=relative_path)
     except FileNotFoundError as e:
         return str(e)
 
     # Clear old structural relationships and re-sync
-    note_data = parse_note(file_path, vault_path)
+    note_data = parse_note(file_path, notes_path)
     db.query(
         "MATCH (n:Note {path: $path})-[r:TAGGED_WITH]->() DELETE r",
         {"path": note_data["path"]},
@@ -165,7 +165,7 @@ def edit_note(title: str, new_content: str) -> str:
     )
     _sync_note_structural(note_data)
 
-    rel_path = file_path.relative_to(vault_path)
+    rel_path = file_path.relative_to(notes_path)
     return f"Updated note '{title}' at {rel_path}"
 
 
@@ -176,7 +176,7 @@ def query_graph(cypher: str) -> str:
     store memories, and create custom entities and relationships.
 
     Graph schema:
-    - (:Note:Document {path, title, content}) — one per vault file
+    - (:Note:Document {path, title, content}) — one per notes file
     - (:Tag {name}) — connected via TAGGED_WITH
     - (:Note) -[:LINKS_TO]-> (:Note) — wikilink connections
     - (:Chunk {text, embedding}) -[:FROM_DOCUMENT]-> (:Note) — text chunks

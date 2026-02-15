@@ -18,18 +18,18 @@ from pathlib import Path
 from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import create_kg_pipeline
-from brain.sync import sync_semantic, sync_structural, sync_vault
+from brain.sync import sync_all, sync_semantic, sync_structural
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Brain vault sync (batch mode)")
+    parser = argparse.ArgumentParser(description="Brain notes sync (batch mode)")
     parser.add_argument("--structural", action="store_true", help="Run structural sync only")
     parser.add_argument("--full", action="store_true", help="Run structural + semantic sync")
     args = parser.parse_args()
 
-    vault_path = Path(settings.vault_path).expanduser()
-    if not vault_path.exists():
-        print(f"Error: vault path {vault_path} does not exist", file=sys.stderr)
+    notes_path = Path(settings.notes_path).expanduser()
+    if not notes_path.exists():
+        print(f"Error: notes path {notes_path} does not exist", file=sys.stderr)
         sys.exit(1)
 
     db = GraphDB()
@@ -37,21 +37,21 @@ def main():
 
     try:
         if args.structural:
-            stats = sync_structural(db, vault_path)
+            stats = sync_structural(db, notes_path)
             print(
                 f"Structural: {stats['notes']} notes, "
                 f"{stats['tags']} tag links, {stats['links']} note links"
             )
         elif args.full:
-            pipeline = create_kg_pipeline(db._driver, vault_path)
-            stats = sync_vault(db, pipeline, vault_path)
+            pipeline = create_kg_pipeline(db._driver, notes_path)
+            stats = sync_all(db, pipeline, notes_path)
             s, sem = stats["structural"], stats["semantic"]
             print(f"Structural: {s['notes']} notes, {s['tags']} tag links, {s['links']} note links")
             print(f"Semantic: {sem['processed']} processed, {sem['skipped']} skipped")
         else:
             # Default: semantic only (the expensive/important one for overnight batch)
-            pipeline = create_kg_pipeline(db._driver, vault_path)
-            stats = sync_semantic(db, pipeline, vault_path)
+            pipeline = create_kg_pipeline(db._driver, notes_path)
+            stats = sync_semantic(db, pipeline, notes_path)
             print(f"Semantic: {stats['processed']} processed, {stats['skipped']} skipped")
     finally:
         db.close()

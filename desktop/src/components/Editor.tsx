@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
@@ -6,15 +6,14 @@ import { markdown } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { vim } from "@replit/codemirror-vim";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { updateVaultFile } from "../lib/api";
+import { updateNoteFile } from "../lib/api";
 
 interface EditorProps {
   filePath: string | null;
   content: string;
-  onContentChange?: (content: string) => void;
 }
 
-export function Editor({ filePath, content, onContentChange }: EditorProps) {
+export function Editor({ filePath, content }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -22,16 +21,13 @@ export function Editor({ filePath, content, onContentChange }: EditorProps) {
 
   filePathRef.current = filePath;
 
-  const saveToServer = useCallback(
-    (text: string) => {
-      if (!filePathRef.current) return;
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = setTimeout(() => {
-        updateVaultFile(filePathRef.current!, text).catch(console.error);
-      }, 1000);
-    },
-    []
-  );
+  function saveToServer(text: string) {
+    if (!filePathRef.current) return;
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      updateNoteFile(filePathRef.current!, text).catch(console.error);
+    }, 1000);
+  }
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -48,7 +44,6 @@ export function Editor({ filePath, content, onContentChange }: EditorProps) {
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             const text = update.state.doc.toString();
-            onContentChange?.(text);
             saveToServer(text);
           }
         }),

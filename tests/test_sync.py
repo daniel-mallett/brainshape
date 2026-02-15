@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from brain.sync import _get_stored_hashes, sync_semantic, sync_structural, sync_vault
+from brain.sync import _get_stored_hashes, sync_all, sync_semantic, sync_structural
 
 
 class TestGetStoredHashes:
@@ -24,48 +24,48 @@ class TestGetStoredHashes:
 
 
 class TestSyncStructural:
-    def test_two_pass_stats(self, tmp_vault):
+    def test_two_pass_stats(self, tmp_notes):
         db = MagicMock()
         db.query.return_value = []
-        stats = sync_structural(db, tmp_vault)
-        assert stats["notes"] == 4  # Simple, Tagged, Linked, Deep
+        stats = sync_structural(db, tmp_notes)
+        assert stats["notes"] == 5  # Welcome, About Me, + 3 Tutorials
         assert stats["tags"] >= 0
         assert stats["links"] >= 0
         assert db.query.call_count > 0
 
-    def test_clears_old_rels(self, tmp_vault):
+    def test_clears_old_rels(self, tmp_notes):
         db = MagicMock()
         db.query.return_value = []
-        sync_structural(db, tmp_vault)
+        sync_structural(db, tmp_notes)
         # Should have DELETE calls for TAGGED_WITH and LINKS_TO
         delete_calls = [c for c in db.query.call_args_list if "DELETE" in str(c)]
         assert len(delete_calls) > 0
 
 
 class TestSyncSemantic:
-    def test_skips_unchanged_files(self, tmp_vault):
+    def test_skips_unchanged_files(self, tmp_notes):
         db = MagicMock()
         pipeline = MagicMock()
         # Precompute hashes so everything appears unchanged
-        from brain.vault import compute_file_hash, list_notes
+        from brain.notes import compute_file_hash, list_notes
 
         hashes = {}
-        for f in list_notes(tmp_vault):
-            rel = str(f.relative_to(tmp_vault))
+        for f in list_notes(tmp_notes):
+            rel = str(f.relative_to(tmp_notes))
             hashes[rel] = compute_file_hash(f)
         db.query.return_value = [{"path": p, "hash": h} for p, h in hashes.items()]
-        stats = sync_semantic(db, pipeline, tmp_vault)
+        stats = sync_semantic(db, pipeline, tmp_notes)
         assert stats["processed"] == 0
-        assert stats["skipped"] == 4
+        assert stats["skipped"] == 5
         pipeline.run.assert_not_called()
 
-    def test_processes_changed_files(self, tmp_vault):
+    def test_processes_changed_files(self, tmp_notes):
         db = MagicMock()
         pipeline = MagicMock()
         db.query.return_value = []  # No stored hashes → all files are new
-        stats = sync_semantic(db, pipeline, tmp_vault)
-        assert stats["processed"] == 4
-        assert pipeline.run.call_count == 4
+        stats = sync_semantic(db, pipeline, tmp_notes)
+        assert stats["processed"] == 5
+        assert pipeline.run.call_count == 5
 
     def test_skips_empty_files(self, tmp_path):
         (tmp_path / "empty.md").write_text("")
@@ -87,12 +87,12 @@ class TestSyncSemantic:
         assert stats["processed"] == 0
 
 
-class TestSyncVault:
-    def test_combines_stats(self, tmp_vault):
+class TestSyncAll:
+    def test_combines_stats(self, tmp_notes):
         db = MagicMock()
         pipeline = MagicMock()
         db.query.return_value = []
-        stats = sync_vault(db, pipeline, tmp_vault)
+        stats = sync_all(db, pipeline, tmp_notes)
         assert "structural" in stats
         assert "semantic" in stats
-        assert stats["structural"]["notes"] == 4
+        assert stats["structural"]["notes"] == 5

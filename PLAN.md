@@ -13,15 +13,17 @@
 - CLI with /sync commands, tool call visibility, batch entry point for cron
 - APOC plugin enabled in Docker
 - Folder-aware note creation and editing (edit_note looks up path from graph)
-- Tool responses use vault-relative paths only (no system path leakage)
+- Tool responses use notes-relative paths only (no system path leakage)
+- Seed notes for first-run experience (Welcome, About Me, 3 Tutorials)
 
 ### FastAPI Server
 - HTTP server on port 8765 exposing all Brain operations
-- Endpoints: health, config, vault CRUD, agent init/message (SSE streaming), sync (structural/semantic/full)
-- Graph endpoints: stats, overview, neighborhood, memories CRUD, vault tags
+- Endpoints: health, config, notes CRUD, agent init/message (SSE streaming), sync (structural/semantic/full)
+- Graph endpoints: stats, overview, neighborhood, memories CRUD, notes tags
 - CORS configured for Vite dev and Tauri origins
 - Session-based agent conversations via in-memory store
 - Structural sync on startup (mirrors CLI behavior)
+- Seed notes initialized on first run (copies from seed_notes/ if notes directory is empty)
 
 ### Desktop App (Tauri 2 + React + TypeScript)
 - Scaffolded with official `create-tauri-app` (React+TS template)
@@ -32,13 +34,12 @@
 - Graph visualization: force-directed graph view (full graph, local per-note neighborhood)
 - Memory management panel: browse, edit, delete agent memories
 - View switching: Editor / Graph / Memory views in header
-- Sync controls (structural/semantic/full) in sidebar
-- ShadCN UI components (button, input, scroll-area, separator) + Tailwind v4
+- ShadCN UI components (button, input, scroll-area) + Tailwind v4
 - Dark mode by default via ShadCN design tokens
 - Health check with auto-reconnect polling
 
 ### Testing & CI
-- 95 unit tests covering all modules including server + graph endpoints (68% line coverage)
+- 98 unit tests covering all modules including server + graph endpoints
 - Server tests properly isolated (noop lifespan, no Neo4j connection required)
 - CI: GitHub Actions workflow runs ruff, ty, and pytest (with coverage) on push/PR to main
 - Pre-commit hooks: ruff lint, ruff format, gitleaks secret detection, pytest
@@ -50,7 +51,7 @@
 - **`.env` config**: API key loading doesn't work for all deps — key needs to be in shell environment too
 - **HuggingFace gating**: EmbeddingGemma requires HF account + login. Need to switch to ungated model or Ollama
 - **`asyncio.run()` per file**: creates new event loop for each note in semantic sync — should be one loop
-- **`vault.py` regex parsing**: could be enhanced with richer metadata extraction in the future
+- **`notes.py` regex parsing**: could be enhanced with richer metadata extraction in the future
 - **Potentially unused deps**: `anthropic`, `langchain-anthropic`, `python-dotenv` are not directly imported — may be transitive deps that could be removed
 - **Desktop: no PyInstaller bundling yet**: Python server must be run separately in dev mode
 
@@ -61,6 +62,6 @@
 3. Better editor features — wikilink autocomplete, tag autocomplete, clickable links
 4. Call transcription — built-in audio recording + Whisper transcription
 5. PyInstaller bundling — bundle Python server as Tauri sidecar for standalone `.app`
-6. File watching — `watchdog` to auto-sync on vault changes
+6. File watching — `watchdog` to auto-sync on notes changes
 7. Command palette — keyboard-driven actions (create note, search, sync, etc.)
 8. Dependency cleanup (audit and remove transitive-only deps)

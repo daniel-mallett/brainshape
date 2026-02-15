@@ -2,7 +2,7 @@ from pathlib import Path
 
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline
-from brain.vault import compute_file_hash, list_notes, read_vault
+from brain.notes import compute_file_hash, list_notes, read_all_notes
 
 
 def _get_stored_hashes(db: GraphDB) -> dict[str, str]:
@@ -11,14 +11,14 @@ def _get_stored_hashes(db: GraphDB) -> dict[str, str]:
     return {r["path"]: r["hash"] for r in results if r["hash"]}
 
 
-def sync_semantic(db: GraphDB, pipeline: KGPipeline, vault_path: Path) -> dict:
+def sync_semantic(db: GraphDB, pipeline: KGPipeline, notes_path: Path) -> dict:
     """Run KG pipeline to extract entities and relationships from note content.
 
     Only processes files whose content has changed since last processing
     (compared via SHA-256 content hash). For changed notes, clears old
     Chunks and extracted entities before re-processing to avoid duplicates.
     """
-    note_files = list_notes(vault_path)
+    note_files = list_notes(notes_path)
     hash_map = _get_stored_hashes(db)
     stats = {"processed": 0, "skipped": 0}
 
@@ -28,7 +28,7 @@ def sync_semantic(db: GraphDB, pipeline: KGPipeline, vault_path: Path) -> dict:
             stats["skipped"] += 1
             continue
 
-        relative_path = str(file_path.relative_to(vault_path))
+        relative_path = str(file_path.relative_to(notes_path))
         file_hash = compute_file_hash(file_path)
 
         if hash_map.get(relative_path) == file_hash:
@@ -59,7 +59,7 @@ def sync_semantic(db: GraphDB, pipeline: KGPipeline, vault_path: Path) -> dict:
     return stats
 
 
-def sync_structural(db: GraphDB, vault_path: Path) -> dict:
+def sync_structural(db: GraphDB, notes_path: Path) -> dict:
     """Add :Note label, properties, and structural relationships to Document nodes.
 
     Uses a two-pass approach:
@@ -71,7 +71,7 @@ def sync_structural(db: GraphDB, vault_path: Path) -> dict:
     Runs on every note unconditionally — structural sync is cheap Cypher
     queries, so hash-gating isn't worth the complexity.
     """
-    notes = read_vault(vault_path)
+    notes = read_all_notes(notes_path)
     stats = {"notes": 0, "tags": 0, "links": 0}
 
     # Pass 1: MERGE all note nodes
@@ -136,14 +136,14 @@ def sync_structural(db: GraphDB, vault_path: Path) -> dict:
     return stats
 
 
-def sync_vault(
+def sync_all(
     db: GraphDB,
     pipeline: KGPipeline,
-    vault_path: Path,
+    notes_path: Path,
 ) -> dict:
-    """Full vault sync: semantic first (creates Document nodes), then structural
+    """Full sync: semantic first (creates Document nodes), then structural
     (adds :Note label, tags, wikilinks onto those same nodes).
     Both steps are incremental — only dirty files are processed."""
-    semantic = sync_semantic(db, pipeline, vault_path)
-    structural = sync_structural(db, vault_path)
+    semantic = sync_semantic(db, pipeline, notes_path)
+    structural = sync_structural(db, notes_path)
     return {"structural": structural, "semantic": semantic}

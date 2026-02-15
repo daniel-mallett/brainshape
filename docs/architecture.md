@@ -2,7 +2,7 @@
 
 ## Overview
 
-Brain is a personal second-brain agent with knowledge graph memory. It connects a markdown note vault to a Neo4j knowledge graph, allowing an AI agent to read/search/create/edit notes and maintain its own long-term memory. It includes a standalone desktop app (Tauri 2 + React) backed by a FastAPI server.
+Brain is a personal second-brain agent with knowledge graph memory. It connects a markdown notes directory to a Neo4j knowledge graph, allowing an AI agent to read/search/create/edit notes and maintain its own long-term memory. It includes a standalone desktop app (Tauri 2 + React) backed by a FastAPI server.
 
 ## Module Map
 
@@ -15,7 +15,7 @@ scripts/dev.sh               # Start full dev environment (Neo4j + server + Taur
 brain/
 ├── config.py                # pydantic-settings, loads from .env
 ├── graph_db.py              # Neo4j driver wrapper, schema bootstrap, query() helper
-├── vault.py                 # Vault reader/writer/parser (wikilinks, tags, frontmatter)
+├── notes.py                 # Notes reader/writer/parser (wikilinks, tags, frontmatter)
 ├── kg_pipeline.py           # Component-based KG pipeline (entity/relationship extraction)
 ├── sync.py                  # Orchestrates incremental semantic + structural sync
 ├── tools.py                 # 7 LangChain tools for the agent
@@ -29,8 +29,7 @@ desktop/                     # Tauri 2 desktop app (React + TypeScript + Vite)
 │   ├── components/
 │   │   ├── Editor.tsx       # CodeMirror 6 + vim mode
 │   │   ├── Chat.tsx         # Agent chat panel with SSE streaming
-│   │   ├── Sidebar.tsx      # File tree / vault browser
-│   │   └── SyncStatus.tsx   # Sync controls + progress
+│   │   └── Sidebar.tsx      # File tree browser
 │   ├── lib/
 │   │   ├── api.ts           # HTTP client for Python backend
 │   │   └── useAgentStream.ts # SSE streaming hook
@@ -40,14 +39,14 @@ desktop/                     # Tauri 2 desktop app (React + TypeScript + Vite)
 └── vite.config.ts
 
 tests/
-├── conftest.py              # Shared fixtures (mock db, mock pipeline, tmp vault)
-├── test_vault.py            # Parsing, writing, hashing
+├── conftest.py              # Shared fixtures (mock db, mock pipeline, tmp notes)
+├── test_notes.py            # Parsing, writing, hashing
 ├── test_config.py           # Settings defaults and env loading
 ├── test_graph_db.py         # GraphDB with mocked driver
 ├── test_tools.py            # Tool functions with mocked db/pipeline
 ├── test_sync.py             # Sync logic with mocked deps
 ├── test_server.py           # FastAPI endpoint tests
-└── test_kg_pipeline.py      # VaultLoader, MergingNeo4jWriter (mocked driver)
+└── test_kg_pipeline.py      # NotesLoader, MergingNeo4jWriter (mocked driver)
 ```
 
 ## Data Flow
@@ -57,7 +56,7 @@ tests/
 main.py ──┤                   │
            └─ brain/server.py ─┬─ FastAPI HTTP+SSE ← desktop/ (Tauri app)
                                │
-                               └─ brain/agent.py → tools → graph_db / vault / kg_pipeline
+                               └─ brain/agent.py → tools → graph_db / notes / kg_pipeline
 ```
 
 ## Interface-Agnostic Design
@@ -77,10 +76,10 @@ Future interfaces (Slack, Discord, voice) each import `create_brain_agent()` and
 - `GET /config` — current settings
 - `POST /agent/init` — create session, returns session_id
 - `POST /agent/message` — stream agent response via SSE
-- `GET /vault/files` — list all notes
-- `GET /vault/file/{path}` — read a note
-- `POST /vault/file` — create a note
-- `PUT /vault/file/{path}` — update a note
+- `GET /notes/files` — list all notes
+- `GET /notes/file/{path}` — read a note
+- `POST /notes/file` — create a note
+- `PUT /notes/file/{path}` — update a note
 - `POST /sync/structural`, `/sync/semantic`, `/sync/full` — trigger sync
 
 In dev mode, the server is started separately. In production, it will be bundled as a Tauri sidecar via PyInstaller.
@@ -90,7 +89,7 @@ In dev mode, the server is started separately. In production, it will be bundled
 Two independent sync layers with different cost profiles:
 
 - **Structural sync** (cheap, always current): runs on every startup (CLI and server) and via `/sync` or `POST /sync/structural`. Processes every note unconditionally — parses tags, wikilinks, frontmatter from markdown files. No hash-gating because it's just Cypher queries.
-- **Semantic sync** (expensive, incremental): runs via `/sync --full`, `/sync --semantic`, or `POST /sync/semantic`. Uses LLM to extract entities and relationships. Tracked by SHA-256 content hash — only dirty (changed) files are processed.
+- **Semantic sync** (expensive, incremental): runs via `/sync --full`, `/sync --semantic`, or `POST /sync/semantic`. Uses local embedding model to chunk and embed notes. Tracked by SHA-256 content hash — only dirty (changed) files are processed.
 - **Batch processing**: `uv run python -m brain.batch` for cron/launchd jobs.
 
 ## Key Dependencies
@@ -137,4 +136,4 @@ All config flows through `brain/config.py` using `pydantic-settings.BaseSettings
 - Validates types at startup
 - Singleton `settings` object imported by all other modules
 
-Key settings: `ANTHROPIC_API_KEY`, `MODEL_NAME`, `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, `VAULT_PATH`
+Key settings: `ANTHROPIC_API_KEY`, `MODEL_NAME`, `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, `NOTES_PATH`

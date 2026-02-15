@@ -11,7 +11,7 @@ from brain.kg_pipeline import KGPipeline, create_kg_pipeline
 SYSTEM_PROMPT = """\
 You are Brain, a personal knowledge management assistant.
 
-You have access to the user's note vault as a knowledge graph in Neo4j.
+You have access to the user's notes as a knowledge graph in Neo4j.
 You can search, read, create, and edit notes. You can run Cypher queries to explore
 relationships, store memories, and build a personal knowledge graph over time.
 
@@ -22,7 +22,7 @@ When the user asks a question:
 - Use find_related to explore a note's connections (wikilinks, shared tags)
 
 Graph schema:
-- (:Note:Document {path, title, content}) — one node per vault file
+- (:Note:Document {path, title, content}) — one node per notes file
 - (:Tag {name}) — connected via TAGGED_WITH
 - (:Note) -[:LINKS_TO]-> (:Note) — wikilink connections
 - (:Chunk {text, embedding}) -[:FROM_DOCUMENT]-> (:Note) — text chunks for semantic search
@@ -67,8 +67,8 @@ def create_brain_agent(
         db.bootstrap_schema()
 
     if pipeline is None:
-        vault_path = Path(settings.vault_path).expanduser()
-        pipeline = create_kg_pipeline(db._driver, vault_path)
+        notes_path = Path(settings.notes_path).expanduser()
+        pipeline = create_kg_pipeline(db._driver, notes_path)
 
     tools.db = db
     tools.pipeline = pipeline

@@ -6,7 +6,7 @@ The Brain agent has 7 tools, all defined as plain Python functions in `brain/too
 
 Tools use module-level `db` and `pipeline` variables set by `create_brain_agent()` in `agent.py` before tools are used.
 
-Tool responses only include vault-relative paths — absolute system paths are never exposed to the agent.
+Tool responses only include notes-relative paths — absolute system paths are never exposed to the agent.
 
 ## Tool Reference
 
@@ -20,14 +20,14 @@ Vector similarity search over chunk embeddings. Embeds the query text using the 
 Read the full content of a specific note by title. Queries the graph for the Note node and returns its content.
 
 ### 4. create_note(title: str, content: str, tags: str = "", folder: str = "")
-Create a new note in the vault and sync it to the graph. Tags are comma-separated. Folder specifies the subdirectory within the vault (e.g., 'Notes', 'Projects/2026'). Flow:
-1. Write markdown file to vault (with frontmatter)
+Create a new note in the notes directory and sync it to the graph. Tags are comma-separated. Folder specifies the subdirectory within the notes directory (e.g., 'Notes', 'Projects/2026'). Flow:
+1. Write markdown file to notes directory (with frontmatter)
 2. Run semantic extraction (KG pipeline creates Document + Chunk + Entity nodes)
 3. Run structural sync (adds :Note label, tags, wikilinks)
 
 ### 5. edit_note(title: str, new_content: str)
 Rewrite an existing note's content while preserving frontmatter. Looks up the note's actual path from the graph so it works with notes in subdirectories. Flow:
-1. Query graph for the note's vault-relative path
+1. Query graph for the note's notes-relative path
 2. Read existing file, replace content, preserve frontmatter
 3. Re-run semantic extraction
 4. Clear old TAGGED_WITH and LINKS_TO relationships

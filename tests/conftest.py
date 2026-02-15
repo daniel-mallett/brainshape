@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from brain import tools
+from brain.notes import init_notes
 
 
 @pytest.fixture
@@ -21,29 +22,11 @@ def mock_pipeline():
 
 
 @pytest.fixture
-def tmp_vault(tmp_path):
-    """Create a temporary vault with sample markdown files."""
-    # Simple note
-    (tmp_path / "Simple.md").write_text("Just some content.\n")
+def tmp_notes(tmp_path):
+    """Create a temporary notes directory populated with seed notes."""
+    init_notes(tmp_path)
 
-    # Note with frontmatter and tags
-    (tmp_path / "Tagged.md").write_text(
-        "---\ntags:\n  - python\n  - project\n---\nContent with #inline tag.\n"
-    )
-
-    # Note with wikilinks
-    (tmp_path / "Linked.md").write_text(
-        "See [[Simple]] and [[Tagged|my tagged note]] for details.\n"
-    )
-
-    # Note in a subfolder
-    sub = tmp_path / "Projects"
-    sub.mkdir()
-    (sub / "Deep.md").write_text(
-        "---\ntags: research\n---\nA [[folder/Page]] link and #nested/tag here.\n"
-    )
-
-    # Non-markdown file (should be ignored)
+    # Non-markdown file (should be ignored by list_notes)
     (tmp_path / "image.png").write_bytes(b"\x89PNG")
 
     return tmp_path
@@ -60,7 +43,7 @@ def tools_setup(mock_db, mock_pipeline):
 
 
 @pytest.fixture
-def vault_settings(tmp_vault, monkeypatch):
-    """Point settings.vault_path at the tmp vault."""
-    monkeypatch.setattr("brain.config.settings.vault_path", str(tmp_vault))
-    return tmp_vault
+def notes_settings(tmp_notes, monkeypatch):
+    """Point settings.notes_path at the tmp notes directory."""
+    monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
+    return tmp_notes

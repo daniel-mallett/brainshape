@@ -2,13 +2,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from brain.kg_pipeline import KGPipeline, VaultLoader
+from brain.kg_pipeline import KGPipeline, NotesLoader
 
 
-class TestVaultLoader:
+class TestNotesLoader:
     @pytest.fixture
     def loader(self, tmp_path):
-        return VaultLoader(vault_path=tmp_path)
+        return NotesLoader(notes_path=tmp_path)
 
     async def test_reads_file_and_returns_document(self, loader, tmp_path):
         note = tmp_path / "Hello.md"
@@ -23,12 +23,12 @@ class TestVaultLoader:
         doc = await loader.run(filepath=note)
         assert doc.document_info.metadata["title"] == "My Note"
 
-    async def test_vault_relative_path(self, tmp_path):
+    async def test_notes_relative_path(self, tmp_path):
         sub = tmp_path / "folder"
         sub.mkdir()
         note = sub / "Deep.md"
         note.write_text("Deep content")
-        loader = VaultLoader(vault_path=tmp_path)
+        loader = NotesLoader(notes_path=tmp_path)
         doc = await loader.run(filepath=note)
         assert doc.document_info.path == "folder/Deep.md"
 

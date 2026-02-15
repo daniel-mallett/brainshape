@@ -5,29 +5,29 @@ from brain.agent import create_brain_agent
 from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline
-from brain.sync import sync_semantic, sync_structural, sync_vault
+from brain.sync import sync_all, sync_semantic, sync_structural
 
 
 def _run_sync(db: GraphDB, pipeline: KGPipeline, args: list[str]) -> None:
-    vault_path = Path(settings.vault_path).expanduser()
-    if not vault_path.exists():
-        print(f"Vault path {vault_path} not found.")
+    notes_path = Path(settings.notes_path).expanduser()
+    if not notes_path.exists():
+        print(f"Notes path {notes_path} not found.")
         return
 
     if "--full" in args:
         print("Running full sync (structural + semantic, incremental)...")
-        stats = sync_vault(db, pipeline, vault_path)
+        stats = sync_all(db, pipeline, notes_path)
         s = stats["structural"]
         sem = stats["semantic"]
         print(f"  Structural: {s['notes']} notes, {s['tags']} tag links, {s['links']} note links")
         print(f"  Semantic: {sem['processed']} processed, {sem['skipped']} skipped")
     elif "--semantic" in args:
         print("Running semantic sync (incremental)...")
-        stats = sync_semantic(db, pipeline, vault_path)
+        stats = sync_semantic(db, pipeline, notes_path)
         print(f"  Processed: {stats['processed']}, Skipped: {stats['skipped']}")
     else:
         print("Running structural sync...")
-        stats = sync_structural(db, vault_path)
+        stats = sync_structural(db, notes_path)
         print(f"  {stats['notes']} notes, {stats['tags']} tag links, {stats['links']} note links")
 
 
@@ -53,20 +53,20 @@ def run_cli():
     agent, db, pipeline = create_brain_agent()
 
     # Structural sync on startup
-    vault_path = Path(settings.vault_path).expanduser()
-    if vault_path.exists():
-        notes = list(vault_path.rglob("*.md"))
+    notes_path = Path(settings.notes_path).expanduser()
+    if notes_path.exists():
+        notes = list(notes_path.rglob("*.md"))
         if notes:
-            print(f"Syncing vault from {vault_path} ({len(notes)} notes)...")
-            stats = sync_structural(db, vault_path)
+            print(f"Syncing notes from {notes_path} ({len(notes)} notes)...")
+            stats = sync_structural(db, notes_path)
             print(
                 f"  {stats['notes']} notes, {stats['tags']} tag links, {stats['links']} note links"
             )
         else:
-            print(f"Vault at {vault_path} is empty.")
+            print(f"Notes directory at {notes_path} is empty.")
     else:
-        print(f"Vault path {vault_path} not found. Starting without vault sync.")
-        print(f"  Create it with: mkdir -p {vault_path}")
+        print(f"Notes path {notes_path} not found. Starting without sync.")
+        print(f"  Create it with: mkdir -p {notes_path}")
 
     print("\nBrain is ready. Type 'quit' or 'exit' to stop. Type /help for commands.\n")
 

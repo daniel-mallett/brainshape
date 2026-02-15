@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { health, getConfig, getVaultFile, type Config } from "./lib/api";
+import { health, getConfig, getNoteFile, type Config } from "./lib/api";
 import { Sidebar } from "./components/Sidebar";
 import { Editor } from "./components/Editor";
 import { Chat } from "./components/Chat";
@@ -38,11 +38,10 @@ function App() {
   const handleSelectFile = useCallback(
     async (path: string) => {
       try {
-        const note = await getVaultFile(path);
+        const note = await getNoteFile(path);
         setSelectedPath(path);
         setFileContent(note.content);
-        // Switch to editor view when selecting a file (unless in graph mode)
-        if (activeView === "memory") {
+        if (activeView !== "editor") {
           setActiveView("editor");
         }
       } catch (err) {
@@ -83,7 +82,7 @@ function App() {
         <div className="flex items-center gap-1 text-xs">
           {config && (
             <span className="text-muted-foreground mr-2">
-              {config.vault_path}
+              {config.notes_path}
             </span>
           )}
           <Button

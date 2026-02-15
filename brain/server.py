@@ -1,4 +1,4 @@
-"""FastAPI server exposing Brain agent, vault, and sync operations over HTTP + SSE."""
+"""FastAPI server exposing Brain agent, notes, and sync operations over HTTP + SSE."""
 
 import json
 import uuid
@@ -14,8 +14,8 @@ from brain.agent import create_brain_agent
 from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline
-from brain.sync import sync_semantic, sync_structural, sync_vault
-from brain.vault import list_notes, parse_note, rewrite_note, write_note
+from brain.notes import init_notes, list_notes, parse_note, rewrite_note, write_note
+from brain.sync import sync_all, sync_semantic, sync_structural
 
 # Module-level state set during lifespan
 _agent = None
@@ -31,11 +31,12 @@ async def lifespan(app: FastAPI):
     global _agent, _db, _pipeline
     _agent, _db, _pipeline = create_brain_agent()
 
-    vault_path = Path(settings.vault_path).expanduser()
-    if vault_path.exists():
-        notes = list(vault_path.rglob("*.md"))
+    notes_path = Path(settings.notes_path).expanduser()
+    init_notes(notes_path)
+    if notes_path.exists():
+        notes = list(notes_path.rglob("*.md"))
         if notes:
-            sync_structural(_db, vault_path)
+            sync_structural(_db, notes_path)
 
     yield
 
@@ -97,7 +98,7 @@ def health():
 @app.get("/config")
 def get_config():
     return {
-        "vault_path": settings.vault_path,
+        "notes_path": settings.notes_path,
         "model_name": settings.model_name,
         "neo4j_uri": settings.neo4j_uri,
     }
@@ -155,63 +156,63 @@ async def agent_message(req: MessageRequest):
     return EventSourceResponse(event_generator())
 
 
-# --- Vault ---
+# --- Notes ---
 
 
-def _vault_path() -> Path:
-    return Path(settings.vault_path).expanduser()
+def _notes_path() -> Path:
+    return Path(settings.notes_path).expanduser()
 
 
-@app.get("/vault/files")
-def vault_files():
-    vault_path = _vault_path()
-    if not vault_path.exists():
+@app.get("/notes/files")
+def notes_files():
+    notes_path = _notes_path()
+    if not notes_path.exists():
         return {"files": []}
-    notes = list_notes(vault_path)
+    note_list = list_notes(notes_path)
     files = []
-    for note in notes:
-        rel = str(note.relative_to(vault_path))
+    for note in note_list:
+        rel = str(note.relative_to(notes_path))
         files.append({"path": rel, "title": note.stem})
     return {"files": files}
 
 
-@app.get("/vault/file/{path:path}")
-def vault_read(path: str):
-    vault_path = _vault_path()
-    file_path = vault_path / path
+@app.get("/notes/file/{path:path}")
+def notes_read(path: str):
+    notes_path = _notes_path()
+    file_path = notes_path / path
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Note not found")
-    note = parse_note(file_path, vault_path)
+    note = parse_note(file_path, notes_path)
     return note
 
 
-@app.post("/vault/file")
-def vault_create(req: CreateNoteRequest):
-    vault_path = _vault_path()
+@app.post("/notes/file")
+def notes_create(req: CreateNoteRequest):
+    notes_path = _notes_path()
     try:
         file_path = write_note(
-            vault_path,
+            notes_path,
             req.title,
             req.content,
             folder=req.folder,
             tags=req.tags if req.tags else None,
             metadata=req.metadata,
         )
-        rel = str(file_path.relative_to(vault_path))
+        rel = str(file_path.relative_to(notes_path))
         return {"path": rel, "title": req.title}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.put("/vault/file/{path:path}")
-def vault_update(path: str, req: UpdateNoteRequest):
-    vault_path = _vault_path()
-    file_path = vault_path / path
+@app.put("/notes/file/{path:path}")
+def notes_update(path: str, req: UpdateNoteRequest):
+    notes_path = _notes_path()
+    file_path = notes_path / path
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Note not found")
     title = file_path.stem
     try:
-        rewrite_note(vault_path, title, req.content, relative_path=path)
+        rewrite_note(notes_path, title, req.content, relative_path=path)
         return {"path": path, "title": title}
     except (FileNotFoundError, ValueError) as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -395,8 +396,8 @@ def update_memory(memory_id: str, req: UpdateMemoryRequest):
     return {"status": "ok", "id": memory_id}
 
 
-@app.get("/vault/tags")
-def vault_tags():
+@app.get("/notes/tags")
+def notes_tags():
     db = _require_db()
     results = db.query("MATCH (t:Tag) RETURN t.name AS name ORDER BY name")
     return {"tags": [r["name"] for r in results]}
@@ -423,10 +424,10 @@ def _truncate(text: str | None, max_len: int) -> str | None:
 def sync_structural_endpoint():
     if _db is None:
         raise HTTPException(status_code=503, detail="Server not initialized")
-    vault_path = _vault_path()
-    if not vault_path.exists():
-        raise HTTPException(status_code=400, detail="Vault path not found")
-    stats = sync_structural(_db, vault_path)
+    notes_path = _notes_path()
+    if not notes_path.exists():
+        raise HTTPException(status_code=400, detail="Notes path not found")
+    stats = sync_structural(_db, notes_path)
     return {"status": "ok", "stats": stats}
 
 
@@ -434,10 +435,10 @@ def sync_structural_endpoint():
 def sync_semantic_endpoint():
     if _db is None or _pipeline is None:
         raise HTTPException(status_code=503, detail="Server not initialized")
-    vault_path = _vault_path()
-    if not vault_path.exists():
-        raise HTTPException(status_code=400, detail="Vault path not found")
-    stats = sync_semantic(_db, _pipeline, vault_path)
+    notes_path = _notes_path()
+    if not notes_path.exists():
+        raise HTTPException(status_code=400, detail="Notes path not found")
+    stats = sync_semantic(_db, _pipeline, notes_path)
     return {"status": "ok", "stats": stats}
 
 
@@ -445,10 +446,10 @@ def sync_semantic_endpoint():
 def sync_full_endpoint():
     if _db is None or _pipeline is None:
         raise HTTPException(status_code=503, detail="Server not initialized")
-    vault_path = _vault_path()
-    if not vault_path.exists():
-        raise HTTPException(status_code=400, detail="Vault path not found")
-    stats = sync_vault(_db, _pipeline, vault_path)
+    notes_path = _notes_path()
+    if not notes_path.exists():
+        raise HTTPException(status_code=400, detail="Notes path not found")
+    stats = sync_all(_db, _pipeline, notes_path)
     return {"status": "ok", "stats": stats}
 
 

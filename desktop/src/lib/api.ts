@@ -24,7 +24,7 @@ export function health(): Promise<{ status: string }> {
 // --- Config ---
 
 export interface Config {
-  vault_path: string;
+  notes_path: string;
   model_name: string;
   neo4j_uri: string;
 }
@@ -33,9 +33,9 @@ export function getConfig(): Promise<Config> {
   return request("/config");
 }
 
-// --- Vault ---
+// --- Notes ---
 
-export interface VaultFile {
+export interface NoteFile {
   path: string;
   title: string;
 }
@@ -49,31 +49,19 @@ export interface Note {
   tags: string[];
 }
 
-export function getVaultFiles(): Promise<{ files: VaultFile[] }> {
-  return request("/vault/files");
+export function getNoteFiles(): Promise<{ files: NoteFile[] }> {
+  return request("/notes/files");
 }
 
-export function getVaultFile(path: string): Promise<Note> {
-  return request(`/vault/file/${path}`);
+export function getNoteFile(path: string): Promise<Note> {
+  return request(`/notes/file/${path}`);
 }
 
-export function createVaultFile(data: {
-  title: string;
-  content: string;
-  folder?: string;
-  tags?: string[];
-}): Promise<{ path: string; title: string }> {
-  return request("/vault/file", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-}
-
-export function updateVaultFile(
+export function updateNoteFile(
   path: string,
   content: string
 ): Promise<{ path: string; title: string }> {
-  return request(`/vault/file/${path}`, {
+  return request(`/notes/file/${path}`, {
     method: "PUT",
     body: JSON.stringify({ content }),
   });
@@ -83,25 +71,6 @@ export function updateVaultFile(
 
 export function initSession(): Promise<{ session_id: string }> {
   return request("/agent/init", { method: "POST" });
-}
-
-// --- Sync ---
-
-export interface SyncStats {
-  status: string;
-  stats: Record<string, unknown>;
-}
-
-export function syncStructural(): Promise<SyncStats> {
-  return request("/sync/structural", { method: "POST" });
-}
-
-export function syncSemantic(): Promise<SyncStats> {
-  return request("/sync/semantic", { method: "POST" });
-}
-
-export function syncFull(): Promise<SyncStats> {
-  return request("/sync/full", { method: "POST" });
 }
 
 // --- Graph ---
@@ -149,13 +118,6 @@ export function getGraphOverview(
   const params = new URLSearchParams({ limit: String(limit) });
   if (label) params.set("label", label);
   return request(`/graph/overview?${params}`);
-}
-
-export function getGraphNeighborhood(
-  path: string,
-  depth = 1
-): Promise<GraphData> {
-  return request(`/graph/neighborhood/${path}?depth=${depth}`);
 }
 
 export function getMemories(): Promise<{ memories: Memory[] }> {

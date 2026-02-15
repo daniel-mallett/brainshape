@@ -28,13 +28,13 @@ RETURN n.title, p.name
 
 Everything lives in a single Neo4j graph database. "Layers" are a conceptual distinction, not physical separation.
 
-### Structural Layer (from our parser in `vault.py`)
+### Structural Layer (from our parser in `notes.py`)
 
-Created by `sync_structural()` in `sync.py`. Mirrors the vault's explicit connections.
+Created by `sync_structural()` in `sync.py`. Mirrors the notes directory's explicit connections.
 
 | Node | Properties | Unique Key |
 |------|-----------|------------|
-| `:Note` (also `:Document`) | `path`, `title`, `content`, `created_at`, `modified_at` | `path` (vault-relative) |
+| `:Note` (also `:Document`) | `path`, `title`, `content`, `created_at`, `modified_at` | `path` (notes-relative) |
 | `:Tag` | `name` | `name` |
 | `:Memory` | `id` (uuid), `type`, `content`, `created_at` | `id` |
 
@@ -51,7 +51,7 @@ Created by `sync_semantic()` in `sync.py` using the component-based `KGPipeline`
 
 | Node | Properties | Created By |
 |------|-----------|------------|
-| `:Document` (also `:Note`) | `path` (vault-relative) | KG Builder (via `VaultLoader`) |
+| `:Document` (also `:Note`) | `path` (notes-relative) | KG Builder (via `NotesLoader`) |
 | `:Chunk` | `text`, `index`, embedding vector | KG Builder (text splitter) |
 | Entity nodes (`:Person`, `:Concept`, `:Project`, `:Location`, `:Event`, `:Tool`, `:Organization`) | `name` + type-specific props | KG Builder (LLM extraction) |
 
@@ -66,16 +66,16 @@ Created by `sync_semantic()` in `sync.py` using the component-based `KGPipeline`
 
 **Semantic runs first**, then structural:
 
-1. `sync_semantic()` — KG Builder processes each note file via `VaultLoader`, creates `:Document` nodes (keyed by vault-relative path), Chunk nodes, Entity nodes with relationships
+1. `sync_semantic()` — KG Builder processes each note file via `NotesLoader`, creates `:Document` nodes (keyed by notes-relative path), Chunk nodes, Entity nodes with relationships
 2. `sync_structural()` — Finds existing Document nodes by `path`, adds `:Note` label, sets `title`/`content` properties, creates `Tag` nodes and `TAGGED_WITH`/`LINKS_TO` relationships
 
 This order ensures the structural sync can merge onto the Document nodes the KG Builder already created.
 
 ## Path as Unique Key
 
-Node paths are **vault-relative** (e.g., `notes/meeting.md`) not absolute (e.g., `/Users/dmallett/obsidian-vault/notes/meeting.md`). This ensures the same note doesn't create duplicate nodes when the vault is synced across devices with different mount points.
+Node paths are **notes-relative** (e.g., `notes/meeting.md`) not absolute (e.g., `/Users/dmallett/Brain/notes/meeting.md`). This ensures the same note doesn't create duplicate nodes when the notes directory is synced across devices with different mount points.
 
-Implemented in `vault.py:parse_note()` using `file_path.relative_to(vault_path)`.
+Implemented in `notes.py:parse_note()` using `file_path.relative_to(notes_path)`.
 
 ## Constraints and Indexes
 

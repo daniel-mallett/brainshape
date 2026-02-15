@@ -1,20 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
-import { getVaultFiles, type VaultFile } from "../lib/api";
+import { getNoteFiles, type NoteFile } from "../lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Button } from "@/components/ui/button";
-import { SyncStatus } from "./SyncStatus";
 
 interface FolderTree {
-  [key: string]: FolderTree | VaultFile;
+  [key: string]: FolderTree | NoteFile;
 }
 
-function buildTree(files: VaultFile[]): FolderTree {
+function buildTree(files: NoteFile[]): FolderTree {
   const tree: FolderTree = {};
   for (const file of files) {
     const parts = file.path.split("/");
     let current = tree;
     for (let i = 0; i < parts.length - 1; i++) {
-      if (!current[parts[i]] || typeof (current[parts[i]] as VaultFile).path === "string") {
+      if (!current[parts[i]] || typeof (current[parts[i]] as NoteFile).path === "string") {
         current[parts[i]] = {} as FolderTree;
       }
       current = current[parts[i]] as FolderTree;
@@ -24,13 +22,13 @@ function buildTree(files: VaultFile[]): FolderTree {
   return tree;
 }
 
-function isFile(node: FolderTree | VaultFile): node is VaultFile {
-  return typeof (node as VaultFile).path === "string";
+function isFile(node: FolderTree | NoteFile): node is NoteFile {
+  return typeof (node as NoteFile).path === "string";
 }
 
 interface TreeNodeProps {
   name: string;
-  node: FolderTree | VaultFile;
+  node: FolderTree | NoteFile;
   selectedPath: string | null;
   onSelect: (path: string) => void;
   depth: number;
@@ -97,15 +95,15 @@ interface SidebarProps {
 }
 
 export function Sidebar({ selectedPath, onSelectFile }: SidebarProps) {
-  const [files, setFiles] = useState<VaultFile[]>([]);
+  const [files, setFiles] = useState<NoteFile[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
-      const { files } = await getVaultFiles();
+      const { files } = await getNoteFiles();
       setFiles(files);
     } catch (err) {
-      console.error("Failed to fetch vault files:", err);
+      console.error("Failed to fetch note files:", err);
     } finally {
       setLoading(false);
     }
@@ -119,11 +117,8 @@ export function Sidebar({ selectedPath, onSelectFile }: SidebarProps) {
 
   return (
     <div className="w-60 flex-shrink-0 border-r border-border flex flex-col">
-      <div className="px-3 py-2 border-b border-border flex items-center justify-between">
+      <div className="px-3 py-2 border-b border-border">
         <span className="text-sm font-medium">Files</span>
-        <Button variant="ghost" size="sm" onClick={refresh} className="h-6 w-6 p-0">
-          ↻
-        </Button>
       </div>
       <ScrollArea className="flex-1">
         <div className="py-1">
@@ -152,7 +147,6 @@ export function Sidebar({ selectedPath, onSelectFile }: SidebarProps) {
           )}
         </div>
       </ScrollArea>
-      <SyncStatus />
     </div>
   );
 }

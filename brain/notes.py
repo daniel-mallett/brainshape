@@ -1,22 +1,25 @@
 import hashlib
 import re
+import shutil
 from pathlib import Path
 
 import frontmatter
+
+SEED_NOTES_DIR = Path(__file__).resolve().parent.parent / "seed_notes"
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
 TAG_RE = re.compile(r"(?:^|\s)#([a-zA-Z][\w/-]*)", re.MULTILINE)
 
 
-def _ensure_within_vault(vault_path: Path, file_path: Path) -> Path:
-    """Resolve *file_path* and verify it lives inside *vault_path*.
+def _ensure_within_notes_dir(notes_path: Path, file_path: Path) -> Path:
+    """Resolve *file_path* and verify it lives inside *notes_path*.
 
-    Raises ``ValueError`` if the resolved path escapes the vault directory
+    Raises ``ValueError`` if the resolved path escapes the notes directory
     (e.g. via ``../`` traversal sequences).
     """
     resolved = file_path.resolve()
-    if not resolved.is_relative_to(vault_path.resolve()):
-        raise ValueError(f"Path escapes vault directory: {file_path}")
+    if not resolved.is_relative_to(notes_path.resolve()):
+        raise ValueError(f"Path escapes notes directory: {file_path}")
     return resolved
 
 
@@ -25,11 +28,11 @@ def compute_file_hash(file_path: Path) -> str:
     return hashlib.sha256(file_path.read_bytes()).hexdigest()
 
 
-def parse_note(file_path: Path, vault_path: Path) -> dict:
+def parse_note(file_path: Path, notes_path: Path) -> dict:
     """Parse a markdown file into a structured dict.
 
-    The path stored is relative to vault_path, so it stays consistent
-    across devices regardless of where the vault is mounted.
+    The path stored is relative to notes_path, so it stays consistent
+    across devices regardless of where the notes directory is mounted.
     """
     post = frontmatter.load(str(file_path))
     content = post.content
@@ -48,7 +51,7 @@ def parse_note(file_path: Path, vault_path: Path) -> dict:
     all_tags = list(set(body_tags + fm_tags))
 
     return {
-        "path": str(file_path.relative_to(vault_path)),
+        "path": str(file_path.relative_to(notes_path)),
         "title": file_path.stem,
         "content": content,
         "metadata": metadata,
@@ -57,25 +60,25 @@ def parse_note(file_path: Path, vault_path: Path) -> dict:
     }
 
 
-def list_notes(vault_path: Path) -> list[Path]:
-    """List all markdown files in the vault."""
-    return sorted(vault_path.rglob("*.md"))
+def list_notes(notes_path: Path) -> list[Path]:
+    """List all markdown files in the notes directory."""
+    return sorted(notes_path.rglob("*.md"))
 
 
-def read_vault(vault_path: Path) -> list[dict]:
-    """Parse all notes in the vault."""
-    return [parse_note(p, vault_path) for p in list_notes(vault_path)]
+def read_all_notes(notes_path: Path) -> list[dict]:
+    """Parse all notes in the notes directory."""
+    return [parse_note(p, notes_path) for p in list_notes(notes_path)]
 
 
 def write_note(
-    vault_path: Path,
+    notes_path: Path,
     title: str,
     content: str,
     folder: str = "",
     tags: list[str] | None = None,
     metadata: dict | None = None,
 ) -> Path:
-    """Write a new markdown note to the vault. Returns the file path."""
+    """Write a new markdown note to the notes directory. Returns the file path."""
     post = frontmatter.Post(content)
     if metadata:
         post.metadata.update(metadata)
@@ -83,25 +86,25 @@ def write_note(
         post.metadata["tags"] = tags
 
     if folder:
-        file_path = vault_path / folder / f"{title}.md"
+        file_path = notes_path / folder / f"{title}.md"
     else:
-        file_path = vault_path / f"{title}.md"
-    file_path = _ensure_within_vault(vault_path, file_path)
+        file_path = notes_path / f"{title}.md"
+    file_path = _ensure_within_notes_dir(notes_path, file_path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
     with open(file_path, "w") as f:
         f.write(frontmatter.dumps(post))
     return file_path
 
 
-def rewrite_note(vault_path: Path, title: str, new_content: str, relative_path: str = "") -> Path:
+def rewrite_note(notes_path: Path, title: str, new_content: str, relative_path: str = "") -> Path:
     """Rewrite an existing note's content, preserving frontmatter.
     Returns the file path, or raises FileNotFoundError.
     If relative_path is provided, uses it directly instead of guessing from title."""
     if relative_path:
-        file_path = vault_path / relative_path
+        file_path = notes_path / relative_path
     else:
-        file_path = vault_path / f"{title}.md"
-    file_path = _ensure_within_vault(vault_path, file_path)
+        file_path = notes_path / f"{title}.md"
+    file_path = _ensure_within_notes_dir(notes_path, file_path)
     if not file_path.exists():
         raise FileNotFoundError(f"Note '{title}' not found at {file_path}")
 
@@ -122,3 +125,28 @@ def rewrite_note(vault_path: Path, title: str, new_content: str, relative_path: 
     with open(file_path, "w") as f:
         f.write(frontmatter.dumps(post))
     return file_path
+
+
+def init_notes(notes_path: Path) -> int:
+    """Copy seed notes into notes directory if it's empty. Returns number of notes copied.
+
+    Non-destructive: does nothing if the directory already contains .md files.
+    Creates the notes directory if it doesn't exist.
+    """
+    notes_path.mkdir(parents=True, exist_ok=True)
+
+    if any(notes_path.rglob("*.md")):
+        return 0
+
+    if not SEED_NOTES_DIR.is_dir():
+        return 0
+
+    copied = 0
+    for src in SEED_NOTES_DIR.rglob("*.md"):
+        relative = src.relative_to(SEED_NOTES_DIR)
+        dest = notes_path / relative
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        copied += 1
+
+    return copied

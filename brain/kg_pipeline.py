@@ -21,16 +21,16 @@ EMBEDDING_MODEL = "google/embeddinggemma-300m"
 EMBEDDING_DIMENSIONS = 768
 
 
-class VaultLoader(DataLoader):
-    """Loads markdown files from the vault for the KG pipeline.
+class NotesLoader(DataLoader):
+    """Loads markdown files from the notes directory for the KG pipeline.
 
     Reads the .md file and returns its content with document metadata
-    containing the vault-relative path. This ensures Document nodes
+    containing the notes-relative path. This ensures Document nodes
     have stable, device-independent paths.
     """
 
-    def __init__(self, vault_path: Path):
-        self.vault_path = vault_path
+    def __init__(self, notes_path: Path):
+        self.notes_path = notes_path
 
     async def run(
         self,
@@ -39,7 +39,7 @@ class VaultLoader(DataLoader):
     ) -> PdfDocument:
         file_path = Path(filepath)
         content = file_path.read_text(encoding="utf-8")
-        relative_path = str(file_path.relative_to(self.vault_path))
+        relative_path = str(file_path.relative_to(self.notes_path))
         doc_metadata = metadata or {}
         doc_metadata["title"] = file_path.stem
         return PdfDocument(
@@ -52,7 +52,7 @@ class VaultLoader(DataLoader):
 
 
 class KGPipeline:
-    """Embedding pipeline for processing vault notes.
+    """Embedding pipeline for processing notes.
 
     Loads markdown files, splits them into chunks, embeds the chunks,
     and writes Document + Chunk nodes to Neo4j with vector embeddings
@@ -60,13 +60,13 @@ class KGPipeline:
     through structural sync (tags, wikilinks) and agent-driven memory.
     """
 
-    def __init__(self, driver: neo4j.Driver, vault_path: Path):
+    def __init__(self, driver: neo4j.Driver, notes_path: Path):
         self.driver = driver
-        self.vault_path = vault_path
+        self.notes_path = notes_path
 
         self._embedder = SentenceTransformerEmbeddings(model=EMBEDDING_MODEL)
 
-        self.loader = VaultLoader(vault_path)
+        self.loader = NotesLoader(notes_path)
         self.splitter = FixedSizeSplitter(chunk_size=4000, chunk_overlap=200)
         self.embedder = TextChunkEmbedder(embedder=self._embedder)
 
@@ -136,6 +136,6 @@ class KGPipeline:
         asyncio.run(self.run_async(file_path))
 
 
-def create_kg_pipeline(driver: neo4j.Driver, vault_path: Path) -> KGPipeline:
-    """Create a KG pipeline for processing vault notes."""
-    return KGPipeline(driver, vault_path)
+def create_kg_pipeline(driver: neo4j.Driver, notes_path: Path) -> KGPipeline:
+    """Create a KG pipeline for processing notes."""
+    return KGPipeline(driver, notes_path)
