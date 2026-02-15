@@ -27,7 +27,7 @@ from brain.notes import (
     write_note,
 )
 from brain.settings import VALID_PROVIDERS, load_settings, update_settings
-from brain.sync import sync_all, sync_semantic, sync_structural
+from brain.sync import sync_all, sync_semantic, sync_semantic_async, sync_structural
 from brain.watcher import start_watcher
 
 # Module-level state set during lifespan
@@ -55,12 +55,22 @@ async def lifespan(app: FastAPI):
         notes = list(notes_path.rglob("*.md"))
         if notes:
             sync_structural(_db, notes_path)
+            if _pipeline is not None:
+                await sync_semantic_async(_db, _pipeline, notes_path)
 
     # Start file watcher for auto-sync
     if notes_path.exists() and _db is not None:
 
         def on_notes_changed():
             sync_structural(_db, notes_path)
+            if _pipeline is not None:
+                import threading
+
+                threading.Thread(
+                    target=sync_semantic,
+                    args=(_db, _pipeline, notes_path),
+                    daemon=True,
+                ).start()
 
         _observer = start_watcher(notes_path, on_notes_changed)
 
@@ -260,9 +270,7 @@ def notes_delete(path: str):
     db = _require_db()
     db.query("MATCH (n:Note {path: $path}) DETACH DELETE n", {"path": path})
     db.query(
-        "MATCH (d:Document {source: $path}) "
-        "OPTIONAL MATCH (d)<-[:PART_OF]-(c:Chunk) "
-        "DETACH DELETE c, d",
+        "MATCH (d:Document {path: $path})<-[:FROM_DOCUMENT]-(c:Chunk) DETACH DELETE c",
         {"path": path},
     )
     return {"status": "ok"}

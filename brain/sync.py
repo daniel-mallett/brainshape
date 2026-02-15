@@ -59,6 +59,52 @@ def sync_semantic(db: GraphDB, pipeline: KGPipeline, notes_path: Path) -> dict:
     return stats
 
 
+async def sync_semantic_async(db: GraphDB, pipeline: KGPipeline, notes_path: Path) -> dict:
+    """Async version of sync_semantic for use inside a running event loop.
+
+    Uses pipeline.run_async() directly instead of the sync wrapper which
+    calls asyncio.run() (which fails inside an already-running loop).
+    """
+    note_files = list_notes(notes_path)
+    hash_map = _get_stored_hashes(db)
+    stats = {"processed": 0, "skipped": 0}
+
+    for file_path in note_files:
+        content = file_path.read_text(encoding="utf-8").strip()
+        if not content:
+            stats["skipped"] += 1
+            continue
+
+        relative_path = str(file_path.relative_to(notes_path))
+        file_hash = compute_file_hash(file_path)
+
+        if hash_map.get(relative_path) == file_hash:
+            stats["skipped"] += 1
+            continue
+
+        # Clear old chunks for this note before re-processing
+        db.query(
+            """
+            MATCH (d:Document {path: $path})<-[:FROM_DOCUMENT]-(c:Chunk)
+            DETACH DELETE c
+            """,
+            {"path": relative_path},
+        )
+
+        try:
+            await pipeline.run_async(str(file_path))
+            db.query(
+                "MATCH (n:Document {path: $path}) SET n.content_hash = $hash",
+                {"path": relative_path, "hash": file_hash},
+            )
+            stats["processed"] += 1
+        except Exception as e:
+            print(f"  Warning: failed to process '{file_path.stem}': {e}")
+            stats["skipped"] += 1
+
+    return stats
+
+
 def sync_structural(db: GraphDB, notes_path: Path) -> dict:
     """Add :Note label, properties, and structural relationships to Document nodes.
 

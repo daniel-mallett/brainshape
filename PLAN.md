@@ -72,9 +72,16 @@
 
 ## Next Steps
 
-1. PyInstaller bundling — bundle Python server as Tauri sidecar for standalone `.app`
-2. Streaming transcription — real-time Whisper output as user speaks (progressive UI)
-3. Rich markdown preview — toggle between edit/preview modes
+### Critical Path (adoption blockers)
+1. **Single-binary install** — bundle Python server as Tauri sidecar (PyInstaller or Nuitka) so the app is a one-click `.app`/`.dmg`. Current setup (Docker + Python + HuggingFace auth) limits adoption to developers.
+2. **Obsidian vault compatibility** — first-class support for coexisting with Obsidian. Read Obsidian vaults directly, respect `.obsidian/` config, handle Obsidian-style links and frontmatter conventions. Position as a companion to Obsidian, not a replacement.
+3. **Killer demo** — build a showcase that demonstrates the agent's long-term memory and cross-note intelligence (e.g., surfacing a forgotten connection, recalling a preference from months ago, answering "what did I write about X last quarter?"). The value of structured memory over flat RAG needs to be felt immediately.
+
+### Product
 4. Search UI — dedicated search view with filters (by tag, date, keyword, semantic)
-5. Plugin system — user-installable extensions beyond MCP servers
-6. Multi-device sync — notes sync via Git or cloud storage
+5. Rich markdown preview — toggle between edit/preview modes
+6. Streaming transcription — real-time Whisper output as user speaks (progressive UI)
+
+### Platform
+7. Plugin system — user-installable extensions beyond MCP servers
+8. Multi-device sync — notes sync via Git or cloud storage
