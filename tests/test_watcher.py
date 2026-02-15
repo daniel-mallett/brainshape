@@ -67,6 +67,47 @@ class TestNoteChangeHandler:
         # Should only fire once
         callback.assert_called_once()
 
+    def test_fires_on_deleted_markdown(self):
+        callback = MagicMock()
+        handler = NoteChangeHandler(callback)
+        handler._debounce_seconds = 0.1
+
+        event = MagicMock()
+        event.is_directory = False
+        event.src_path = "/notes/old.md"
+
+        handler.on_deleted(event)
+        time.sleep(0.3)
+        callback.assert_called_once()
+
+    def test_fires_on_created_markdown(self):
+        callback = MagicMock()
+        handler = NoteChangeHandler(callback)
+        handler._debounce_seconds = 0.1
+
+        event = MagicMock()
+        event.is_directory = False
+        event.src_path = "/notes/new.md"
+
+        handler.on_created(event)
+        time.sleep(0.3)
+        callback.assert_called_once()
+
+    def test_fire_handles_callback_error(self):
+        callback = MagicMock(side_effect=RuntimeError("sync failed"))
+        handler = NoteChangeHandler(callback)
+        handler._debounce_seconds = 0.1
+
+        event = MagicMock()
+        event.is_directory = False
+        event.src_path = "/notes/test.md"
+
+        handler.on_modified(event)
+        time.sleep(0.3)
+        # Callback was called (and raised), but handler didn't crash
+        callback.assert_called_once()
+        assert handler._timer is None
+
 
 class TestStartWatcher:
     def test_starts_and_stops(self, tmp_path):

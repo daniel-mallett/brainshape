@@ -20,7 +20,7 @@ The unified design means a single Cypher query can traverse both layers. For exa
 
 ```cypher
 MATCH (t:Tag {name: "meeting"})<-[:TAGGED_WITH]-(n:Note)
-      -[:HAS_CHUNK]->(c:Chunk)<-[:FROM_CHUNK]-(p:Person)
+      <-[:FROM_DOCUMENT]-(c:Chunk)<-[:FROM_CHUNK]-(p:Person)
 RETURN n.title, p.name
 ```
 

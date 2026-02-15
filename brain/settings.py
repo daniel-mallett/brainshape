@@ -77,7 +77,7 @@ def get_llm_model_string(settings: dict[str, Any] | None = None) -> str:
     provider = settings.get("llm_provider", DEFAULTS["llm_provider"])
     model = settings.get("llm_model", DEFAULTS["llm_model"])
 
-    if provider == "anthropic":
+    if provider == "anthropic":  # noqa: SIM116
         return f"anthropic:{model}"
     elif provider == "openai":
         return f"openai:{model}"

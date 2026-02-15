@@ -16,3 +16,8 @@ jobs:
       - run: uv run ruff check
       - run: uv run ty check
       - run: uv run pytest --cov=brain --cov-report=term-missing
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: cd desktop && npm ci && npx tsc --noEmit

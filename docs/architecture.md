@@ -21,6 +21,10 @@ brain/
 ├── tools.py                 # 7 LangChain tools for the agent
 ├── agent.py                 # create_brain_agent() — model + tools + system prompt
 ├── server.py                # FastAPI server (HTTP + SSE) for desktop app
+├── settings.py              # Persistent user settings (JSON on disk), LLM provider config
+├── mcp_client.py            # MCP server client, loads external tools via langchain-mcp-adapters
+├── watcher.py               # Watchdog file watcher for auto-sync on notes changes
+├── transcribe.py            # Local voice transcription via mlx-whisper
 ├── cli.py                   # Interactive CLI chat loop with /sync commands
 └── batch.py                 # Standalone batch sync for cron/launchd
 
@@ -29,11 +33,21 @@ desktop/                     # Tauri 2 desktop app (React + TypeScript + Vite)
 │   ├── components/
 │   │   ├── Editor.tsx       # CodeMirror 6 + vim mode
 │   │   ├── Chat.tsx         # Agent chat panel with SSE streaming
-│   │   └── Sidebar.tsx      # File tree browser
+│   │   ├── Sidebar.tsx      # File tree browser
+│   │   ├── GraphPanel.tsx   # Graph stats + overview controls
+│   │   ├── GraphView.tsx    # Force-directed graph visualization
+│   │   ├── MemoryPanel.tsx  # Browse, edit, delete agent memories
+│   │   ├── SettingsPanel.tsx # LLM provider/model, MCP servers config
+│   │   ├── CommandPalette.tsx # Cmd+K search and actions
+│   │   └── VoiceRecorder.tsx # Mic button for audio transcription
 │   ├── lib/
 │   │   ├── api.ts           # HTTP client for Python backend
-│   │   └── useAgentStream.ts # SSE streaming hook
-│   └── App.tsx              # 3-panel layout (sidebar | editor | chat)
+│   │   ├── useAgentStream.ts # SSE streaming hook
+│   │   ├── useVoiceRecorder.ts # Audio recording hook
+│   │   ├── wikilinks.ts     # Clickable wikilink decorations
+│   │   ├── completions.ts   # Wikilink + tag autocomplete
+│   │   └── utils.ts         # Tailwind merge utilities
+│   └── App.tsx              # Multi-view layout (Editor / Graph / Memory / Settings)
 ├── src-tauri/               # Rust shell (Tauri 2)
 ├── package.json
 └── vite.config.ts
@@ -46,7 +60,11 @@ tests/
 ├── test_tools.py            # Tool functions with mocked db/pipeline
 ├── test_sync.py             # Sync logic with mocked deps
 ├── test_server.py           # FastAPI endpoint tests
-└── test_kg_pipeline.py      # NotesLoader, MergingNeo4jWriter (mocked driver)
+├── test_kg_pipeline.py      # NotesLoader, MergingNeo4jWriter (mocked driver)
+├── test_settings.py         # Settings load/save, defaults
+├── test_mcp_client.py       # MCP config building, tool loading
+├── test_watcher.py          # File watcher event handling
+└── test_transcribe.py       # Transcription with mocked mlx-whisper
 ```
 
 ## Data Flow
@@ -73,13 +91,24 @@ Future interfaces (Slack, Discord, voice) each import `create_brain_agent()` and
 `brain/server.py` is a FastAPI app on `localhost:8765` that exposes:
 
 - `GET /health` — health check
-- `GET /config` — current settings
+- `GET /config` — current configuration
 - `POST /agent/init` — create session, returns session_id
 - `POST /agent/message` — stream agent response via SSE
 - `GET /notes/files` — list all notes
 - `GET /notes/file/{path}` — read a note
 - `POST /notes/file` — create a note
 - `PUT /notes/file/{path}` — update a note
+- `DELETE /notes/file/{path}` — delete a note
+- `GET /notes/tags` — list all tags
+- `GET /graph/stats` — node/relationship counts
+- `GET /graph/overview` — all nodes and edges (optional label filter)
+- `GET /graph/neighborhood/{path}` — local subgraph around a note
+- `GET /graph/memories` — list agent memories
+- `DELETE /graph/memory/{id}` — delete a memory
+- `PUT /graph/memory/{id}` — update a memory
+- `POST /transcribe` — upload audio, returns transcription
+- `GET /settings` — current user settings
+- `PUT /settings` — update user settings
 - `POST /sync/structural`, `/sync/semantic`, `/sync/full` — trigger sync
 
 In dev mode, the server is started separately. In production, it will be bundled as a Tauri sidecar via PyInstaller.
@@ -109,6 +138,9 @@ Two independent sync layers with different cost profiles:
 | `fastapi` | HTTP server framework for desktop app backend |
 | `uvicorn` | ASGI server for FastAPI |
 | `sse-starlette` | Server-Sent Events for agent response streaming |
+| `watchdog` | File system watcher for auto-sync on notes changes |
+| `mlx-whisper` | Local voice transcription on Apple Silicon |
+| `langchain-mcp-adapters` | Load external MCP server tools into the agent |
 
 ### Dev Dependencies
 

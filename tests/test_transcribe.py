@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from brain.transcribe import reset_model, transcribe_audio
+from brain.transcribe import _get_model_path, reset_model, transcribe_audio
 
 
 @pytest.fixture(autouse=True)
@@ -49,6 +49,38 @@ def test_transcribe_audio(mock_mlx_whisper, tmp_path, monkeypatch):
         language="en",
         word_timestamps=True,
     )
+
+
+def test_get_model_path_default(monkeypatch, tmp_path):
+    """Uses default model when settings has no whisper_model."""
+    monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
+    path = _get_model_path()
+    assert path == "mlx-community/whisper-large-v3-turbo"
+
+
+def test_get_model_path_custom(monkeypatch, tmp_path):
+    """Uses custom model from settings."""
+    import json
+
+    monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text(json.dumps({"whisper_model": "custom/model"}))
+
+    path = _get_model_path()
+    assert path == "custom/model"
+
+
+def test_get_model_path_caches(monkeypatch, tmp_path):
+    """Caches result after first call."""
+    monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
+    path1 = _get_model_path()
+    # Even if settings change, cached value is returned
+    import json
+
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text(json.dumps({"whisper_model": "changed/model"}))
+    path2 = _get_model_path()
+    assert path1 == path2  # cached
 
 
 def test_transcribe_empty_segments(mock_mlx_whisper, tmp_path, monkeypatch):

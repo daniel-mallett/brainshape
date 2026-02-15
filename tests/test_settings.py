@@ -90,4 +90,4 @@ class TestGetLlmModelString:
 
 
 def test_valid_providers():
-    assert VALID_PROVIDERS == {"anthropic", "openai", "ollama"}
+    assert {"anthropic", "openai", "ollama"} == VALID_PROVIDERS

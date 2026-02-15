@@ -399,6 +399,74 @@ class TestSettings:
         assert resp.json()["llm_model"] == "gpt-4o"
 
 
+class TestTranscriptionErrors:
+    def test_transcribe_failure(self, client, monkeypatch):
+        monkeypatch.setattr(
+            "brain.transcribe.transcribe_audio",
+            MagicMock(side_effect=RuntimeError("model not found")),
+        )
+        resp = client.post(
+            "/transcribe",
+            files={"audio": ("test.wav", b"fake", "audio/wav")},
+        )
+        assert resp.status_code == 500
+        assert "Transcription failed" in resp.json()["detail"]
+
+
+class TestUninitializedServer:
+    """Test endpoints return 503 when server state is not initialized."""
+
+    @pytest.fixture
+    def bare_client(self, tmp_notes, tmp_path, monkeypatch):
+        """Client with _db and _pipeline set to None."""
+        monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
+        monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
+
+        from contextlib import asynccontextmanager
+
+        @asynccontextmanager
+        async def noop_lifespan(app):
+            yield
+
+        original = server.app.router.lifespan_context
+        server.app.router.lifespan_context = noop_lifespan
+
+        server._agent = None
+        server._db = None
+        server._pipeline = None
+        server._sessions = {}
+
+        with TestClient(app=server.app, raise_server_exceptions=False) as c:
+            yield c
+
+        server.app.router.lifespan_context = original
+
+    def test_graph_stats_503(self, bare_client):
+        assert bare_client.get("/graph/stats").status_code == 503
+
+    def test_graph_overview_503(self, bare_client):
+        assert bare_client.get("/graph/overview").status_code == 503
+
+    def test_graph_neighborhood_503(self, bare_client):
+        assert bare_client.get("/graph/neighborhood/test.md").status_code == 503
+
+    def test_graph_memories_503(self, bare_client):
+        assert bare_client.get("/graph/memories").status_code == 503
+
+    def test_sync_structural_503(self, bare_client):
+        assert bare_client.post("/sync/structural").status_code == 503
+
+    def test_sync_semantic_503(self, bare_client):
+        assert bare_client.post("/sync/semantic").status_code == 503
+
+    def test_sync_full_503(self, bare_client):
+        assert bare_client.post("/sync/full").status_code == 503
+
+    def test_agent_message_503(self, bare_client):
+        resp = bare_client.post("/agent/message", json={"session_id": "x", "message": "hi"})
+        assert resp.status_code == 503
+
+
 class TestSync:
     def test_structural_sync(self, client):
         resp = client.post("/sync/structural")

@@ -57,7 +57,7 @@ Replaced `SimpleKGPipeline` with sequential component orchestration in `KGPipeli
 
 ### Unit Tests — DONE
 
-85 unit tests covering all modules including server endpoints (71% line coverage). All external deps mocked. Run with `uv run pytest`.
+139 unit tests covering all modules including server, settings, transcription, watcher, MCP client. All external deps mocked. Run with `uv run pytest`.
 
 ### Other
 

@@ -221,7 +221,7 @@ def notes_read(path: str):
     try:
         file_path = _ensure_within_notes_dir(notes_path, file_path)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid path")
+        raise HTTPException(status_code=400, detail="Invalid path") from None
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Note not found")
     note = parse_note(file_path, notes_path)
@@ -243,7 +243,7 @@ def notes_create(req: CreateNoteRequest):
         rel = str(file_path.relative_to(notes_path))
         return {"path": rel, "title": req.title}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from None
 
 
 @app.delete("/notes/file/{path:path}")
@@ -252,9 +252,9 @@ def notes_delete(path: str):
     try:
         delete_note(notes_path, path)
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Note not found")
+        raise HTTPException(status_code=404, detail="Note not found") from None
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from None
 
     # Clean up graph: Note node + relationships, and Document/Chunk nodes from semantic sync
     db = _require_db()
@@ -275,7 +275,7 @@ def notes_update(path: str, req: UpdateNoteRequest):
     try:
         file_path = _ensure_within_notes_dir(notes_path, file_path)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid path")
+        raise HTTPException(status_code=400, detail="Invalid path") from None
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Note not found")
     title = file_path.stem
@@ -283,7 +283,7 @@ def notes_update(path: str, req: UpdateNoteRequest):
         rewrite_note(notes_path, title, req.content, relative_path=path)
         return {"path": path, "title": title}
     except (FileNotFoundError, ValueError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from None
 
 
 # --- Graph ---
@@ -489,7 +489,7 @@ def _truncate(text: str | None, max_len: int) -> str | None:
 
 
 @app.post("/transcribe")
-async def transcribe(audio: UploadFile = File(...)):
+async def transcribe(audio: UploadFile = File(...)):  # noqa: B008
     """Transcribe an uploaded audio file using local Whisper model."""
     from brain.transcribe import transcribe_audio
 
@@ -505,7 +505,7 @@ async def transcribe(audio: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Transcription failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {e}") from None
     finally:
         if tmp_path:
             Path(tmp_path).unlink(missing_ok=True)

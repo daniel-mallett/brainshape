@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     # Neo4j
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
-    neo4j_password: str = "brain-dev-password"
+    neo4j_password: str = "brain-dev-password"  # noqa: S105
 
     # Notes
     notes_path: str = "~/Brain"

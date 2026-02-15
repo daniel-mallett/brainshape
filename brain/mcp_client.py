@@ -62,7 +62,7 @@ async def load_mcp_tools() -> list:
     try:
         from langchain_mcp_adapters.client import MultiServerMCPClient
 
-        client = MultiServerMCPClient(config)
+        client = MultiServerMCPClient(config)  # type: ignore[invalid-argument-type]
         tools = await client.get_tools()
         _active_client = client
         logger.info("Loaded %d tools from %d MCP servers", len(tools), len(config))

@@ -53,7 +53,7 @@
 - Health check with auto-reconnect polling
 
 ### Testing & CI
-- 134 unit tests covering all modules including server, settings, transcription, watcher, MCP client
+- 161 unit tests covering all modules including server, settings, transcription, watcher, MCP client
 - Server tests properly isolated (noop lifespan, no Neo4j connection required)
 - CI: GitHub Actions workflow runs ruff, ty, and pytest (with coverage) on push/PR to main
 - Pre-commit hooks: ruff lint, ruff format, gitleaks secret detection, pytest

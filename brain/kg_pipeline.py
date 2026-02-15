@@ -1,6 +1,5 @@
 import asyncio
 from pathlib import Path
-from typing import Optional
 
 import neo4j
 from neo4j_graphrag.embeddings.sentence_transformers import (
@@ -35,7 +34,7 @@ class NotesLoader(DataLoader):
     async def run(
         self,
         filepath: Path,
-        metadata: Optional[dict[str, str]] = None,
+        metadata: dict[str, str] | None = None,
     ) -> PdfDocument:
         file_path = Path(filepath)
         content = file_path.read_text(encoding="utf-8")

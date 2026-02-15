@@ -74,6 +74,6 @@ Notes use notes-relative paths as unique keys in Neo4j. If the notes directory i
 
 The notes directory itself needs to be synced by an external tool (iCloud, Dropbox, etc.). Brain just reads/writes the files — it doesn't handle replication.
 
-## Future: File Watching
+## File Watching
 
-Currently sync is manual (on startup or via `/sync` CLI commands). A future enhancement could use `watchdog` to auto-sync changes in the background.
+Implemented in `brain/watcher.py` using `watchdog`. A `NoteChangeHandler` monitors the notes directory for `.md` file changes and auto-triggers structural sync with a 2-second debounce. The watcher is started on server startup and stopped on shutdown.

@@ -23,7 +23,9 @@ class NoteChangeHandler(FileSystemEventHandler):
         self._timer = None
         self._debounce_seconds = 2.0
 
-    def _is_markdown(self, path: str) -> bool:
+    def _is_markdown(self, path: str | bytes) -> bool:
+        if isinstance(path, bytes):
+            return path.endswith(b".md")
         return path.endswith(".md")
 
     def _schedule_sync(self) -> None:
@@ -59,7 +61,7 @@ class NoteChangeHandler(FileSystemEventHandler):
             self._schedule_sync()
 
 
-def start_watcher(notes_path: Path, on_change: Callable[[], None]) -> Observer:
+def start_watcher(notes_path: Path, on_change: Callable[[], None]) -> Observer:  # type: ignore[invalid-type-form]
     """Start watching the notes directory for .md changes.
 
     Returns the Observer instance (call .stop() to shut down).
