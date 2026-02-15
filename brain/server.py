@@ -127,6 +127,7 @@ class UpdateSettingsRequest(BaseModel):
     llm_provider: str | None = None
     llm_model: str | None = None
     ollama_base_url: str | None = None
+    anthropic_api_key: str | None = None
     openai_api_key: str | None = None
     whisper_model: str | None = None
     embedding_model: str | None = None
@@ -556,6 +557,7 @@ def get_settings():
     s = load_settings()
     # Never expose API keys to the frontend
     safe = {k: v for k, v in s.items() if "api_key" not in k}
+    safe["anthropic_api_key_set"] = bool(s.get("anthropic_api_key"))
     safe["openai_api_key_set"] = bool(s.get("openai_api_key"))
     return safe
 
@@ -571,6 +573,8 @@ async def put_settings(req: UpdateSettingsRequest):
         updates["llm_model"] = req.llm_model
     if req.ollama_base_url is not None:
         updates["ollama_base_url"] = req.ollama_base_url
+    if req.anthropic_api_key is not None:
+        updates["anthropic_api_key"] = req.anthropic_api_key
     if req.openai_api_key is not None:
         updates["openai_api_key"] = req.openai_api_key
     if req.whisper_model is not None:

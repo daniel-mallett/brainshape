@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { getSettings, updateSettings, type Settings, type MCPServer } from "../lib/api";
+import {
+  getSettings,
+  updateSettings,
+  type Settings,
+  type MCPServer,
+} from "../lib/api";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
@@ -19,6 +24,22 @@ const SUGGESTED_MODELS: Record<string, string[]> = {
   ollama: ["llama3.3", "mistral", "deepseek-r1"],
 };
 
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground pb-1 border-b border-border">
+      {children}
+    </h3>
+  );
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <label className="text-sm font-medium">{children}</label>;
+}
+
+function FieldHint({ children }: { children: React.ReactNode }) {
+  return <p className="text-xs text-muted-foreground">{children}</p>;
+}
+
 export function SettingsPanel() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,6 +50,7 @@ export function SettingsPanel() {
   const [provider, setProvider] = useState("anthropic");
   const [model, setModel] = useState("");
   const [ollamaUrl, setOllamaUrl] = useState("");
+  const [anthropicKey, setAnthropicKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
   const [whisperModel, setWhisperModel] = useState("");
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
@@ -43,6 +65,7 @@ export function SettingsPanel() {
       setOllamaUrl(s.ollama_base_url);
       setWhisperModel(s.whisper_model);
       setMcpServers(s.mcp_servers || []);
+      setAnthropicKey("");
       setOpenaiKey("");
     } catch (err) {
       console.error("Failed to load settings:", err);
@@ -65,12 +88,14 @@ export function SettingsPanel() {
         whisper_model: whisperModel,
         mcp_servers: mcpServers,
       };
-      if (openaiKey) {
-        updates.openai_api_key = openaiKey;
-      }
-      const s = await updateSettings(updates as Parameters<typeof updateSettings>[0]);
+      if (anthropicKey) updates.anthropic_api_key = anthropicKey;
+      if (openaiKey) updates.openai_api_key = openaiKey;
+      const s = await updateSettings(
+        updates as Parameters<typeof updateSettings>[0]
+      );
       setSettings(s);
       setDirty(false);
+      setAnthropicKey("");
       setOpenaiKey("");
     } catch (err) {
       console.error("Failed to save settings:", err);
@@ -98,125 +123,163 @@ export function SettingsPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-lg mx-auto p-6 space-y-6">
-          {/* LLM Provider */}
-          <section className="space-y-2">
-            <label className="text-sm font-medium">LLM Provider</label>
-            <div className="flex gap-2">
-              {PROVIDERS.map((p) => (
-                <Button
-                  key={p.value}
-                  variant={provider === p.value ? "secondary" : "ghost"}
-                  size="sm"
-                  className="h-8"
-                  onClick={() => {
-                    setProvider(p.value);
-                    const defaults = SUGGESTED_MODELS[p.value];
-                    if (defaults?.length) setModel(defaults[0]);
+        <div className="max-w-lg mx-auto p-6 space-y-8">
+          {/* ── Language Model ── */}
+          <div className="space-y-4">
+            <SectionHeading>Language Model</SectionHeading>
+
+            <section className="space-y-1.5">
+              <FieldLabel>Provider</FieldLabel>
+              <select
+                value={provider}
+                onChange={(e) => {
+                  setProvider(e.target.value);
+                  const defaults = SUGGESTED_MODELS[e.target.value];
+                  if (defaults?.length) setModel(defaults[0]);
+                  markDirty();
+                }}
+                className="w-full h-8 text-sm rounded-md border border-input bg-background px-3 text-foreground"
+              >
+                {PROVIDERS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </section>
+
+            <section className="space-y-1.5">
+              <FieldLabel>Model</FieldLabel>
+              <select
+                value={suggestions.includes(model) ? model : "__custom__"}
+                onChange={(e) => {
+                  if (e.target.value !== "__custom__") {
+                    setModel(e.target.value);
+                    markDirty();
+                  }
+                }}
+                className="w-full h-8 text-sm rounded-md border border-input bg-background px-3 text-foreground"
+              >
+                {suggestions.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+                {!suggestions.includes(model) && (
+                  <option value="__custom__">{model || "Custom..."}</option>
+                )}
+                {suggestions.includes(model) && (
+                  <option value="__custom__">Custom...</option>
+                )}
+              </select>
+              {(!suggestions.includes(model) ||
+                model === "__custom__") && (
+                <Input
+                  value={model === "__custom__" ? "" : model}
+                  onChange={(e) => {
+                    setModel(e.target.value);
                     markDirty();
                   }}
-                >
-                  {p.label}
-                </Button>
-              ))}
-            </div>
-          </section>
+                  placeholder="Enter custom model name..."
+                  className="h-8 text-sm"
+                />
+              )}
+            </section>
+          </div>
 
-          {/* Model */}
-          <section className="space-y-2">
-            <label className="text-sm font-medium">Model</label>
-            <Input
-              value={model}
-              onChange={(e) => {
-                setModel(e.target.value);
-                markDirty();
-              }}
-              placeholder="Model name..."
-              className="h-8 text-sm"
-            />
-            {suggestions.length > 0 && (
-              <div className="flex gap-1 flex-wrap">
-                {suggestions.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => {
-                      setModel(s);
-                      markDirty();
-                    }}
-                    className={`text-xs px-2 py-0.5 rounded border transition-colors ${
-                      model === s
-                        ? "border-primary bg-primary/10 text-foreground"
-                        : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
+          {/* ── API Keys ── */}
+          <div className="space-y-4">
+            <SectionHeading>API Keys</SectionHeading>
+
+            {provider === "anthropic" && (
+              <section className="space-y-1.5">
+                <FieldLabel>Anthropic API Key</FieldLabel>
+                <Input
+                  type="password"
+                  value={anthropicKey}
+                  onChange={(e) => {
+                    setAnthropicKey(e.target.value);
+                    markDirty();
+                  }}
+                  placeholder={
+                    settings?.anthropic_api_key_set
+                      ? "Key is set (enter new to update)"
+                      : "sk-ant-..."
+                  }
+                  className="h-8 text-sm"
+                />
+                <FieldHint>
+                  Can also be set via ANTHROPIC_API_KEY environment variable.
+                </FieldHint>
+              </section>
             )}
-          </section>
 
-          {/* Provider-specific settings */}
-          {provider === "ollama" && (
-            <section className="space-y-2">
-              <label className="text-sm font-medium">Ollama Base URL</label>
+            {provider === "openai" && (
+              <section className="space-y-1.5">
+                <FieldLabel>OpenAI API Key</FieldLabel>
+                <Input
+                  type="password"
+                  value={openaiKey}
+                  onChange={(e) => {
+                    setOpenaiKey(e.target.value);
+                    markDirty();
+                  }}
+                  placeholder={
+                    settings?.openai_api_key_set
+                      ? "Key is set (enter new to update)"
+                      : "sk-..."
+                  }
+                  className="h-8 text-sm"
+                />
+              </section>
+            )}
+
+            {provider === "ollama" && (
+              <section className="space-y-1.5">
+                <FieldLabel>Ollama Base URL</FieldLabel>
+                <Input
+                  value={ollamaUrl}
+                  onChange={(e) => {
+                    setOllamaUrl(e.target.value);
+                    markDirty();
+                  }}
+                  placeholder="http://localhost:11434"
+                  className="h-8 text-sm"
+                />
+                <FieldHint>No API key needed for local Ollama.</FieldHint>
+              </section>
+            )}
+          </div>
+
+          {/* ── Voice ── */}
+          <div className="space-y-4">
+            <SectionHeading>Voice Transcription</SectionHeading>
+
+            <section className="space-y-1.5">
+              <FieldLabel>Whisper Model</FieldLabel>
               <Input
-                value={ollamaUrl}
+                value={whisperModel}
                 onChange={(e) => {
-                  setOllamaUrl(e.target.value);
+                  setWhisperModel(e.target.value);
                   markDirty();
                 }}
-                placeholder="http://localhost:11434"
+                placeholder="mlx-community/whisper-large-v3-turbo"
                 className="h-8 text-sm"
               />
+              <FieldHint>
+                Local transcription via mlx-whisper. Requires Apple Silicon.
+              </FieldHint>
             </section>
-          )}
+          </div>
 
-          {provider === "openai" && (
-            <section className="space-y-2">
-              <label className="text-sm font-medium">OpenAI API Key</label>
-              <Input
-                type="password"
-                value={openaiKey}
-                onChange={(e) => {
-                  setOpenaiKey(e.target.value);
-                  markDirty();
-                }}
-                placeholder={
-                  settings?.openai_api_key_set
-                    ? "Key is set (enter new to update)"
-                    : "sk-..."
-                }
-                className="h-8 text-sm"
-              />
-            </section>
-          )}
-
-          {/* Whisper model */}
-          <section className="space-y-2">
-            <label className="text-sm font-medium">Whisper Model</label>
-            <Input
-              value={whisperModel}
-              onChange={(e) => {
-                setWhisperModel(e.target.value);
-                markDirty();
-              }}
-              placeholder="mlx-community/whisper-large-v3-turbo"
-              className="h-8 text-sm"
-            />
-            <p className="text-xs text-muted-foreground">
-              Used for local voice transcription. Requires Apple Silicon.
-            </p>
-          </section>
-
-          {/* MCP Servers */}
-          <section className="space-y-3">
+          {/* ── MCP Servers ── */}
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">MCP Servers</label>
+              <SectionHeading>MCP Servers</SectionHeading>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 text-xs"
+                className="h-6 text-xs"
                 onClick={() => {
                   setMcpServers([
                     ...mcpServers,
@@ -225,12 +288,14 @@ export function SettingsPanel() {
                   markDirty();
                 }}
               >
-                + Add Server
+                + Add
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Connect external MCP servers to extend the agent with additional tools.
-            </p>
+            <FieldHint>
+              Connect external MCP servers to extend the agent with additional
+              tools.
+            </FieldHint>
+
             {mcpServers.map((server, i) => (
               <div
                 key={i}
@@ -248,26 +313,22 @@ export function SettingsPanel() {
                     placeholder="Server name"
                     className="h-7 text-sm flex-1"
                   />
-                  <div className="flex gap-1">
-                    {(["stdio", "http"] as const).map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => {
-                          const updated = [...mcpServers];
-                          updated[i] = { ...updated[i], transport: t };
-                          setMcpServers(updated);
-                          markDirty();
-                        }}
-                        className={`text-xs px-2 py-0.5 rounded border transition-colors ${
-                          server.transport === t
-                            ? "border-primary bg-primary/10 text-foreground"
-                            : "border-border text-muted-foreground"
-                        }`}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
+                  <select
+                    value={server.transport}
+                    onChange={(e) => {
+                      const updated = [...mcpServers];
+                      updated[i] = {
+                        ...updated[i],
+                        transport: e.target.value as "stdio" | "http",
+                      };
+                      setMcpServers(updated);
+                      markDirty();
+                    }}
+                    className="h-7 text-xs rounded-md border border-input bg-background px-2 text-foreground"
+                  >
+                    <option value="stdio">stdio</option>
+                    <option value="http">http</option>
+                  </select>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -286,7 +347,10 @@ export function SettingsPanel() {
                       value={server.command || ""}
                       onChange={(e) => {
                         const updated = [...mcpServers];
-                        updated[i] = { ...updated[i], command: e.target.value };
+                        updated[i] = {
+                          ...updated[i],
+                          command: e.target.value,
+                        };
                         setMcpServers(updated);
                         markDirty();
                       }}
@@ -328,10 +392,10 @@ export function SettingsPanel() {
                 No MCP servers configured.
               </p>
             )}
-          </section>
+          </div>
 
-          {/* Save */}
-          <div className="pt-2">
+          {/* ── Save ── */}
+          <div className="pt-2 pb-4">
             <Button
               onClick={handleSave}
               disabled={!dirty || saving}

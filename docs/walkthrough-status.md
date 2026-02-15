@@ -49,7 +49,7 @@ Implemented in `sync.py`. SHA-256 content hashes stored on `:Document` nodes. Se
 
 ### Real Embeddings — DONE
 
-Using `SentenceTransformerEmbeddings` with `embeddinggemma-300m` (768-dim). Vector index on Chunk nodes for cosine similarity search.
+Using `SentenceTransformerEmbeddings` with `all-mpnet-base-v2` (768-dim, ungated). Configurable via settings UI with auto vector index migration. Vector index on Chunk nodes for cosine similarity search.
 
 ### Component-Based Pipeline — DONE
 
@@ -57,7 +57,19 @@ Replaced `SimpleKGPipeline` with sequential component orchestration in `KGPipeli
 
 ### Unit Tests — DONE
 
-139 unit tests covering all modules including server, settings, transcription, watcher, MCP client. All external deps mocked. Run with `uv run pytest`.
+169 unit tests covering all modules including server, settings, transcription, watcher, MCP client. All external deps mocked. Run with `uv run pytest`.
+
+### Markdown Rendering — DONE
+
+Chat messages rendered with Streamdown (streaming-aware markdown renderer) + Shiki code highlighting. Editor supports three modes: plain text editing, inline WYSIWYG rendering (CodeMirror decorations that hide syntax on non-cursor lines), and full read-only preview (Streamdown).
+
+### Settings UI — DONE
+
+Provider dropdown, model dropdown with suggested models per provider, API key fields (Anthropic/OpenAI), Ollama URL, Whisper model, MCP server editor. Organized into logical sections.
+
+### SSE Token Streaming — DONE
+
+Server streams agent responses token-by-token via `stream_mode="messages"`. JSON-encoded text tokens preserve newlines across SSE transport.
 
 ### Other
 

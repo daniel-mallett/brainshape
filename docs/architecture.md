@@ -31,13 +31,13 @@ brain/
 desktop/                     # Tauri 2 desktop app (React + TypeScript + Vite)
 ├── src/
 │   ├── components/
-│   │   ├── Editor.tsx       # CodeMirror 6 + vim mode
-│   │   ├── Chat.tsx         # Agent chat panel with SSE streaming
+│   │   ├── Editor.tsx       # CodeMirror 6 + vim mode, three-mode toggle (edit/inline/preview)
+│   │   ├── Chat.tsx         # Agent chat panel with SSE streaming + Streamdown markdown
 │   │   ├── Sidebar.tsx      # File tree browser
 │   │   ├── GraphPanel.tsx   # Graph stats + overview controls
 │   │   ├── GraphView.tsx    # Force-directed graph visualization
 │   │   ├── MemoryPanel.tsx  # Browse, edit, delete agent memories
-│   │   ├── SettingsPanel.tsx # LLM provider/model, MCP servers config
+│   │   ├── SettingsPanel.tsx # LLM provider/model, API keys, MCP servers, voice config
 │   │   ├── CommandPalette.tsx # Cmd+K search and actions
 │   │   └── VoiceRecorder.tsx # Mic button for audio transcription
 │   ├── lib/
@@ -45,6 +45,7 @@ desktop/                     # Tauri 2 desktop app (React + TypeScript + Vite)
 │   │   ├── useAgentStream.ts # SSE streaming hook
 │   │   ├── useVoiceRecorder.ts # Audio recording hook
 │   │   ├── wikilinks.ts     # Clickable wikilink decorations
+│   │   ├── inlineMarkdown.ts # CodeMirror inline markdown rendering (WYSIWYG decorations)
 │   │   ├── completions.ts   # Wikilink + tag autocomplete
 │   │   └── utils.ts         # Tailwind merge utilities
 │   └── App.tsx              # Multi-view layout (Editor / Graph / Memory / Settings)
@@ -130,7 +131,7 @@ Two independent sync layers with different cost profiles:
 | `langgraph` | `MemorySaver` for in-session conversation history |
 | `neo4j` | Python driver for Bolt protocol |
 | `neo4j-graphrag` | KG pipeline components (entity extraction, graph writing, entity resolution, `AnthropicLLM`) |
-| `sentence-transformers` | Local embedding model (EmbeddingGemma 300m, 768-dim), used via neo4j-graphrag |
+| `sentence-transformers` | Local embedding model (`all-mpnet-base-v2`, 768-dim), configurable via settings |
 | `anthropic` | Transitive dep of neo4j-graphrag's `AnthropicLLM` (not directly imported) |
 | `python-frontmatter` | Parse YAML frontmatter from markdown notes |
 | `pydantic-settings` | Type-safe .env config (handles `.env` loading natively) |

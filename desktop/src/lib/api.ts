@@ -100,6 +100,7 @@ export interface Settings {
   llm_provider: string;
   llm_model: string;
   ollama_base_url: string;
+  anthropic_api_key_set: boolean;
   openai_api_key_set: boolean;
   whisper_model: string;
   mcp_servers: MCPServer[];
@@ -114,6 +115,7 @@ export function updateSettings(
     llm_provider: string;
     llm_model: string;
     ollama_base_url: string;
+    anthropic_api_key: string;
     openai_api_key: string;
     whisper_model: string;
     mcp_servers: MCPServer[];

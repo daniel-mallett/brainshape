@@ -20,6 +20,8 @@ DEFAULTS: dict[str, Any] = {
     "llm_model": "claude-haiku-4-5-20251001",
     # Ollama base URL (only used when provider is "ollama")
     "ollama_base_url": "http://localhost:11434",
+    # Anthropic API key (used when provider is "anthropic")
+    "anthropic_api_key": "",
     # OpenAI-compatible API key (only used when provider is "openai")
     "openai_api_key": "",
     # Whisper model for transcription

@@ -12,7 +12,7 @@ Brain is a local-first, single-user application. The trust boundary sits between
 |--------|-----------------|-------------------|
 | Neo4j driver | `graph_db.py` constructor | `db.query()` |
 | Anthropic SDK | LangChain model string | Agent framework (implicit) |
-| HuggingFace embeddings | `kg_pipeline.py` | `pipeline.embed_query()` / `pipeline.run()` |
+| HuggingFace embeddings | `kg_pipeline.py` | `pipeline.embed_query()` / `pipeline.run_async()` |
 
 The `.env` file is listed in `.gitignore` and is not readable through any agent tool.
 
@@ -54,11 +54,13 @@ If the project grows to support untrusted input sources (shared vaults, web clip
 
 The FastAPI server binds to `127.0.0.1:8765` — localhost only, not exposed to the network. It adds a web-accessible surface to the agent:
 
-- **CORS** is restricted to `http://localhost:5173` (Vite dev), `tauri://localhost`, and `https://tauri.localhost` (Tauri webview). No wildcard origins.
+- **CORS** is restricted to `http://localhost:1420` and `:5173` (Vite dev), `tauri://localhost`, and `https://tauri.localhost` (Tauri webview). No wildcard origins.
 - **No authentication** — the server is single-user and local-only. If the server were ever exposed to the network, session auth would need to be added.
 - **Notes CRUD endpoints** reuse `notes.py` functions, inheriting path-traversal protection via `_ensure_within_notes_dir()`.
 - **Agent SSE streaming** at `/agent/message` passes user input through the same agent/tool pipeline as the CLI — no additional attack surface vs the CLI.
 - **Session state** is in-memory (dict keyed by session_id). No persistence, no cross-session data leakage.
+- **Settings API** (`GET /settings`, `PUT /settings`) handles API keys safely: `GET` never returns raw keys, only boolean `_set` flags (e.g., `anthropic_api_key_set: true`). `PUT` accepts new key values but they are stored on disk only, never echoed back.
+- **MCP command validation** — `PUT /settings` validates MCP server commands against an allowlist (`npx`, `node`, `python`, `python3`, `uvx`, `docker`) to prevent arbitrary command execution.
 
 ## Known Limitations
 

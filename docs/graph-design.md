@@ -5,11 +5,11 @@
 Each markdown file is represented as a **single node** with dual labels `:Document:Note`. This node is the hub connecting both the structural world (tags, wikilinks) and the semantic world (chunks, extracted entities).
 
 ```
-(:Tag) <-TAGGED_WITH- (:Document:Note) <-FROM_DOCUMENT- (:Chunk) <-FROM_CHUNK- (:Person)
-                            |                            (:Chunk) <-FROM_CHUNK- (:Concept)
-                        LINKS_TO
+(:Tag) <-TAGGED_WITH- (:Document:Note) <-FROM_DOCUMENT- (:Chunk)  [embedding vector]
+                            |
+                        LINKS_TO                         (:Memory) -ABOUT-> (:Note)
                             v
-                      (:Document:Note) ...
+                      (:Document:Note) ...               (:Person), (:Concept), ... [agent-created]
 ```
 
 ## Why Unified?
@@ -45,28 +45,26 @@ Created by `sync_structural()` in `sync.py`. Mirrors the notes directory's expli
 | `ABOUT` | `(:Memory)-[:ABOUT]->(:Note)` | Agent memory referencing a note |
 | `ABOUT_TAG` | `(:Memory)-[:ABOUT_TAG]->(:Tag)` | Agent memory referencing a topic |
 
-### Semantic Layer (from KG Builder in `kg_pipeline.py`)
+### Semantic Layer (from embedding pipeline in `kg_pipeline.py`)
 
-Created by `sync_semantic()` in `sync.py` using the component-based `KGPipeline` in `kg_pipeline.py`.
+Created by `sync_semantic()` in `sync.py` using the `KGPipeline` in `kg_pipeline.py`.
 
 | Node | Properties | Created By |
 |------|-----------|------------|
-| `:Document` (also `:Note`) | `path` (notes-relative) | KG Builder (via `NotesLoader`) |
-| `:Chunk` | `text`, `index`, embedding vector | KG Builder (text splitter) |
-| Entity nodes (`:Person`, `:Concept`, `:Project`, `:Location`, `:Event`, `:Tool`, `:Organization`) | `name` + type-specific props | KG Builder (LLM extraction) |
+| `:Document` (also `:Note`) | `path` (notes-relative) | Pipeline (via `NotesLoader`) |
+| `:Chunk` | `text`, `index`, embedding vector (768-dim) | Pipeline (text splitter + embedder) |
 
 | Relationship | Pattern | Created By |
 |-------------|---------|------------|
-| `FROM_DOCUMENT` | `(:Chunk)-[:FROM_DOCUMENT]->(:Document)` | KG Builder |
-| `NEXT_CHUNK` | `(:Chunk)-[:NEXT_CHUNK]->(:Chunk)` | KG Builder |
-| `FROM_CHUNK` | `(entity)-[:FROM_CHUNK]->(:Chunk)` | KG Builder |
-| `RELATED_TO`, `WORKS_ON`, `USES`, `LOCATED_IN`, `PART_OF`, `CREATED_BY` | Between entity nodes | KG Builder (LLM extraction) |
+| `FROM_DOCUMENT` | `(:Chunk)-[:FROM_DOCUMENT]->(:Document)` | Pipeline |
+
+Entity nodes (`:Person`, `:Concept`, `:Project`, etc.) and their relationships are created by the agent during conversation via `query_graph`, not by automated extraction. This keeps indexing cheap (local embeddings only, no LLM calls) while producing higher-quality entities driven by user context.
 
 ## Sync Order
 
 **Semantic runs first**, then structural:
 
-1. `sync_semantic()` — KG Builder processes each note file via `NotesLoader`, creates `:Document` nodes (keyed by notes-relative path), Chunk nodes, Entity nodes with relationships
+1. `sync_semantic()` — Pipeline processes each note file via `NotesLoader`, creates `:Document` nodes (keyed by notes-relative path) and Chunk nodes with embeddings
 2. `sync_structural()` — Finds existing Document nodes by `path`, adds `:Note` label, sets `title`/`content` properties, creates `Tag` nodes and `TAGGED_WITH`/`LINKS_TO` relationships
 
 This order ensures the structural sync can merge onto the Document nodes the KG Builder already created.
@@ -96,8 +94,8 @@ CREATE FULLTEXT INDEX note_content IF NOT EXISTS FOR (n:Note) ON EACH [n.content
 
 ## Entity Schema
 
-No predefined schema — the `LLMEntityRelationExtractor` auto-discovers entity types and relationships from note content. Common types that emerge include Person, Concept, Project, Location, Event, Tool, Organization, with relationships like RELATED_TO, WORKS_ON, USES, PART_OF, etc.
+No predefined entity schema. Entity nodes and relationships are created by the agent during conversation via `query_graph`. Common types include Person, Concept, Project, Location, Event, Tool, Organization, with relationships like RELATED_TO, WORKS_ON, USES, PART_OF, etc.
 
 ## Embeddings
 
-Uses `SentenceTransformerEmbeddings` with Google's `embeddinggemma-300m` model (768 dimensions). The model runs locally — no API cost for embeddings. A vector index (`chunk_embeddings`) on `Chunk.embedding` enables cosine similarity search via the `semantic_search` tool.
+Default model: `sentence-transformers/all-mpnet-base-v2` (768 dimensions, ungated). Runs locally — no API cost. Configurable via the settings UI (`embedding_model` and `embedding_dimensions`). Changing the model triggers automatic vector index migration. A vector index (`chunk_embeddings`) on `Chunk.embedding` enables cosine similarity search via the `semantic_search` tool.

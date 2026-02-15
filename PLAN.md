@@ -46,7 +46,10 @@
 - **Voice recording**: mic button in chat, records audio, transcribes locally, populates input
 - Graph visualization: force-directed graph view (full graph, local per-note neighborhood)
 - Memory management panel: browse, edit, delete agent memories
-- **Settings panel**: configure LLM provider/model, Ollama URL, OpenAI key, Whisper model, MCP servers
+- **Markdown rendering in chat**: Streamdown (streaming-aware markdown renderer) + Shiki code highlighting for agent messages
+- **Editor three-mode toggle**: Edit (plain CodeMirror), Inline (WYSIWYG decorations that hide syntax on non-cursor lines), Preview (read-only Streamdown rendering)
+- **Token-by-token SSE streaming**: server streams via `stream_mode="messages"`, JSON-encoded tokens preserve newlines across SSE transport
+- **Settings panel**: LLM provider dropdown, model dropdown with suggestions per provider, API key fields (Anthropic/OpenAI), Ollama URL, Whisper model, MCP server editor — organized into logical sections
 - **Command palette**: Cmd+K to search notes and run actions (switch views, create note, sync, etc.)
 - View switching: Editor / Graph / Memory / Settings views in header
 - ShadCN UI components (button, input, scroll-area) + Tailwind v4
@@ -54,7 +57,7 @@
 - Health check with auto-reconnect polling
 
 ### Testing & CI
-- 169 unit tests covering all modules including server, settings, transcription, watcher, MCP client
+- 169+ unit tests covering all modules including server, settings, transcription, watcher, MCP client
 - Server tests properly isolated (noop lifespan, no Neo4j connection required)
 - CI: GitHub Actions workflow runs ruff, ty, and pytest (with coverage) on push/PR to main
 - Pre-commit hooks: ruff lint, ruff format, gitleaks secret detection, pytest
@@ -77,7 +80,7 @@
 
 ### Product
 4. Search UI — dedicated search view with filters (by tag, date, keyword, semantic)
-5. Rich markdown preview — toggle between edit/preview modes
+5. ~~Rich markdown preview~~ — **DONE** (three-mode editor: edit/inline/preview)
 6. Streaming transcription — real-time Whisper output as user speaks (progressive UI)
 
 ### Platform
