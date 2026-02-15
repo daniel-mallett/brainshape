@@ -1,3 +1,5 @@
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,3 +20,26 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def export_api_keys() -> None:
+    """Push API keys into os.environ for downstream libraries.
+
+    Checks both runtime settings (from UI) and .env config,
+    with runtime taking precedence. Uses setdefault so explicit
+    shell exports aren't overwritten.
+    """
+    from brain.settings import load_settings
+
+    runtime = load_settings()
+
+    anthropic_key = runtime.get("anthropic_api_key") or settings.anthropic_api_key
+    if anthropic_key:
+        os.environ.setdefault("ANTHROPIC_API_KEY", anthropic_key)
+
+    openai_key = runtime.get("openai_api_key", "")
+    if openai_key:
+        os.environ.setdefault("OPENAI_API_KEY", openai_key)
+
+
+export_api_keys()

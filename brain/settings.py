@@ -25,7 +25,7 @@ DEFAULTS: dict[str, Any] = {
     # OpenAI-compatible API key (only used when provider is "openai")
     "openai_api_key": "",
     # Whisper model for transcription
-    "whisper_model": "mlx-community/whisper-large-v3-turbo",
+    "whisper_model": "mlx-community/whisper-small",
     # Embedding model for semantic search (must be a sentence-transformers model)
     "embedding_model": "sentence-transformers/all-mpnet-base-v2",
     # Embedding dimensions (must match the model's output dimensions)

@@ -82,7 +82,7 @@ class KGPipeline:
                 dimensions=embedding_dimensions,
                 similarity_fn="cosine",
             )
-        except Exception:
+        except neo4j.exceptions.ClientError:
             with driver.session() as session:
                 session.run("DROP INDEX chunk_embeddings IF EXISTS")
                 session.run("MATCH (c:Chunk) DETACH DELETE c")

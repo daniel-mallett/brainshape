@@ -1,4 +1,7 @@
-from brain.config import Settings
+import os
+from unittest.mock import patch
+
+from brain.config import Settings, export_api_keys
 
 
 class TestSettings:
@@ -20,3 +23,30 @@ class TestSettings:
         s = Settings(_env_file=None)
         assert s.anthropic_api_key == "sk-test-123"
         assert s.notes_path == "/custom/notes"
+
+
+class TestExportApiKeys:
+    def test_exports_anthropic_key(self, monkeypatch):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        with patch("brain.settings.load_settings") as mock_load:
+            mock_load.return_value = {"anthropic_api_key": "sk-from-settings", "openai_api_key": ""}
+            export_api_keys()
+            assert os.environ["ANTHROPIC_API_KEY"] == "sk-from-settings"
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    def test_runtime_settings_take_precedence_over_env(self, monkeypatch):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        with patch("brain.settings.load_settings") as mock_load:
+            mock_load.return_value = {"anthropic_api_key": "sk-from-ui", "openai_api_key": ""}
+            export_api_keys()
+            assert os.environ["ANTHROPIC_API_KEY"] == "sk-from-ui"
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    def test_setdefault_preserves_shell_export(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-from-shell")
+        with patch("brain.settings.load_settings") as mock_load:
+            mock_load.return_value = {"anthropic_api_key": "", "openai_api_key": ""}
+            export_api_keys()
+            # Shell export should be preserved (setdefault doesn't overwrite)
+            assert os.environ["ANTHROPIC_API_KEY"] == "sk-from-shell"

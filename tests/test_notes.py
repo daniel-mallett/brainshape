@@ -89,6 +89,15 @@ class TestParseNote:
         assert "personal" in result["tags"]
         assert "agent-context" in result["tags"]
 
+    def test_malformed_frontmatter(self, tmp_path):
+        bad = tmp_path / "bad.md"
+        bad.write_text("---\ntags: [unclosed\n---\nSome content here")
+        result = parse_note(bad, tmp_path)
+        assert result["title"] == "bad"
+        assert result["path"] == "bad.md"
+        # Should still have content even though frontmatter parsing failed
+        assert "Some content" in result["content"]
+
 
 class TestListNotes:
     def test_finds_md_files(self, tmp_notes):

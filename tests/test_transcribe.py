@@ -55,7 +55,7 @@ def test_get_model_path_default(monkeypatch, tmp_path):
     """Uses default model when settings has no whisper_model."""
     monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
     path = _get_model_path()
-    assert path == "mlx-community/whisper-large-v3-turbo"
+    assert path == "mlx-community/whisper-small"
 
 
 def test_get_model_path_custom(monkeypatch, tmp_path):

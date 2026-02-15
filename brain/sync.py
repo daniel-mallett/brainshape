@@ -128,18 +128,20 @@ def sync_structural(db: GraphDB, notes_path: Path) -> dict:
 
         # Create wikilink relationships (MATCH only — no placeholder nodes)
         for link_title in note["links"]:
-            db.query(
+            result = db.query(
                 """
                 MATCH (source:Note {path: $source_path})
                 MATCH (target:Note {title: $target_title})
                 MERGE (source)-[:LINKS_TO]->(target)
+                RETURN target.path AS path
                 """,
                 {
                     "source_path": note["path"],
                     "target_title": link_title,
                 },
             )
-            stats["links"] += 1
+            if result:
+                stats["links"] += 1
 
     return stats
 

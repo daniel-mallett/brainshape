@@ -20,7 +20,7 @@ def _get_model_path() -> str:
         from brain.settings import load_settings
 
         settings = load_settings()
-        _model_path = settings.get("whisper_model", "mlx-community/whisper-large-v3-turbo")
+        _model_path = settings.get("whisper_model", "mlx-community/whisper-small")
     return _model_path
 
 

@@ -1,9 +1,12 @@
 import hashlib
+import logging
 import re
 import shutil
 from pathlib import Path
 
 import frontmatter
+
+logger = logging.getLogger(__name__)
 
 SEED_NOTES_DIR = Path(__file__).resolve().parent.parent / "seed_notes"
 
@@ -34,9 +37,14 @@ def parse_note(file_path: Path, notes_path: Path) -> dict:
     The path stored is relative to notes_path, so it stays consistent
     across devices regardless of where the notes directory is mounted.
     """
-    post = frontmatter.load(str(file_path))
-    content = post.content
-    metadata = dict(post.metadata)
+    try:
+        post = frontmatter.load(str(file_path))
+        content = post.content
+        metadata = dict(post.metadata)
+    except Exception:
+        logger.warning("Failed to parse frontmatter in %s, using raw content", file_path.name)
+        content = file_path.read_text(encoding="utf-8")
+        metadata = {}
 
     # Extract wikilinks: [[Page Name]] or [[Page Name|display text]]
     links = [link.split("/")[-1] for link in WIKILINK_RE.findall(content)]
@@ -66,8 +74,14 @@ def list_notes(notes_path: Path) -> list[Path]:
 
 
 def read_all_notes(notes_path: Path) -> list[dict]:
-    """Parse all notes in the notes directory."""
-    return [parse_note(p, notes_path) for p in list_notes(notes_path)]
+    """Parse all notes in the notes directory. Skips notes that fail to parse."""
+    notes = []
+    for p in list_notes(notes_path):
+        try:
+            notes.append(parse_note(p, notes_path))
+        except Exception:
+            logger.warning("Skipping unreadable note: %s", p.name)
+    return notes
 
 
 def write_note(

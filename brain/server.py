@@ -592,6 +592,19 @@ async def put_settings(req: UpdateSettingsRequest):
 
     updated = update_settings(updates)
 
+    # Re-export API keys to os.environ so downstream libraries pick them up
+    if req.anthropic_api_key is not None or req.openai_api_key is not None:
+        import os
+
+        from brain.config import export_api_keys
+
+        # Clear existing values so export_api_keys' setdefault can update them
+        if req.anthropic_api_key is not None:
+            os.environ.pop("ANTHROPIC_API_KEY", None)
+        if req.openai_api_key is not None:
+            os.environ.pop("OPENAI_API_KEY", None)
+        export_api_keys()
+
     # Hot-reload agent when MCP servers or LLM config changes
     needs_reload = any(
         [

@@ -66,10 +66,8 @@
 
 ## Known Issues
 
-- **`.env` config**: API key loading doesn't work for all deps — key needs to be in shell environment too
-- **`notes.py` regex parsing**: could be enhanced with richer metadata extraction in the future
 - **Desktop: no PyInstaller bundling yet**: Python server must be run separately in dev mode
-- **Whisper model download**: first transcription triggers model download (~3GB for large-v3-turbo)
+- **`notes.py` regex parsing**: could be enhanced with richer metadata extraction in the future
 
 ## Next Steps
 

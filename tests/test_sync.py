@@ -41,6 +41,17 @@ class TestSyncStructural:
         delete_calls = [c for c in db.query.call_args_list if "DELETE" in str(c)]
         assert len(delete_calls) > 0
 
+    def test_link_stats_only_count_matched(self, tmp_path):
+        """Links to nonexistent notes should not be counted in stats."""
+        # Create a note with a wikilink to a nonexistent note
+        (tmp_path / "linker.md").write_text("---\ntags: []\n---\nSee [[Nonexistent]]")
+        db = MagicMock()
+        # Return empty list for MATCH queries (target note doesn't exist)
+        db.query.return_value = []
+        stats = sync_structural(db, tmp_path)
+        assert stats["notes"] == 1
+        assert stats["links"] == 0  # Should not count failed matches
+
 
 class TestSyncSemantic:
     def test_skips_unchanged_files(self, tmp_notes):
