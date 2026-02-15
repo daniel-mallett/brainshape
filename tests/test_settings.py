@@ -5,6 +5,8 @@ import pytest
 from brain.settings import (
     DEFAULTS,
     VALID_PROVIDERS,
+    VALID_TRANSCRIPTION_PROVIDERS,
+    _migrate_settings,
     get_llm_model_string,
     load_settings,
     save_settings,
@@ -109,3 +111,45 @@ class TestEmbeddingSettings:
 
 def test_valid_providers():
     assert {"anthropic", "openai", "ollama"} == VALID_PROVIDERS
+
+
+def test_valid_transcription_providers():
+    assert {"local", "openai", "mistral"} == VALID_TRANSCRIPTION_PROVIDERS
+
+
+class TestMigrateSettings:
+    def test_whisper_model_migrated(self):
+        old = {"whisper_model": "mlx-community/whisper-large-v3-turbo"}
+        result = _migrate_settings(old)
+        assert "whisper_model" not in result
+        assert result["transcription_model"] == "mlx-community/whisper-large-v3-turbo"
+
+    def test_whisper_model_skipped_if_new_key_set(self):
+        old = {
+            "whisper_model": "old-model",
+            "transcription_model": "already-set",
+        }
+        result = _migrate_settings(old)
+        assert result["transcription_model"] == "already-set"
+        assert "whisper_model" not in result
+
+    def test_no_migration_needed(self):
+        settings = {"llm_provider": "anthropic"}
+        result = _migrate_settings(settings)
+        assert result == {"llm_provider": "anthropic"}
+
+    def test_migration_on_load(self, tmp_settings_file):
+        """whisper_model in stored file gets migrated on load."""
+        tmp_settings_file.write_text(
+            json.dumps({"whisper_model": "mlx-community/whisper-large-v3-turbo"})
+        )
+        settings = load_settings()
+        assert settings["transcription_model"] == "mlx-community/whisper-large-v3-turbo"
+        assert "whisper_model" not in settings
+
+
+class TestTranscriptionSettings:
+    def test_defaults(self):
+        assert DEFAULTS["transcription_provider"] == "local"
+        assert DEFAULTS["transcription_model"] == ""
+        assert DEFAULTS["mistral_api_key"] == ""

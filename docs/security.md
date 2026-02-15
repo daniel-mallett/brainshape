@@ -12,6 +12,8 @@ Brain is a local-first, single-user application. The trust boundary sits between
 |--------|-----------------|-------------------|
 | Neo4j driver | `graph_db.py` constructor | `db.query()` |
 | Anthropic SDK | LangChain model string | Agent framework (implicit) |
+| OpenAI Whisper API | `transcribe.py` | `httpx.post()` with Bearer token |
+| Mistral Voxtral API | `transcribe.py` | `httpx.post()` with Bearer token |
 | HuggingFace embeddings | `kg_pipeline.py` | `pipeline.embed_query()` / `pipeline.run_async()` |
 
 The `.env` file is listed in `.gitignore` and is not readable through any agent tool.
@@ -59,7 +61,8 @@ The FastAPI server binds to `127.0.0.1:8765` — localhost only, not exposed to 
 - **Notes CRUD endpoints** reuse `notes.py` functions, inheriting path-traversal protection via `_ensure_within_notes_dir()`.
 - **Agent SSE streaming** at `/agent/message` passes user input through the same agent/tool pipeline as the CLI — no additional attack surface vs the CLI.
 - **Session state** is in-memory (dict keyed by session_id). No persistence, no cross-session data leakage.
-- **Settings API** (`GET /settings`, `PUT /settings`) handles API keys safely: `GET` never returns raw keys, only boolean `_set` flags (e.g., `anthropic_api_key_set: true`). `PUT` accepts new key values but they are stored on disk only, never echoed back.
+- **Settings API** (`GET /settings`, `PUT /settings`) handles API keys safely: `GET` never returns raw keys, only boolean `_set` flags (e.g., `anthropic_api_key_set: true`, `mistral_api_key_set: true`). `PUT` accepts new key values but they are stored on disk only, never echoed back.
+- **API key export** — `config.py:export_api_keys()` pushes keys from both `.env` and runtime settings into `os.environ` using `setdefault` (shell exports take precedence). Cloud transcription providers read keys from `os.environ` at call time, not from settings directly.
 - **MCP command validation** — `PUT /settings` validates MCP server commands against an allowlist (`npx`, `node`, `python`, `python3`, `uvx`, `docker`) to prevent arbitrary command execution.
 
 ## Known Limitations

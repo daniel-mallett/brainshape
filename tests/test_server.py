@@ -372,6 +372,93 @@ class TestTranscription:
         assert data["text"] == "Hello world"
 
 
+class TestTranscribeMeeting:
+    def test_meeting_creates_note(self, client, tmp_notes, monkeypatch):
+        mock_transcribe = MagicMock(
+            return_value={
+                "text": "Hello from the meeting",
+                "segments": [
+                    {"start": 0.0, "end": 2.0, "text": "Hello from the meeting"},
+                ],
+            }
+        )
+        monkeypatch.setattr("brain.transcribe.transcribe_audio", mock_transcribe)
+
+        resp = client.post(
+            "/transcribe/meeting",
+            files={"audio": ("meeting.wav", b"fake audio", "audio/wav")},
+            data={"title": "Standup", "tags": "meeting,daily"},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["title"] == "Standup"
+        assert data["segment_count"] == 1
+        assert (tmp_notes / "Standup.md").exists()
+
+    def test_meeting_default_title(self, client, tmp_notes, monkeypatch):
+        mock_transcribe = MagicMock(return_value={"text": "Hello", "segments": []})
+        monkeypatch.setattr("brain.transcribe.transcribe_audio", mock_transcribe)
+
+        resp = client.post(
+            "/transcribe/meeting",
+            files={"audio": ("meeting.wav", b"fake", "audio/wav")},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["title"].startswith("Meeting ")
+
+    def test_meeting_default_tags(self, client, tmp_notes, monkeypatch):
+        mock_transcribe = MagicMock(return_value={"text": "Hello", "segments": []})
+        monkeypatch.setattr("brain.transcribe.transcribe_audio", mock_transcribe)
+
+        resp = client.post(
+            "/transcribe/meeting",
+            files={"audio": ("meeting.wav", b"fake", "audio/wav")},
+        )
+
+        assert resp.status_code == 200
+        # Note should be created with default tags
+        import frontmatter
+
+        title = resp.json()["title"]
+        note_path = tmp_notes / f"{title}.md"
+        assert note_path.exists()
+        post = frontmatter.load(str(note_path))
+        assert "meeting" in post.metadata.get("tags", [])
+        assert "transcription" in post.metadata.get("tags", [])
+
+
+class TestFmtTime:
+    def test_minutes_seconds(self):
+        from brain.server import _fmt_time
+
+        assert _fmt_time(0) == "0:00"
+        assert _fmt_time(65) == "1:05"
+        assert _fmt_time(599) == "9:59"
+
+    def test_hours(self):
+        from brain.server import _fmt_time
+
+        assert _fmt_time(3600) == "1:00:00"
+        assert _fmt_time(3661) == "1:01:01"
+
+
+class TestTranscribeMeetingWithFolder:
+    def test_meeting_in_folder(self, client, tmp_notes, monkeypatch):
+        mock_transcribe = MagicMock(return_value={"text": "Hello", "segments": []})
+        monkeypatch.setattr("brain.transcribe.transcribe_audio", mock_transcribe)
+
+        resp = client.post(
+            "/transcribe/meeting",
+            files={"audio": ("meeting.wav", b"fake", "audio/wav")},
+            data={"title": "Review", "folder": "Meetings"},
+        )
+
+        assert resp.status_code == 200
+        assert (tmp_notes / "Meetings" / "Review.md").exists()
+
+
 class TestSettings:
     def test_get_settings(self, client):
         resp = client.get("/settings")
@@ -381,9 +468,11 @@ class TestSettings:
         assert "llm_model" in data
         assert "embedding_model" in data
         assert "embedding_dimensions" in data
+        assert "transcription_provider" in data
         # API keys should not be exposed
         assert "openai_api_key" not in data
         assert "openai_api_key_set" in data
+        assert "mistral_api_key_set" in data
 
     def test_update_settings(self, client, monkeypatch):
         mock_reload = AsyncMock(return_value=[])
@@ -434,6 +523,15 @@ class TestSettings:
         assert resp.status_code == 200
         mock_reload.assert_awaited_once()
         mock_recreate.assert_called_once()
+
+    def test_update_transcription_provider(self, client):
+        resp = client.put("/settings", json={"transcription_provider": "openai"})
+        assert resp.status_code == 200
+        assert resp.json()["transcription_provider"] == "openai"
+
+    def test_update_invalid_transcription_provider(self, client):
+        resp = client.put("/settings", json={"transcription_provider": "invalid"})
+        assert resp.status_code == 400
 
     def test_llm_change_triggers_reload(self, client, monkeypatch):
         """PUT /settings with llm_provider triggers agent reload."""

@@ -24,8 +24,12 @@ DEFAULTS: dict[str, Any] = {
     "anthropic_api_key": "",
     # OpenAI-compatible API key (only used when provider is "openai")
     "openai_api_key": "",
-    # Whisper model for transcription
-    "whisper_model": "mlx-community/whisper-small",
+    # Mistral API key (used for Mistral transcription)
+    "mistral_api_key": "",
+    # Transcription provider: "local" (mlx-whisper), "openai", "mistral"
+    "transcription_provider": "local",
+    # Transcription model (empty = provider default)
+    "transcription_model": "",
     # Embedding model for semantic search (must be a sentence-transformers model)
     "embedding_model": "sentence-transformers/all-mpnet-base-v2",
     # Embedding dimensions (must match the model's output dimensions)
@@ -38,9 +42,29 @@ DEFAULTS: dict[str, Any] = {
 # Valid LLM providers
 VALID_PROVIDERS = {"anthropic", "openai", "ollama"}
 
+# Valid transcription providers
+VALID_TRANSCRIPTION_PROVIDERS = {"local", "openai", "mistral"}
+
+# Default transcription models per provider
+TRANSCRIPTION_MODEL_DEFAULTS = {
+    "local": "mlx-community/whisper-small",
+    "openai": "gpt-4o-mini-transcribe",
+    "mistral": "voxtral-mini-latest",
+}
+
 
 def _ensure_dir() -> None:
     SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _migrate_settings(settings: dict[str, Any]) -> dict[str, Any]:
+    """Migrate old settings keys to new ones."""
+    # whisper_model → transcription_model (if not already set)
+    if "whisper_model" in settings:
+        if not settings.get("transcription_model"):
+            settings["transcription_model"] = settings["whisper_model"]
+        del settings["whisper_model"]
+    return settings
 
 
 def load_settings() -> dict[str, Any]:
@@ -49,6 +73,7 @@ def load_settings() -> dict[str, Any]:
     if SETTINGS_FILE.exists():
         try:
             stored = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+            stored = _migrate_settings(stored)
             settings.update(stored)
         except (json.JSONDecodeError, OSError):
             pass  # Corrupt file — use defaults

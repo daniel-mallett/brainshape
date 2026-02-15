@@ -57,7 +57,7 @@ Replaced `SimpleKGPipeline` with sequential component orchestration in `KGPipeli
 
 ### Unit Tests — DONE
 
-169 unit tests covering all modules including server, settings, transcription, watcher, MCP client. All external deps mocked. Run with `uv run pytest`.
+193+ unit tests covering all modules including server, settings, transcription providers, watcher, MCP client. All external deps mocked. Run with `uv run pytest`.
 
 ### Markdown Rendering — DONE
 
@@ -65,7 +65,7 @@ Chat messages rendered with Streamdown (streaming-aware markdown renderer) + Shi
 
 ### Settings UI — DONE
 
-Provider dropdown, model dropdown with suggested models per provider, API key fields (Anthropic/OpenAI), Ollama URL, Whisper model, MCP server editor. Organized into logical sections.
+Provider dropdown, model dropdown with suggested models per provider, API key fields (Anthropic/OpenAI/Mistral), Ollama URL, transcription provider/model selection, MCP server editor. Organized into logical sections.
 
 ### SSE Token Streaming — DONE
 
@@ -79,3 +79,7 @@ Server streams agent responses token-by-token via `stream_mode="messages"`. JSON
 - GraphPruning for schema enforcement
 - Preflight checks (Neo4j connectivity, APOC plugin, LLM health)
 - Additional data sources (call transcripts, health data, etc.)
+
+### Voice Transcription Providers — DONE
+
+Pluggable transcription provider system: local (mlx-whisper on Apple Silicon), OpenAI Whisper API, Mistral Voxtral API. Provider + model configurable in settings. Meeting transcription endpoint (`POST /transcribe/meeting`) records audio and saves timestamped transcription as a Note.

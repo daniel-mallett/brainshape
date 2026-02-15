@@ -41,5 +41,9 @@ def export_api_keys() -> None:
     if openai_key:
         os.environ.setdefault("OPENAI_API_KEY", openai_key)
 
+    mistral_key = runtime.get("mistral_api_key", "")
+    if mistral_key:
+        os.environ.setdefault("MISTRAL_API_KEY", mistral_key)
+
 
 export_api_keys()

@@ -24,7 +24,7 @@ brain/
 ├── settings.py              # Persistent user settings (JSON on disk), LLM provider config
 ├── mcp_client.py            # MCP server client, loads external tools via langchain-mcp-adapters
 ├── watcher.py               # Watchdog file watcher for auto-sync on notes changes
-├── transcribe.py            # Local voice transcription via mlx-whisper
+├── transcribe.py            # Voice transcription with pluggable providers (local/OpenAI/Mistral)
 ├── cli.py                   # Interactive CLI chat loop with /sync commands
 └── batch.py                 # Standalone batch sync for cron/launchd
 
@@ -65,7 +65,7 @@ tests/
 ├── test_settings.py         # Settings load/save, defaults
 ├── test_mcp_client.py       # MCP config building, tool loading
 ├── test_watcher.py          # File watcher event handling
-└── test_transcribe.py       # Transcription with mocked mlx-whisper
+└── test_transcribe.py       # Transcription provider dispatch, all providers mocked
 ```
 
 ## Data Flow
@@ -107,7 +107,8 @@ Future interfaces (Slack, Discord, voice) each import `create_brain_agent()` and
 - `GET /graph/memories` — list agent memories
 - `DELETE /graph/memory/{id}` — delete a memory
 - `PUT /graph/memory/{id}` — update a memory
-- `POST /transcribe` — upload audio, returns transcription
+- `POST /transcribe` — upload audio, returns transcription (uses configured provider)
+- `POST /transcribe/meeting` — record meeting audio → timestamped Note
 - `GET /settings` — current user settings
 - `PUT /settings` — update user settings
 - `POST /sync/structural`, `/sync/semantic`, `/sync/full` — trigger sync
@@ -140,7 +141,8 @@ Two independent sync layers with different cost profiles:
 | `uvicorn` | ASGI server for FastAPI |
 | `sse-starlette` | Server-Sent Events for agent response streaming |
 | `watchdog` | File system watcher for auto-sync on notes changes |
-| `mlx-whisper` | Local voice transcription on Apple Silicon |
+| `mlx-whisper` | Local voice transcription on Apple Silicon (optional) |
+| `httpx` | HTTP client for cloud transcription APIs (OpenAI, Mistral) |
 | `langchain-mcp-adapters` | Load external MCP server tools into the agent |
 
 ### Dev Dependencies

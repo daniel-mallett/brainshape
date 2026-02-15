@@ -12,6 +12,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 brain/                    # Python backend
 ├── server.py             # FastAPI (HTTP + SSE) — desktop app backend
 ├── agent.py → tools → graph_db / notes / kg_pipeline
+├── transcribe.py         # Voice transcription (local / OpenAI / Mistral)
+├── settings.py           # Runtime user settings (JSON on disk)
+├── config.py             # Env-based secrets/infra (pydantic-settings)
+├── sync.py               # Structural + semantic sync from notes → graph
+├── watcher.py            # File watcher for auto-sync on .md changes
+├── mcp_client.py         # External MCP server integration
+├── batch.py              # Standalone batch sync for cron/launchd
+└── cli.py                # Interactive CLI chat loop
 
 desktop/                  # Tauri 2 + React + TypeScript
 ├── src/components/       # Editor (CodeMirror 6 + vim), Chat (SSE), Sidebar
@@ -19,20 +27,22 @@ desktop/                  # Tauri 2 + React + TypeScript
 └── src-tauri/            # Rust shell
 ```
 
+### Module Reference
+
 - `brain/agent.py` — agent factory (`create_brain_agent()`), interface-agnostic
 - `brain/tools.py` — 7 LangChain tools (search, semantic search, read, create, edit notes; query graph; find related)
 - `brain/graph_db.py` — Neo4j connection wrapper
 - `brain/notes.py` — notes reader/writer/parser (wikilinks, tags, frontmatter)
 - `brain/server.py` — FastAPI server (HTTP + SSE) for desktop app
-- `brain/kg_pipeline.py` — component-based KG pipeline for entity/relationship extraction
+- `brain/kg_pipeline.py` — embedding pipeline: load → split → embed → write (no LLM entity extraction)
 - `brain/sync.py` — orchestrates incremental structural + semantic sync from notes to graph
-- `brain/settings.py` — persistent user settings (JSON on disk), LLM provider config, MCP servers
+- `brain/settings.py` — persistent user settings (JSON on disk), LLM provider config, transcription config, MCP servers
 - `brain/mcp_client.py` — MCP server client, loads external tools via `langchain-mcp-adapters`
 - `brain/watcher.py` — watchdog file watcher for auto-sync on notes changes
-- `brain/transcribe.py` — local voice transcription via mlx-whisper
+- `brain/transcribe.py` — voice transcription with pluggable providers (local mlx-whisper, OpenAI, Mistral)
 - `brain/cli.py` — interactive CLI chat loop with `/sync` commands
 - `brain/batch.py` — standalone batch sync entry point for cron/launchd
-- `brain/config.py` — pydantic-settings from .env (secrets/infra)
+- `brain/config.py` — pydantic-settings from .env (secrets/infra), exports API keys to `os.environ`
 - `tests/` — unit tests (all external deps mocked, no Docker/Neo4j required)
 
 ## Development Environment
@@ -41,7 +51,7 @@ desktop/                  # Tauri 2 + React + TypeScript
 - Package management: uv (uses `pyproject.toml`, no `requirements.txt`)
 - Virtual environment: `.venv/`
 - Neo4j 5 via Docker (with APOC plugin)
-- Node.js 20+ / npm (for desktop frontend)
+- Node.js 22 / npm (for desktop frontend, see `.nvmrc`)
 - Rust / Cargo (for Tauri shell)
 
 ## Commands
@@ -71,7 +81,7 @@ desktop/                  # Tauri 2 + React + TypeScript
 ## CI & Pre-commit
 
 **Pre-commit hooks** (via `pre-commit` framework):
-- `ruff` — lint check
+- `ruff` — lint check with `--fix` for safe auto-fixes
 - `ruff-format` — format check
 - `gitleaks` — secret detection (API keys, passwords, tokens)
 - `pytest` — runs the test suite
@@ -103,16 +113,18 @@ There is no `[build-system]` table in `pyproject.toml` — the project is not an
 
 Copy `.env.example` to `.env` and fill in `ANTHROPIC_API_KEY` and `NOTES_PATH`.
 
-**Known issue:** `.env` loading doesn't work for all dependencies — the Anthropic API key may need to be exported in your shell profile (e.g. `~/.zshrc`) as well.
+API keys are loaded from both `.env` (via pydantic-settings) and `~/.config/brain/settings.json` (via the settings UI). `config.py` exports them to `os.environ` at startup so downstream libraries (LangChain, Anthropic SDK, etc.) find them automatically. Shell-exported keys take precedence.
 
 **Embedding model:** The default embedding model is `sentence-transformers/all-mpnet-base-v2` (ungated, no login required). This can be changed via the settings UI or `~/.config/brain/settings.json` (`embedding_model` and `embedding_dimensions` keys). Changing the model triggers automatic vector index migration on next sync.
 
+**Transcription:** Supports three providers — `local` (mlx-whisper, Apple Silicon only), `openai` (Whisper API), `mistral` (Voxtral API). Configured via `transcription_provider` and `transcription_model` in settings. Old `whisper_model` setting auto-migrates.
+
 ## Testing
 
-Unit tests live in `tests/`. All external dependencies (Neo4j, Anthropic, HuggingFace) are mocked — no Docker or network access required to run tests.
+Unit tests live in `tests/`. All external dependencies (Neo4j, Anthropic, HuggingFace, cloud APIs) are mocked — no Docker or network access required to run tests.
 
 - `tests/conftest.py` — shared fixtures (`mock_db`, `mock_pipeline`, `tmp_notes`, `notes_settings`)
-- Tests cover: notes parsing/writing, config, graph_db, all 7 tools, sync logic, kg_pipeline components, server endpoints
+- Tests cover: notes parsing/writing, config/env export, graph_db, all 7 tools, sync logic, kg_pipeline components, server endpoints (CRUD, transcription, meeting, settings, sync), transcription providers, settings migration, MCP client, watcher
 
 When adding new functionality, add corresponding tests. When fixing bugs, add a regression test.
 
@@ -125,3 +137,4 @@ Documentation lives in `docs/`, `CLAUDE.md`, and `PLAN.md`. When making changes 
 - **The agent must never have access to raw credentials.** API keys and secrets live in `.env` and are loaded by `config.py` into pre-authenticated clients (Neo4j driver, Anthropic SDK). Agent tools use those clients — they never see the keys themselves.
 - **Any future tool that accesses the internet or file system must go through a service layer** that prevents the agent from exfiltrating secrets (e.g., no arbitrary HTTP requests, no reading outside the notes directory).
 - **The notes path must never overlap with the project directory** to prevent the agent from reading `.env` or source code through note-reading tools.
+- **API keys are never exposed via the settings API.** The `GET /settings` endpoint strips all `*_api_key` fields and returns `*_api_key_set` booleans instead.

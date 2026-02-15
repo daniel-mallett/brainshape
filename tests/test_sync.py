@@ -101,6 +101,27 @@ class TestSyncSemantic:
         assert stats["processed"] == 0
 
 
+class TestSyncEmptyDir:
+    def test_structural_empty_dir(self, tmp_path):
+        """Structural sync on an empty directory should not crash."""
+        db = MagicMock()
+        db.query.return_value = []
+        stats = sync_structural(db, tmp_path)
+        assert stats["notes"] == 0
+        assert stats["tags"] == 0
+        assert stats["links"] == 0
+
+    def test_semantic_empty_dir(self, tmp_path):
+        """Semantic sync on an empty directory should process nothing."""
+        db = MagicMock()
+        pipeline = MagicMock()
+        pipeline.run_async = AsyncMock(return_value=None)
+        db.query.return_value = []
+        stats = sync_semantic(db, pipeline, tmp_path)
+        assert stats["processed"] == 0
+        assert stats["skipped"] == 0
+
+
 class TestSyncAll:
     def test_combines_stats(self, tmp_notes):
         db = MagicMock()

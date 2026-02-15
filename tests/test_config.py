@@ -50,3 +50,31 @@ class TestExportApiKeys:
             export_api_keys()
             # Shell export should be preserved (setdefault doesn't overwrite)
             assert os.environ["ANTHROPIC_API_KEY"] == "sk-from-shell"
+
+    def test_exports_mistral_key(self, monkeypatch):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
+        with patch("brain.settings.load_settings") as mock_load:
+            mock_load.return_value = {
+                "anthropic_api_key": "",
+                "openai_api_key": "",
+                "mistral_api_key": "mk-test-key",
+            }
+            export_api_keys()
+            assert os.environ["MISTRAL_API_KEY"] == "mk-test-key"
+        monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
+
+    def test_exports_openai_key(self, monkeypatch):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
+        with patch("brain.settings.load_settings") as mock_load:
+            mock_load.return_value = {
+                "anthropic_api_key": "",
+                "openai_api_key": "sk-openai-test",
+                "mistral_api_key": "",
+            }
+            export_api_keys()
+            assert os.environ["OPENAI_API_KEY"] == "sk-openai-test"
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)

@@ -6,7 +6,7 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
@@ -129,7 +129,9 @@ class UpdateSettingsRequest(BaseModel):
     ollama_base_url: str | None = None
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
-    whisper_model: str | None = None
+    mistral_api_key: str | None = None
+    transcription_provider: str | None = None
+    transcription_model: str | None = None
     embedding_model: str | None = None
     embedding_dimensions: int | None = None
     mcp_servers: list[dict] | None = None
@@ -505,18 +507,23 @@ def _truncate(text: str | None, max_len: int) -> str | None:
 # --- Transcription ---
 
 
+async def _save_upload_to_temp(audio: UploadFile) -> str:
+    """Save an uploaded audio file to a temp file, return path."""
+    suffix = Path(audio.filename or "audio.wav").suffix or ".wav"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        content = await audio.read()
+        tmp.write(content)
+        return tmp.name
+
+
 @app.post("/transcribe")
 async def transcribe(audio: UploadFile = File(...)):  # noqa: B008
-    """Transcribe an uploaded audio file using local Whisper model."""
+    """Transcribe an uploaded audio file using the configured provider."""
     from brain.transcribe import transcribe_audio
 
-    suffix = Path(audio.filename or "audio.wav").suffix or ".wav"
     tmp_path = None
     try:
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-            tmp_path = tmp.name
-            content = await audio.read()
-            tmp.write(content)
+        tmp_path = await _save_upload_to_temp(audio)
         result = transcribe_audio(tmp_path)
         return result
     except HTTPException:
@@ -526,6 +533,80 @@ async def transcribe(audio: UploadFile = File(...)):  # noqa: B008
     finally:
         if tmp_path:
             Path(tmp_path).unlink(missing_ok=True)
+
+
+@app.post("/transcribe/meeting")
+async def transcribe_meeting(
+    audio: UploadFile = File(...),  # noqa: B008
+    title: str = Form(""),
+    folder: str = Form(""),
+    tags: str = Form(""),
+):
+    """Transcribe audio and save as a new note with timestamps."""
+    from datetime import datetime
+
+    from brain.notes import write_note
+    from brain.settings import load_settings
+    from brain.transcribe import transcribe_audio
+
+    tmp_path = None
+    try:
+        tmp_path = await _save_upload_to_temp(audio)
+        result = transcribe_audio(tmp_path)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {e}") from None
+    finally:
+        if tmp_path:
+            Path(tmp_path).unlink(missing_ok=True)
+
+    # Build note content with timestamps
+    user_settings = load_settings()
+    provider = user_settings.get("transcription_provider", "local")
+    now = datetime.now()
+
+    if not title:
+        title = f"Meeting {now.strftime('%Y-%m-%d %H:%M')}"
+
+    lines = [
+        f"> Transcribed on {now.strftime('%Y-%m-%d at %H:%M')} using {provider}",
+        "",
+    ]
+
+    segments = result.get("segments", [])
+    if segments:
+        for seg in segments:
+            ts = _fmt_time(seg["start"])
+            lines.append(f"**[{ts}]** {seg['text']}")
+            lines.append("")
+    else:
+        lines.append(result.get("text", ""))
+
+    content = "\n".join(lines)
+    tag_list = (
+        [t.strip() for t in tags.split(",") if t.strip()] if tags else ["meeting", "transcription"]
+    )
+
+    notes_path = Path(settings.notes_path).expanduser()
+    note_path = write_note(notes_path, title, content, folder=folder, tags=tag_list)
+    relative = str(note_path.relative_to(notes_path))
+
+    return {
+        "path": relative,
+        "title": title,
+        "text": result.get("text", ""),
+        "segment_count": len(segments),
+    }
+
+
+def _fmt_time(seconds: float) -> str:
+    """Format seconds as MM:SS or H:MM:SS."""
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
 
 
 # --- Settings ---
@@ -559,6 +640,7 @@ def get_settings():
     safe = {k: v for k, v in s.items() if "api_key" not in k}
     safe["anthropic_api_key_set"] = bool(s.get("anthropic_api_key"))
     safe["openai_api_key_set"] = bool(s.get("openai_api_key"))
+    safe["mistral_api_key_set"] = bool(s.get("mistral_api_key"))
     return safe
 
 
@@ -577,8 +659,22 @@ async def put_settings(req: UpdateSettingsRequest):
         updates["anthropic_api_key"] = req.anthropic_api_key
     if req.openai_api_key is not None:
         updates["openai_api_key"] = req.openai_api_key
-    if req.whisper_model is not None:
-        updates["whisper_model"] = req.whisper_model
+    if req.mistral_api_key is not None:
+        updates["mistral_api_key"] = req.mistral_api_key
+    if req.transcription_provider is not None:
+        from brain.settings import VALID_TRANSCRIPTION_PROVIDERS
+
+        if req.transcription_provider not in VALID_TRANSCRIPTION_PROVIDERS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid transcription provider: {req.transcription_provider}",
+            )
+        updates["transcription_provider"] = req.transcription_provider
+        from brain.transcribe import reset_model
+
+        reset_model()
+    if req.transcription_model is not None:
+        updates["transcription_model"] = req.transcription_model
         from brain.transcribe import reset_model
 
         reset_model()
@@ -593,7 +689,14 @@ async def put_settings(req: UpdateSettingsRequest):
     updated = update_settings(updates)
 
     # Re-export API keys to os.environ so downstream libraries pick them up
-    if req.anthropic_api_key is not None or req.openai_api_key is not None:
+    any_key_changed = any(
+        [
+            req.anthropic_api_key is not None,
+            req.openai_api_key is not None,
+            req.mistral_api_key is not None,
+        ]
+    )
+    if any_key_changed:
         import os
 
         from brain.config import export_api_keys
@@ -603,6 +706,8 @@ async def put_settings(req: UpdateSettingsRequest):
             os.environ.pop("ANTHROPIC_API_KEY", None)
         if req.openai_api_key is not None:
             os.environ.pop("OPENAI_API_KEY", None)
+        if req.mistral_api_key is not None:
+            os.environ.pop("MISTRAL_API_KEY", None)
         export_api_keys()
 
     # Hot-reload agent when MCP servers or LLM config changes
@@ -623,7 +728,9 @@ async def put_settings(req: UpdateSettingsRequest):
         _sessions.clear()  # Clear stale sessions since agent was recreated
 
     safe = {k: v for k, v in updated.items() if "api_key" not in k}
+    safe["anthropic_api_key_set"] = bool(updated.get("anthropic_api_key"))
     safe["openai_api_key_set"] = bool(updated.get("openai_api_key"))
+    safe["mistral_api_key_set"] = bool(updated.get("mistral_api_key"))
     return safe
 
 

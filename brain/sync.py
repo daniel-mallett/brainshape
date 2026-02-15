@@ -1,9 +1,12 @@
 import asyncio
+import logging
 from pathlib import Path
 
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline
 from brain.notes import compute_file_hash, list_notes, read_all_notes
+
+logger = logging.getLogger(__name__)
 
 
 def _get_stored_hashes(db: GraphDB) -> dict[str, str]:
@@ -61,7 +64,7 @@ async def sync_semantic_async(db: GraphDB, pipeline: KGPipeline, notes_path: Pat
             )
             stats["processed"] += 1
         except Exception as e:
-            print(f"  Warning: failed to process '{file_path.stem}': {e}")
+            logger.warning("Failed to process '%s': %s", file_path.stem, e)
             stats["skipped"] += 1
 
     return stats
