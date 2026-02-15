@@ -127,6 +127,19 @@ def rewrite_note(notes_path: Path, title: str, new_content: str, relative_path: 
     return file_path
 
 
+def delete_note(notes_path: Path, relative_path: str) -> Path:
+    """Delete a note from the notes directory. Returns the resolved path.
+
+    Raises ``FileNotFoundError`` if the note doesn't exist.
+    Raises ``ValueError`` if the path escapes the notes directory.
+    """
+    file_path = _ensure_within_notes_dir(notes_path, notes_path / relative_path)
+    if not file_path.exists():
+        raise FileNotFoundError(f"Note not found at {relative_path}")
+    file_path.unlink()
+    return file_path
+
+
 def init_notes(notes_path: Path) -> int:
     """Copy seed notes into notes directory if it's empty. Returns number of notes copied.
 

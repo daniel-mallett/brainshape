@@ -14,7 +14,7 @@ from brain.agent import create_brain_agent
 from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline
-from brain.notes import init_notes, list_notes, parse_note, rewrite_note, write_note
+from brain.notes import delete_note, init_notes, list_notes, parse_note, rewrite_note, write_note
 from brain.sync import sync_all, sync_semantic, sync_structural
 
 # Module-level state set during lifespan
@@ -202,6 +202,28 @@ def notes_create(req: CreateNoteRequest):
         return {"path": rel, "title": req.title}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/notes/file/{path:path}")
+def notes_delete(path: str):
+    notes_path = _notes_path()
+    try:
+        delete_note(notes_path, path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Note not found")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Clean up graph: Note node + relationships, and Document/Chunk nodes from semantic sync
+    db = _require_db()
+    db.query("MATCH (n:Note {path: $path}) DETACH DELETE n", {"path": path})
+    db.query(
+        "MATCH (d:Document {source: $path}) "
+        "OPTIONAL MATCH (d)<-[:PART_OF]-(c:Chunk) "
+        "DETACH DELETE c, d",
+        {"path": path},
+    )
+    return {"status": "ok"}
 
 
 @app.put("/notes/file/{path:path}")

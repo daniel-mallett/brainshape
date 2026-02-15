@@ -4,6 +4,7 @@ from brain.notes import (
     SEED_NOTES_DIR,
     _ensure_within_notes_dir,
     compute_file_hash,
+    delete_note,
     init_notes,
     list_notes,
     parse_note,
@@ -186,6 +187,23 @@ class TestRewriteNote:
     def test_rejects_title_traversal(self, tmp_path):
         with pytest.raises(ValueError, match="escapes notes"):
             rewrite_note(tmp_path, "../../../evil", "pwned")
+
+
+class TestDeleteNote:
+    def test_deletes_file(self, tmp_path):
+        write_note(tmp_path, "Doomed", "goodbye")
+        assert (tmp_path / "Doomed.md").exists()
+        result = delete_note(tmp_path, "Doomed.md")
+        assert not (tmp_path / "Doomed.md").exists()
+        assert result == (tmp_path / "Doomed.md").resolve()
+
+    def test_file_not_found(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            delete_note(tmp_path, "nonexistent.md")
+
+    def test_rejects_traversal(self, tmp_path):
+        with pytest.raises(ValueError, match="escapes notes"):
+            delete_note(tmp_path, "../../etc/passwd")
 
 
 class TestInitNotes:

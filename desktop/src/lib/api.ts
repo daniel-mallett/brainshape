@@ -67,6 +67,25 @@ export function updateNoteFile(
   });
 }
 
+export function deleteNoteFile(path: string): Promise<{ status: string }> {
+  return request(`/notes/file/${path}`, { method: "DELETE" });
+}
+
+export function createNoteFile(
+  title: string,
+  content = "",
+  folder = ""
+): Promise<{ path: string; title: string }> {
+  return request("/notes/file", {
+    method: "POST",
+    body: JSON.stringify({ title, content, folder }),
+  });
+}
+
+export function syncStructural(): Promise<{ status: string; stats: Record<string, number> }> {
+  return request("/sync/structural", { method: "POST" });
+}
+
 // --- Agent ---
 
 export function initSession(): Promise<{ session_id: string }> {

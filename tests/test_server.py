@@ -128,6 +128,18 @@ class TestNoteFiles:
         resp = client.put("/notes/file/missing.md", json={"content": "nope"})
         assert resp.status_code == 404
 
+    def test_delete_file(self, client, tmp_notes, server_db):
+        assert (tmp_notes / "Welcome.md").exists()
+        server_db.query.return_value = []
+        resp = client.delete("/notes/file/Welcome.md")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
+        assert not (tmp_notes / "Welcome.md").exists()
+
+    def test_delete_missing_file(self, client, server_db):
+        resp = client.delete("/notes/file/nonexistent.md")
+        assert resp.status_code == 404
+
 
 class TestAgentInit:
     def test_init_session(self, client):
