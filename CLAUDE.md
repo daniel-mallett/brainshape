@@ -18,6 +18,7 @@ brain/                    # Python backend
 ├── sync.py               # Structural + semantic sync from notes → graph
 ├── watcher.py            # File watcher for auto-sync on .md changes
 ├── mcp_client.py         # External MCP server integration
+├── mcp_server.py         # MCP server exposing tools to external agents
 ├── batch.py              # Standalone batch sync for cron/launchd
 └── cli.py                # Interactive CLI chat loop
 
@@ -38,6 +39,7 @@ desktop/                  # Tauri 2 + React + TypeScript
 - `brain/sync.py` — orchestrates incremental structural + semantic sync from notes to graph
 - `brain/settings.py` — persistent user settings (JSON on disk), LLM provider config, transcription config, MCP servers, font/editor prefs, auto-migration of old keys
 - `brain/mcp_client.py` — MCP server client, loads external tools via `langchain-mcp-adapters`
+- `brain/mcp_server.py` — MCP server exposing all 7 tools via stdio, for external agents (Claude Code, etc.)
 - `brain/watcher.py` — watchdog file watcher for auto-sync on notes changes
 - `brain/transcribe.py` — voice transcription with pluggable providers (local mlx-whisper, OpenAI, Mistral)
 - `brain/cli.py` — interactive CLI chat loop with `/sync` commands
@@ -62,6 +64,7 @@ desktop/                  # Tauri 2 + React + TypeScript
 ### Python Backend
 - **Run CLI**: `uv run main.py`
 - **Run server**: `uv run python -m brain.server` (starts FastAPI on port 8765)
+- **Run MCP server**: `uv run python -m brain.mcp_server` (stdio transport for Claude Code)
 - **Start Neo4j**: `docker compose up -d`
 - **Neo4j browser**: http://localhost:7474
 - **Batch sync**: `uv run python -m brain.batch` (semantic), `--structural`, or `--full`
