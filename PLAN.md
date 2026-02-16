@@ -27,6 +27,7 @@
 - HTTP server on port 8765 exposing all Brain operations
 - Endpoints: health, config, notes CRUD, agent init/message (SSE streaming), sync (structural/semantic/full)
 - Graph endpoints: stats, overview, neighborhood (BFS), memories CRUD, notes tags
+- Search endpoints: POST /search/keyword (BM25), POST /search/semantic (vector similarity), both with optional tag filter
 - Settings endpoints: GET/PUT /settings for runtime configuration
 - Transcription endpoints: POST /transcribe (voice-to-text), POST /transcribe/meeting (audio-to-note with timestamps)
 - CORS configured for Vite dev and Tauri origins
@@ -60,7 +61,8 @@
 - **Meeting recording**: Header button opens modal recorder — captures audio, shows elapsed time, then transcribes via `/transcribe/meeting` and creates a timestamped note
 - **Resizable panels**: Sidebar and Chat panels are resizable and collapsible via drag handles (`react-resizable-panels`), sizes persist to localStorage
 - **Command palette**: Cmd+K to search notes and run actions (switch views, create note, sync, etc.). Inline note creation from palette, mouse-hover gating to prevent accidental selection.
-- View switching: Editor / Graph / Memory views in header
+- View switching: Editor / Graph / Memory / Search views in header
+- **Search view**: Dedicated search panel with keyword (BM25) and smart (semantic/vector) modes, tag filter dropdown, debounced input, result snippets with highlighting, score badges. `Cmd+Shift+F` keyboard shortcut.
 - **Sidebar**: forwardRef imperative handle for programmatic control (create note, refresh). Context menu clamped to viewport bounds.
 - **Error boundary**: Top-level React error boundary catches render crashes and offers reload instead of white-screening the app
 - **SurrealDB warning bar**: Shows a subtle warning below the header when SurrealDB is not connected (degraded mode)
@@ -73,7 +75,7 @@
 - Health check with auto-reconnect polling
 
 ### Testing & CI
-- 390 unit tests (89% coverage) covering all modules including tools (edge cleanup, entity-type matrix, reserved names, duplicate prevention), graph_db (table discovery), server (graph endpoints, memory connections), notes (wikilink dedup), settings, transcription providers, watcher, MCP client/server, vault import, trash system, note rename, error boundary
+- 396 unit tests (89% coverage) covering all modules including tools (edge cleanup, entity-type matrix, reserved names, duplicate prevention), graph_db (table discovery), server (graph endpoints, memory connections, search), notes (wikilink dedup), settings, transcription providers, watcher, MCP client/server, vault import, trash system, note rename, error boundary
 - Server tests properly isolated (noop lifespan, no SurrealDB connection required)
 - CI: GitHub Actions workflow runs ruff, ty, and pytest (with coverage) on push/PR to main
 - Pre-commit hooks: ruff lint, ruff format, gitleaks secret detection, pytest
@@ -91,7 +93,7 @@
 2. **Killer demo** — build a showcase that demonstrates the agent's long-term memory and cross-note intelligence (e.g., surfacing a forgotten connection, recalling a preference from months ago, answering "what did I write about X last quarter?"). The value of structured memory over flat RAG needs to be felt immediately.
 
 ### Product
-3. Search UI — dedicated search view with filters (by tag, date, keyword, semantic)
+3. ~~Search UI~~ — **DONE** (dedicated search view with keyword/BM25 and semantic/vector modes, tag filter, debounced input, result snippets with highlighting, `Cmd+Shift+F` shortcut)
 4. ~~Rich markdown preview~~ — **DONE** (three-mode editor: edit/inline/preview)
 5. Streaming transcription — real-time output as user speaks (progressive UI, leverage Mistral realtime API)
 

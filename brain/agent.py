@@ -2,12 +2,13 @@ import logging
 from pathlib import Path
 
 from langchain.agents import create_agent
+from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.memory import MemorySaver
 
 from brain import tools
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline, create_kg_pipeline
-from brain.settings import get_llm_model_string
+from brain.settings import get_llm_kwargs, get_llm_model_string
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,9 @@ def create_brain_agent(
 
     checkpointer = MemorySaver()
 
-    model = get_llm_model_string()
+    model_string = get_llm_model_string()
+    model_kwargs = get_llm_kwargs()
+    model = init_chat_model(model_string, **model_kwargs)
 
     all_tools = list(tools.ALL_TOOLS)
     if mcp_tools:
@@ -135,7 +138,10 @@ def recreate_agent(
     tools.pipeline = pipeline
 
     checkpointer = MemorySaver()
-    model = get_llm_model_string()
+
+    model_string = get_llm_model_string()
+    model_kwargs = get_llm_kwargs()
+    model = init_chat_model(model_string, **model_kwargs)
 
     all_tools = list(tools.ALL_TOOLS)
     if mcp_tools:

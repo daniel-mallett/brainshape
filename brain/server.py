@@ -149,6 +149,12 @@ class UpdateMemoryRequest(BaseModel):
     content: str
 
 
+class SearchRequest(BaseModel):
+    query: str
+    tag: str | None = None
+    limit: int = 20
+
+
 class UpdateSettingsRequest(BaseModel):
     notes_path: str | None = None
     llm_provider: str | None = None
@@ -217,7 +223,7 @@ async def agent_message(req: MessageRequest):
 
     async def event_generator():
         try:
-            for event in _agent.stream(messages, config=config, stream_mode="messages"):
+            async for event in _agent.astream(messages, config=config, stream_mode="messages"):
                 msg_chunk, metadata = event
                 # Only process AI message chunks (skip tool responses, human messages)
                 if msg_chunk.type != "AIMessageChunk":
@@ -746,6 +752,64 @@ def notes_tags():
     return {"tags": [r["name"] for r in results]}
 
 
+# --- Search ---
+
+
+@app.post("/search/keyword")
+def search_keyword(req: SearchRequest):
+    """BM25 fulltext search over note content."""
+    db = _require_db()
+    limit = min(req.limit, 50)
+    if req.tag:
+        results = db.query(
+            "SELECT title, path, string::slice(content, 0, 300) AS snippet, "
+            "search::score(1) AS score "
+            "FROM note WHERE content @1@ $query "
+            "AND ->tagged_with->tag.name CONTAINS $tag "
+            "ORDER BY score DESC LIMIT $limit",
+            {"query": req.query, "tag": req.tag, "limit": limit},
+        )
+    else:
+        results = db.query(
+            "SELECT title, path, string::slice(content, 0, 300) AS snippet, "
+            "search::score(1) AS score "
+            "FROM note WHERE content @1@ $query "
+            "ORDER BY score DESC LIMIT $limit",
+            {"query": req.query, "limit": limit},
+        )
+    return {"results": results}
+
+
+@app.post("/search/semantic")
+def search_semantic(req: SearchRequest):
+    """Vector similarity search over note content using embeddings."""
+    db = _require_db()
+    if _pipeline is None:
+        raise HTTPException(status_code=503, detail="Embedding pipeline not initialized")
+    limit = min(req.limit, 50)
+    embedding = _pipeline.embed_query(req.query)
+    results = db.query(
+        "SELECT "
+        "(->from_document->note)[0].title AS title, "
+        "(->from_document->note)[0].path AS path, "
+        "string::slice(text, 0, 300) AS snippet, "
+        "vector::similarity::cosine(embedding, $embedding) AS score "
+        "FROM chunk "
+        "WHERE embedding <|10,40|> $embedding "
+        "ORDER BY score DESC LIMIT $limit",
+        {"embedding": embedding, "limit": limit},
+    )
+    # Post-filter by tag if specified
+    if req.tag and results:
+        tagged_paths = db.query(
+            "SELECT VALUE <-tagged_with<-note.path FROM tag WHERE name = $tag",
+            {"tag": req.tag},
+        )
+        path_set = set(tagged_paths[0]) if tagged_paths and tagged_paths[0] else set()
+        results = [r for r in results if r.get("path") in path_set]
+    return {"results": results}
+
+
 def _primary_label(table: str) -> str:
     """Capitalize a SurrealDB table name for display."""
     return table.capitalize() if table else "Unknown"
@@ -1012,6 +1076,7 @@ async def put_settings(req: UpdateSettingsRequest):
             req.mcp_servers is not None,
             req.llm_provider is not None,
             req.llm_model is not None,
+            req.ollama_base_url is not None,
         ]
     )
     needs_pipeline_reload = any(
@@ -1062,6 +1127,28 @@ async def put_settings(req: UpdateSettingsRequest):
     safe = {k: v for k, v in updated.items() if "api_key" not in k}
     _add_key_flags(safe, updated)
     return safe
+
+
+# --- Ollama ---
+
+
+@app.get("/ollama/models")
+def ollama_models(base_url: str = "http://localhost:11434"):
+    """Fetch installed models from an Ollama instance."""
+    import httpx
+
+    try:
+        resp = httpx.get(f"{base_url.rstrip('/')}/api/tags", timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+        models = [{"name": m["name"], "size": m.get("size", 0)} for m in data.get("models", [])]
+        return {"models": models}
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=502, detail=f"Cannot connect to Ollama at {base_url}"
+        ) from None
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Ollama error: {e}") from e
 
 
 # --- Sync ---

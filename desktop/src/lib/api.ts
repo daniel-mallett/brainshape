@@ -256,6 +256,52 @@ export function getTags(): Promise<{ tags: string[] }> {
   return request("/notes/tags");
 }
 
+// --- Search ---
+
+export interface SearchResult {
+  title: string;
+  path: string;
+  snippet: string;
+  score: number;
+}
+
+export function searchKeyword(
+  query: string,
+  tag?: string,
+  limit = 20
+): Promise<{ results: SearchResult[] }> {
+  return request("/search/keyword", {
+    method: "POST",
+    body: JSON.stringify({ query, tag: tag || null, limit }),
+  });
+}
+
+export function searchSemantic(
+  query: string,
+  tag?: string,
+  limit = 20
+): Promise<{ results: SearchResult[] }> {
+  return request("/search/semantic", {
+    method: "POST",
+    body: JSON.stringify({ query, tag: tag || null, limit }),
+  });
+}
+
+// --- Ollama ---
+
+export interface OllamaModel {
+  name: string;
+  size: number;
+}
+
+export function getOllamaModels(
+  baseUrl = "http://localhost:11434"
+): Promise<{ models: OllamaModel[] }> {
+  return request(
+    `/ollama/models?base_url=${encodeURIComponent(baseUrl)}`
+  );
+}
+
 // --- Agent ---
 
 export function initSession(): Promise<{ session_id: string }> {

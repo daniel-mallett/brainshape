@@ -37,6 +37,7 @@ desktop/                     # Tauri 2 desktop app (React + TypeScript + Vite)
 │   │   ├── GraphPanel.tsx   # Graph stats + overview controls
 │   │   ├── GraphView.tsx    # Force-directed graph visualization
 │   │   ├── MemoryPanel.tsx  # Browse, edit, delete agent memories
+│   │   ├── SearchPanel.tsx  # Keyword (BM25) + semantic search with tag filter
 │   │   ├── SettingsPanel.tsx # LLM provider/model, API keys, MCP servers, voice config
 │   │   ├── CommandPalette.tsx # Cmd+K search and actions
 │   │   ├── MeetingRecorder.tsx # Meeting audio recording + transcription modal
@@ -54,7 +55,7 @@ desktop/                     # Tauri 2 desktop app (React + TypeScript + Vite)
 │   │   ├── inlineMarkdown.ts # CodeMirror inline markdown rendering (WYSIWYG decorations)
 │   │   ├── completions.ts   # Wikilink + tag autocomplete
 │   │   └── utils.ts         # Tailwind merge utilities
-│   └── App.tsx              # Multi-view layout (Editor / Graph / Memory / Settings)
+│   └── App.tsx              # Multi-view layout (Editor / Graph / Memory / Search / Settings)
 ├── src-tauri/               # Rust shell (Tauri 2)
 ├── package.json
 └── vite.config.ts
@@ -114,6 +115,8 @@ Future interfaces (Slack, Discord, voice) each import `create_brain_agent()` and
 - `POST /notes/trash/{path}/restore` — restore a note from trash
 - `DELETE /notes/trash` — permanently empty trash
 - `GET /notes/tags` — list all tags
+- `POST /search/keyword` — BM25 fulltext search with optional tag filter
+- `POST /search/semantic` — vector similarity search with optional tag filter
 - `GET /graph/stats` — node/relationship counts (dynamic table discovery)
 - `GET /graph/overview` — all nodes and edges (optional label filter, includes custom relations)
 - `GET /graph/neighborhood/{path}` — local subgraph around a note (BFS over all edge tables)

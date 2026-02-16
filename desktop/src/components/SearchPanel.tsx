@@ -1,0 +1,249 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  searchKeyword,
+  searchSemantic,
+  getTags,
+  type SearchResult,
+} from "../lib/api";
+import { Input } from "./ui/input";
+import { ScrollArea } from "./ui/scroll-area";
+
+type SearchMode = "keyword" | "semantic";
+
+interface SearchPanelProps {
+  onNavigateToNote: (path: string) => void;
+}
+
+export function SearchPanel({ onNavigateToNote }: SearchPanelProps) {
+  const [query, setQuery] = useState("");
+  const [mode, setMode] = useState<SearchMode>("keyword");
+  const [tag, setTag] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [tags, setTags] = useState<string[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch available tags on mount
+  useEffect(() => {
+    getTags()
+      .then((data) => setTags(data.tags))
+      .catch(console.error);
+  }, []);
+
+  // Focus input on mount
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const doSearch = useCallback(
+    async (q: string, m: SearchMode, t: string) => {
+      if (!q.trim()) {
+        setResults([]);
+        setHasSearched(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const searchFn = m === "semantic" ? searchSemantic : searchKeyword;
+        const data = await searchFn(q, t || undefined);
+        setResults(data.results);
+        setHasSearched(true);
+      } catch (err) {
+        console.error("Search failed:", err);
+        setResults([]);
+        setHasSearched(true);
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
+  // Debounced search on query/mode/tag change
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    const delay = mode === "semantic" ? 500 : 300;
+    timerRef.current = setTimeout(() => doSearch(query, mode, tag), delay);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [query, mode, tag, doSearch]);
+
+  const highlightSnippet = (snippet: string, q: string) => {
+    if (!q.trim() || mode === "semantic") return snippet;
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const parts = snippet.split(new RegExp(`(${escaped})`, "gi"));
+    return parts.map((part, i) =>
+      part.toLowerCase() === q.toLowerCase() ? (
+        <mark key={i} className="bg-yellow-500/30 text-inherit rounded px-0.5">
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    );
+  };
+
+  const formatScore = (score: number) => {
+    if (mode === "semantic") return `${(score * 100).toFixed(0)}%`;
+    return score.toFixed(2);
+  };
+
+  return (
+    <div className="flex flex-col h-full" style={{ backgroundColor: "var(--bg-primary)" }}>
+      {/* Header */}
+      <div
+        className="flex flex-col gap-3 p-4 border-b"
+        style={{ borderColor: "var(--border-primary)" }}
+      >
+        <div className="flex items-center gap-2">
+          <Input
+            ref={inputRef}
+            placeholder={
+              mode === "semantic"
+                ? "Search by meaning..."
+                : "Search by keyword..."
+            }
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="flex-1"
+            style={{
+              backgroundColor: "var(--bg-secondary)",
+              borderColor: "var(--border-primary)",
+              color: "var(--text-primary)",
+            }}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Mode toggle */}
+          <div
+            className="flex rounded-md overflow-hidden border"
+            style={{ borderColor: "var(--border-primary)" }}
+          >
+            <button
+              onClick={() => setMode("keyword")}
+              className="px-3 py-1 text-xs font-medium transition-colors"
+              style={{
+                backgroundColor:
+                  mode === "keyword" ? "var(--accent-primary)" : "var(--bg-secondary)",
+                color:
+                  mode === "keyword" ? "var(--bg-primary)" : "var(--text-secondary)",
+              }}
+            >
+              Keyword
+            </button>
+            <button
+              onClick={() => setMode("semantic")}
+              className="px-3 py-1 text-xs font-medium transition-colors"
+              style={{
+                backgroundColor:
+                  mode === "semantic" ? "var(--accent-primary)" : "var(--bg-secondary)",
+                color:
+                  mode === "semantic" ? "var(--bg-primary)" : "var(--text-secondary)",
+              }}
+            >
+              Smart
+            </button>
+          </div>
+          {/* Tag filter */}
+          {tags.length > 0 && (
+            <select
+              value={tag}
+              onChange={(e) => setTag(e.target.value)}
+              className="text-xs px-2 py-1 rounded border"
+              style={{
+                backgroundColor: "var(--bg-secondary)",
+                borderColor: "var(--border-primary)",
+                color: "var(--text-secondary)",
+              }}
+            >
+              <option value="">All tags</option>
+              {tags.map((t) => (
+                <option key={t} value={t}>
+                  #{t}
+                </option>
+              ))}
+            </select>
+          )}
+          {/* Result count */}
+          {hasSearched && (
+            <span className="text-xs ml-auto" style={{ color: "var(--text-muted)" }}>
+              {results.length} result{results.length !== 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Results */}
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-2">
+          {loading && (
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+              Searching...
+            </p>
+          )}
+          {!loading && !hasSearched && !query.trim() && (
+            <div className="text-center py-12">
+              <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                Type to search your notes
+              </p>
+              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                Use <strong>Keyword</strong> for exact matches or{" "}
+                <strong>Smart</strong> for meaning-based search
+              </p>
+            </div>
+          )}
+          {!loading && hasSearched && results.length === 0 && (
+            <p className="text-sm text-center py-8" style={{ color: "var(--text-muted)" }}>
+              No results found
+            </p>
+          )}
+          {results.map((r, i) => (
+            <button
+              key={`${r.path}-${i}`}
+              onClick={() => onNavigateToNote(r.path)}
+              className="w-full text-left p-3 rounded-lg border transition-colors hover:border-[var(--accent-primary)]"
+              style={{
+                backgroundColor: "var(--bg-secondary)",
+                borderColor: "var(--border-primary)",
+              }}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span
+                  className="font-medium text-sm"
+                  style={{ color: "var(--text-primary)" }}
+                >
+                  {r.title}
+                </span>
+                <span
+                  className="text-xs px-1.5 py-0.5 rounded"
+                  style={{
+                    backgroundColor: "var(--accent-primary)",
+                    color: "var(--bg-primary)",
+                    opacity: 0.8,
+                  }}
+                >
+                  {formatScore(r.score)}
+                </span>
+              </div>
+              <p
+                className="text-xs leading-relaxed line-clamp-2"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                {highlightSnippet(r.snippet || "", query)}
+              </p>
+              <span
+                className="text-xs mt-1 block"
+                style={{ color: "var(--text-muted)" }}
+              >
+                {r.path}
+              </span>
+            </button>
+          ))}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}

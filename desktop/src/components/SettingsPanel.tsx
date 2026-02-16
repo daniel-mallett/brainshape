@@ -3,6 +3,7 @@ import {
   getSettings,
   updateSettings,
   importVault,
+  getOllamaModels,
   type Settings,
   type MCPServer,
 } from "../lib/api";
@@ -244,6 +245,11 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
   const [editorLineNumbers, setEditorLineNumbers] = useState(false);
   const [editorWordWrap, setEditorWordWrap] = useState(true);
 
+  // Ollama
+  const [ollamaModels, setOllamaModels] = useState<ModelOption[]>([]);
+  const [ollamaError, setOllamaError] = useState("");
+  const [ollamaLoading, setOllamaLoading] = useState(false);
+
   // Import
   const [importPath, setImportPath] = useState("");
   const [importing, setImporting] = useState(false);
@@ -287,6 +293,38 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
   }, []);
 
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
+
+  // Fetch Ollama models when provider is ollama
+  useEffect(() => {
+    if (provider !== "ollama") {
+      setOllamaModels([]);
+      setOllamaError("");
+      return;
+    }
+    const url = ollamaUrl || "http://localhost:11434";
+    setOllamaLoading(true);
+    setOllamaError("");
+    getOllamaModels(url)
+      .then((data) => {
+        const models = data.models.map((m) => ({
+          value: m.name,
+          label: m.name,
+        }));
+        setOllamaModels(models);
+        if (models.length > 0 && !model) {
+          setModel(models[0].value);
+        }
+      })
+      .catch((err) => {
+        setOllamaError(
+          err instanceof Error && err.message.includes("502")
+            ? `Cannot connect to Ollama at ${url}`
+            : "Failed to fetch Ollama models"
+        );
+        setOllamaModels([]);
+      })
+      .finally(() => setOllamaLoading(false));
+  }, [provider, ollamaUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live preview: apply theme as user changes colors
   const livePreviewTheme = useCallback(() => {
@@ -375,7 +413,9 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
     );
   }
 
-  const suggestions = SUGGESTED_MODELS[provider] || [];
+  const suggestions = provider === "ollama"
+    ? ollamaModels
+    : (SUGGESTED_MODELS[provider] || []);
   const txSuggestions = SUGGESTED_TRANSCRIPTION_MODELS[txProvider] || [];
   const currentBaseTheme = BUILTIN_THEMES.find((t) => t.name === themeName) || BUILTIN_THEMES[0];
 
@@ -632,11 +672,24 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
               <ApiKeyField label="API Key" value={openaiKey} isSet={!!settings?.openai_api_key_set} onChange={(v) => { setOpenaiKey(v); markDirty(); }} placeholder="sk-..." />
             )}
             {provider === "ollama" && (
-              <section className="space-y-1.5">
-                <FieldLabel>Base URL</FieldLabel>
-                <Input value={ollamaUrl} onChange={(e) => { setOllamaUrl(e.target.value); markDirty(); }} placeholder="http://localhost:11434" className="h-8 text-sm" />
-                <FieldHint>No API key needed for local Ollama.</FieldHint>
-              </section>
+              <>
+                <section className="space-y-1.5">
+                  <FieldLabel>Base URL</FieldLabel>
+                  <Input value={ollamaUrl} onChange={(e) => { setOllamaUrl(e.target.value); markDirty(); }} placeholder="http://localhost:11434" className="h-8 text-sm" />
+                  {ollamaLoading && <FieldHint>Connecting to Ollama...</FieldHint>}
+                  {ollamaError && (
+                    <p className="text-xs text-destructive">
+                      {ollamaError}. For a remote machine, set the URL to <code className="bg-muted px-1 rounded text-[11px]">http://HOSTNAME:11434</code>
+                    </p>
+                  )}
+                  {!ollamaLoading && !ollamaError && ollamaModels.length > 0 && (
+                    <FieldHint>Connected — {ollamaModels.length} model{ollamaModels.length !== 1 ? "s" : ""} installed.</FieldHint>
+                  )}
+                  {!ollamaLoading && !ollamaError && ollamaModels.length === 0 && (
+                    <FieldHint>No models found. Run <code className="bg-muted px-1 rounded text-[11px]">ollama pull llama3.1</code> to install one.</FieldHint>
+                  )}
+                </section>
+              </>
             )}
           </div>
 

@@ -36,7 +36,7 @@
 
 ### Unit Tests — DONE
 
-390 unit tests (89% coverage) covering all modules including tools (edge cleanup, entity-type matrix, reserved names, duplicate prevention), graph_db (table discovery), server (graph endpoints, memory connections), notes (wikilink dedup), settings, transcription providers, watcher, MCP client/server, vault import, trash system, note rename. All external deps mocked. Run with `uv run pytest`.
+396 unit tests (89% coverage) covering all modules including tools (edge cleanup, entity-type matrix, reserved names, duplicate prevention), graph_db (table discovery), server (graph endpoints, memory connections, search), notes (wikilink dedup), settings, transcription providers, watcher, MCP client/server, vault import, trash system, note rename. All external deps mocked. Run with `uv run pytest`.
 
 ### Other Items — DONE
 
@@ -49,11 +49,10 @@
 - MCP server (HTTP + stdio transports)
 - Configurable notes path with native file picker
 - Trash system and note rename with wikilink rewriting
+- Search UI (keyword/BM25 + semantic/vector, tag filter, Cmd+Shift+F)
 
 ### Future Work
 
 - Single-binary install (bundle Python server as Tauri sidecar via PyInstaller)
-- Search UI (dedicated search view with filters)
 - Streaming transcription (real-time output)
-- Plugin system beyond MCP servers
 - Multi-device sync via Git or cloud storage

@@ -136,6 +136,25 @@ def get_llm_model_string(settings: dict[str, Any] | None = None) -> str:
     return f"anthropic:{model}"
 
 
+def get_llm_kwargs(settings: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Return extra kwargs needed for LangChain model init (e.g. Ollama base_url)."""
+    if settings is None:
+        settings = load_settings()
+
+    provider = settings.get("llm_provider", DEFAULTS["llm_provider"])
+    kwargs: dict[str, Any] = {}
+
+    if provider == "ollama":
+        kwargs["base_url"] = settings.get("ollama_base_url", DEFAULTS["ollama_base_url"])
+        # Always use reasoning=True so Ollama separates thinking into its own
+        # field rather than leaking it into content (think:false is broken in
+        # Ollama streaming as of 0.16.1). The server only streams content, so
+        # thinking is automatically excluded from the chat response.
+        kwargs["reasoning"] = True
+
+    return kwargs
+
+
 def get_notes_path() -> str:
     """Resolve the notes path: settings.json > .env > default.
 

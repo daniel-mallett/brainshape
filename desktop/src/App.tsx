@@ -10,11 +10,12 @@ import { MemoryPanel } from "./components/MemoryPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import { MeetingRecorder } from "./components/MeetingRecorder";
+import { SearchPanel } from "./components/SearchPanel";
 import { SetupScreen } from "./components/SetupScreen";
 import { Button } from "@/components/ui/button";
 import "./App.css";
 
-type ActiveView = "editor" | "graph" | "memory";
+type ActiveView = "editor" | "graph" | "memory" | "search";
 
 function GearIcon({ className }: { className?: string }) {
   return (
@@ -185,6 +186,10 @@ function App() {
         e.preventDefault();
         setPaletteOpen((prev) => !prev);
       }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "f") {
+        e.preventDefault();
+        setActiveView("search");
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === "[") {
         e.preventDefault();
         goBack();
@@ -254,6 +259,7 @@ function App() {
           <Button variant={activeView === "editor" ? "secondary" : "ghost"} size="sm" onClick={() => setActiveView("editor")} className="h-6 text-xs">Editor</Button>
           <Button variant={activeView === "graph" ? "secondary" : "ghost"} size="sm" onClick={() => setActiveView("graph")} className="h-6 text-xs">Graph</Button>
           <Button variant={activeView === "memory" ? "secondary" : "ghost"} size="sm" onClick={() => setActiveView("memory")} className="h-6 text-xs">Memory</Button>
+          <Button variant={activeView === "search" ? "secondary" : "ghost"} size="sm" onClick={() => setActiveView("search")} className="h-6 text-xs">Search</Button>
           <div className="border-l border-border h-4 mx-1" />
           <Button variant={chatOpen ? "secondary" : "ghost"} size="sm" onClick={() => setChatOpen(!chatOpen)} className="h-6 text-xs">Chat</Button>
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 ml-1" />
@@ -309,6 +315,7 @@ function App() {
             )}
             {activeView === "graph" && <GraphPanel onNavigateToNote={handleNavigateToNote} />}
             {activeView === "memory" && <MemoryPanel />}
+            {activeView === "search" && <SearchPanel onNavigateToNote={handleNavigateToNote} />}
           </Panel>
 
           {/* Chat panel */}

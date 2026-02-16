@@ -103,6 +103,15 @@ export function CommandPalette({
         },
       },
       {
+        id: "view-search",
+        label: "Switch to Search",
+        category: "action",
+        action: () => {
+          onClose();
+          onSwitchView("search");
+        },
+      },
+      {
         id: "view-settings",
         label: "Open Settings",
         category: "action",

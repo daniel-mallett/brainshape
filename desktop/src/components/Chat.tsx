@@ -122,13 +122,18 @@ export function Chat({ onNavigateToNote }: { onNavigateToNote?: (title: string) 
               isAnimating={i === streamingMessageIndex}
             />
           ))}
-          {isStreaming && (
-            <div className="flex justify-start">
-              <div className="text-xs text-muted-foreground px-3 py-1">
-                thinking...
+          {isStreaming && (() => {
+            const lastMsg = messages[messages.length - 1];
+            const hasContent = lastMsg?.role === "assistant" &&
+              (lastMsg.content !== "" || (lastMsg.toolCalls && lastMsg.toolCalls.length > 0));
+            return !hasContent ? (
+              <div className="flex justify-start">
+                <div className="text-xs text-muted-foreground px-3 py-1">
+                  thinking...
+                </div>
               </div>
-            </div>
-          )}
+            ) : null;
+          })()}
         </div>
       </ScrollArea>
 

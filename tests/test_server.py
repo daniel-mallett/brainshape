@@ -643,6 +643,56 @@ class TestNoteTags:
         assert resp.json()["tags"] == ["python", "project"]
 
 
+class TestSearch:
+    def test_keyword_search(self, client, server_db):
+        server_db.query.return_value = [
+            {"title": "Note 1", "path": "Note 1.md", "snippet": "matching content", "score": 2.5}
+        ]
+        resp = client.post("/search/keyword", json={"query": "test"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["results"]) == 1
+        assert data["results"][0]["title"] == "Note 1"
+
+    def test_keyword_search_with_tag(self, client, server_db):
+        server_db.query.return_value = [
+            {"title": "Tagged", "path": "Tagged.md", "snippet": "...", "score": 1.0}
+        ]
+        resp = client.post("/search/keyword", json={"query": "test", "tag": "python"})
+        assert resp.status_code == 200
+        # Verify tag parameter was included in query
+        sql = server_db.query.call_args[0][0]
+        assert "tag" in sql.lower()
+
+    def test_keyword_search_empty_results(self, client, server_db):
+        server_db.query.return_value = []
+        resp = client.post("/search/keyword", json={"query": "nonexistent"})
+        assert resp.status_code == 200
+        assert resp.json()["results"] == []
+
+    def test_semantic_search(self, client, server_db):
+        server_db.query.return_value = [
+            {"title": "Concept", "path": "Concept.md", "snippet": "related", "score": 0.85}
+        ]
+        resp = client.post("/search/semantic", json={"query": "machine learning"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["results"]) == 1
+        assert data["results"][0]["score"] == 0.85
+
+    def test_semantic_search_requires_pipeline(self, bare_client):
+        resp = bare_client.post("/search/semantic", json={"query": "test"})
+        assert resp.status_code == 503
+
+    def test_search_limit_capped(self, client, server_db):
+        server_db.query.return_value = []
+        resp = client.post("/search/keyword", json={"query": "test", "limit": 100})
+        assert resp.status_code == 200
+        # Verify the limit passed to DB was capped at 50
+        params = server_db.query.call_args[0][1]
+        assert params["limit"] <= 50
+
+
 class TestTranscription:
     def test_transcribe_audio(self, client, monkeypatch):
         mock_transcribe = MagicMock(return_value={"text": "Hello world", "segments": []})
