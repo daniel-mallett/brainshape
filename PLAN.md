@@ -15,7 +15,7 @@
 - Folder-aware note creation and editing (edit_note looks up path from graph)
 - Tool responses use notes-relative paths only (no system path leakage)
 - Seed notes for first-run experience (Welcome, About Me, 3 Tutorials)
-- **Settings system**: persistent JSON config (~/.config/brain/settings.json), runtime-configurable LLM provider (Anthropic/OpenAI/Ollama), model selection, Whisper model
+- **Settings system**: persistent JSON config (~/.config/brain/settings.json), runtime-configurable LLM provider (Anthropic/OpenAI/Ollama), model selection, unified font family, auto-migration of old settings keys
 - **Configurable embedding model**: default `sentence-transformers/all-mpnet-base-v2` (ungated), switchable via settings, auto-migrates vector index on dimension change
 - **MCP server integration**: consume external MCP servers via `langchain-mcp-adapters`, stdio + HTTP transports, hot-reload on settings change (no restart required)
 - **File watching**: watchdog monitors notes directory, auto-triggers structural sync on .md changes (debounced 2s)
@@ -50,17 +50,18 @@
 - **Markdown rendering in chat**: Streamdown (streaming-aware markdown renderer) + Shiki code highlighting for agent messages
 - **Editor three-mode toggle**: Edit (plain CodeMirror), Inline (WYSIWYG decorations that hide syntax on non-cursor lines), Preview (read-only Streamdown rendering)
 - **Token-by-token SSE streaming**: server streams via `stream_mode="messages"`, JSON-encoded tokens preserve newlines across SSE transport
-- **Settings panel**: Appearance (theme selector + per-property color customizer), Fonts (UI font, editor font, font size), Editor (keybindings, line numbers, word wrap), LLM provider, transcription provider, MCP server editor
+- **Settings panel**: Appearance (theme selector + per-property color customizer), Fonts (unified font family + editor font size), Editor (keybindings, line numbers, word wrap), LLM provider, transcription provider, MCP server editor
 - **Theme engine**: 4 built-in themes (Midnight, Dawn, Nord, Solarized Dark), ~40 CSS variables covering all UI elements (base colors, surfaces, editor syntax, graph nodes, sidebar). Full per-property customization with color pickers and live preview. Themes persist to backend settings.
 - **Meeting recording**: Header button opens modal recorder — captures audio, shows elapsed time, then transcribes via `/transcribe/meeting` and creates a timestamped note
 - **Resizable panels**: Sidebar and Chat panels are resizable and collapsible via drag handles (`react-resizable-panels`), sizes persist to localStorage
-- **Command palette**: Cmd+K to search notes and run actions (switch views, create note, sync, etc.)
+- **Command palette**: Cmd+K to search notes and run actions (switch views, create note, sync, etc.). Inline note creation from palette, mouse-hover gating to prevent accidental selection.
 - View switching: Editor / Graph / Memory views in header
+- **Sidebar**: forwardRef imperative handle for programmatic control (create note, refresh). Context menu clamped to viewport bounds.
 - ShadCN UI components (button, input, scroll-area) + Tailwind v4
 - Health check with auto-reconnect polling
 
 ### Testing & CI
-- 202+ unit tests covering all modules including server, settings, transcription providers, watcher, MCP client
+- 208+ unit tests covering all modules including server, settings, transcription providers, watcher, MCP client
 - Server tests properly isolated (noop lifespan, no Neo4j connection required)
 - CI: GitHub Actions workflow runs ruff, ty, and pytest (with coverage) on push/PR to main
 - Pre-commit hooks: ruff lint, ruff format, gitleaks secret detection, pytest

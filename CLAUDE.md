@@ -36,7 +36,7 @@ desktop/                  # Tauri 2 + React + TypeScript
 - `brain/server.py` — FastAPI server (HTTP + SSE) for desktop app
 - `brain/kg_pipeline.py` — embedding pipeline: load → split → embed → write (no LLM entity extraction)
 - `brain/sync.py` — orchestrates incremental structural + semantic sync from notes to graph
-- `brain/settings.py` — persistent user settings (JSON on disk), LLM provider config, transcription config, MCP servers
+- `brain/settings.py` — persistent user settings (JSON on disk), LLM provider config, transcription config, MCP servers, font/editor prefs, auto-migration of old keys
 - `brain/mcp_client.py` — MCP server client, loads external tools via `langchain-mcp-adapters`
 - `brain/watcher.py` — watchdog file watcher for auto-sync on notes changes
 - `brain/transcribe.py` — voice transcription with pluggable providers (local mlx-whisper, OpenAI, Mistral)
@@ -118,6 +118,8 @@ API keys are loaded from both `.env` (via pydantic-settings) and `~/.config/brai
 **Embedding model:** The default embedding model is `sentence-transformers/all-mpnet-base-v2` (ungated, no login required). This can be changed via the settings UI or `~/.config/brain/settings.json` (`embedding_model` and `embedding_dimensions` keys). Changing the model triggers automatic vector index migration on next sync.
 
 **Transcription:** Supports three providers — `local` (mlx-whisper, Apple Silicon only), `openai` (Whisper API), `mistral` (Voxtral API). Configured via `transcription_provider` and `transcription_model` in settings. Old `whisper_model` setting auto-migrates.
+
+**Fonts:** A single `font_family` setting applies to the entire app (UI, editor, preview). When empty, falls back to CSS defaults (Inter for UI, JetBrains Mono for editor). Old `ui_font_family`/`editor_font_family` settings auto-migrate to `font_family`.
 
 ## Testing
 
