@@ -12,12 +12,15 @@ import { inlineMarkdownExtension } from "../lib/inlineMarkdown";
 import { brainThemeExtension } from "../lib/editorTheme";
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
+import { remarkWikilinks } from "../lib/remarkWikilinks";
+import { createWikilinkComponents } from "../lib/WikilinkComponents";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 
 type EditorMode = "edit" | "inline" | "preview";
 
 const streamdownPlugins = { code };
+const wikilinkRemarkPlugins = [remarkWikilinks];
 
 interface EditorProps {
   filePath: string | null;
@@ -157,7 +160,11 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
       {editorMode === "preview" ? (
         <ScrollArea className="flex-1 overflow-hidden">
           <div className="p-6 max-w-prose">
-            <Streamdown plugins={streamdownPlugins}>
+            <Streamdown
+              plugins={streamdownPlugins}
+              remarkPlugins={wikilinkRemarkPlugins}
+              components={createWikilinkComponents(onNavigateToNote)}
+            >
               {liveContent}
             </Streamdown>
           </div>

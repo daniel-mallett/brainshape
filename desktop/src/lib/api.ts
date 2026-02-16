@@ -86,6 +86,24 @@ export function syncStructural(): Promise<{ status: string; stats: Record<string
   return request("/sync/structural", { method: "POST" });
 }
 
+// --- Import ---
+
+export interface ImportVaultResult {
+  status: string;
+  stats: {
+    files_copied: number;
+    files_skipped: number;
+    folders_created: number;
+  };
+}
+
+export function importVault(sourcePath: string): Promise<ImportVaultResult> {
+  return request("/import/vault", {
+    method: "POST",
+    body: JSON.stringify({ source_path: sourcePath }),
+  });
+}
+
 // --- Settings ---
 
 export interface MCPServer {

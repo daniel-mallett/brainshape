@@ -5,6 +5,7 @@ from brain.notes import (
     _ensure_within_notes_dir,
     compute_file_hash,
     delete_note,
+    import_vault,
     init_notes,
     list_notes,
     parse_note,
@@ -242,3 +243,186 @@ class TestInitNotes:
         assert SEED_NOTES_DIR.is_dir()
         seed_notes = list(SEED_NOTES_DIR.rglob("*.md"))
         assert len(seed_notes) == 5
+
+
+class TestParseNoteRegexFixes:
+    def test_wikilink_strips_heading_anchor(self, tmp_path):
+        f = tmp_path / "test.md"
+        f.write_text("Link to [[MyNote#Section One]] here")
+        result = parse_note(f, tmp_path)
+        assert "MyNote" in result["links"]
+        assert not any("#" in link for link in result["links"])
+
+    def test_wikilink_strips_block_ref(self, tmp_path):
+        f = tmp_path / "test.md"
+        f.write_text("See [[Reference^abc123]] for details")
+        result = parse_note(f, tmp_path)
+        assert "Reference" in result["links"]
+        assert not any("^" in link for link in result["links"])
+
+    def test_wikilink_skips_image_embeds(self, tmp_path):
+        f = tmp_path / "test.md"
+        f.write_text("An image: ![[photo.png]]\nA note: [[Real Note]]")
+        result = parse_note(f, tmp_path)
+        assert "Real Note" in result["links"]
+        assert "photo" not in result["links"]
+        assert "photo.png" not in result["links"]
+
+    def test_wikilink_skips_pdf_embeds(self, tmp_path):
+        f = tmp_path / "test.md"
+        f.write_text("See ![[report.pdf]]")
+        result = parse_note(f, tmp_path)
+        assert result["links"] == []
+
+    def test_tags_not_extracted_from_code_blocks(self, tmp_path):
+        f = tmp_path / "test.md"
+        f.write_text("Real #valid tag\n\n```\n#fake-tag\n```\n\nMore #real text")
+        result = parse_note(f, tmp_path)
+        assert "valid" in result["tags"]
+        assert "real" in result["tags"]
+        assert "fake-tag" not in result["tags"]
+
+    def test_tag_case_insensitive_dedup(self, tmp_path):
+        f = tmp_path / "test.md"
+        f.write_text("#Python and #python are the same")
+        result = parse_note(f, tmp_path)
+        assert result["tags"].count("python") == 1
+        assert "Python" not in result["tags"]
+
+    def test_wikilink_with_heading_and_alias(self, tmp_path):
+        f = tmp_path / "test.md"
+        f.write_text("See [[Deep Note#Intro|introduction]]")
+        result = parse_note(f, tmp_path)
+        assert "Deep Note" in result["links"]
+
+    def test_wikilink_folder_path_with_anchor(self, tmp_path):
+        f = tmp_path / "test.md"
+        f.write_text("See [[Projects/MyProject#Overview]]")
+        result = parse_note(f, tmp_path)
+        assert "MyProject" in result["links"]
+
+
+class TestRewriteNoteRegexFixes:
+    def test_rewrite_strips_code_block_tags(self, tmp_path):
+        write_note(tmp_path, "CodeTest", "old content")
+        rewrite_note(tmp_path, "CodeTest", "New #real\n```\n#fake\n```")
+        import frontmatter
+
+        post = frontmatter.load(str(tmp_path / "CodeTest.md"))
+        assert "real" in post.metadata["tags"]
+        assert "fake" not in post.metadata["tags"]
+
+    def test_rewrite_normalizes_tag_case(self, tmp_path):
+        write_note(tmp_path, "CaseTest", "old", tags=["KeepTag"])
+        rewrite_note(tmp_path, "CaseTest", "New #python content")
+        import frontmatter
+
+        post = frontmatter.load(str(tmp_path / "CaseTest.md"))
+        assert "python" in post.metadata["tags"]
+        assert "keeptag" in post.metadata["tags"]
+        assert "KeepTag" not in post.metadata["tags"]
+
+
+class TestImportVault:
+    def test_imports_md_files(self, tmp_path):
+        source = tmp_path / "source"
+        dest = tmp_path / "dest"
+        source.mkdir()
+        dest.mkdir()
+        (source / "note1.md").write_text("# Note 1")
+        (source / "note2.md").write_text("# Note 2")
+
+        stats = import_vault(source, dest)
+        assert stats["files_copied"] == 2
+        assert (dest / "note1.md").exists()
+        assert (dest / "note2.md").exists()
+
+    def test_preserves_folder_structure(self, tmp_path):
+        source = tmp_path / "source"
+        dest = tmp_path / "dest"
+        (source / "Projects").mkdir(parents=True)
+        (source / "Projects" / "task.md").write_text("# Task")
+
+        stats = import_vault(source, dest)
+        assert stats["files_copied"] == 1
+        assert stats["folders_created"] >= 1
+        assert (dest / "Projects" / "task.md").exists()
+
+    def test_skips_obsidian_dir(self, tmp_path):
+        source = tmp_path / "source"
+        dest = tmp_path / "dest"
+        (source / ".obsidian").mkdir(parents=True)
+        (source / ".obsidian" / "config.md").write_text("config")
+        (source / "real.md").write_text("# Real")
+
+        stats = import_vault(source, dest)
+        assert stats["files_copied"] == 1
+        assert stats["files_skipped"] == 1
+        assert not (dest / ".obsidian").exists()
+
+    def test_skips_git_dir(self, tmp_path):
+        source = tmp_path / "source"
+        dest = tmp_path / "dest"
+        (source / ".git").mkdir(parents=True)
+        (source / ".git" / "hooks.md").write_text("hook")
+        (source / "note.md").write_text("# Note")
+
+        stats = import_vault(source, dest)
+        assert stats["files_copied"] == 1
+        assert not (dest / ".git").exists()
+
+    def test_skips_trash_dir(self, tmp_path):
+        source = tmp_path / "source"
+        dest = tmp_path / "dest"
+        (source / ".trash").mkdir(parents=True)
+        (source / ".trash" / "deleted.md").write_text("deleted")
+        (source / "note.md").write_text("# Note")
+
+        stats = import_vault(source, dest)
+        assert stats["files_copied"] == 1
+        assert stats["files_skipped"] == 1
+
+    def test_rejects_nonexistent_source(self, tmp_path):
+        with pytest.raises(ValueError, match="does not exist"):
+            import_vault(tmp_path / "nonexistent", tmp_path / "dest")
+
+    def test_rejects_file_as_source(self, tmp_path):
+        source_file = tmp_path / "file.txt"
+        source_file.write_text("not a dir")
+        with pytest.raises(ValueError, match="not a directory"):
+            import_vault(source_file, tmp_path / "dest")
+
+    def test_rejects_same_directory(self, tmp_path):
+        with pytest.raises(ValueError, match="same directory"):
+            import_vault(tmp_path, tmp_path)
+
+    def test_rejects_overlapping_directories(self, tmp_path):
+        parent = tmp_path / "parent"
+        child = parent / "child"
+        parent.mkdir()
+        child.mkdir()
+        with pytest.raises(ValueError, match="inside"):
+            import_vault(parent, child)
+
+    def test_creates_dest_if_missing(self, tmp_path):
+        source = tmp_path / "source"
+        dest = tmp_path / "new_dest"
+        source.mkdir()
+        (source / "note.md").write_text("# Note")
+
+        stats = import_vault(source, dest)
+        assert dest.exists()
+        assert stats["files_copied"] == 1
+
+    def test_only_copies_md_files(self, tmp_path):
+        source = tmp_path / "source"
+        dest = tmp_path / "dest"
+        source.mkdir()
+        (source / "note.md").write_text("# Note")
+        (source / "image.png").write_bytes(b"\x89PNG")
+        (source / "data.json").write_text("{}")
+
+        stats = import_vault(source, dest)
+        assert stats["files_copied"] == 1
+        assert not (dest / "image.png").exists()
+        assert not (dest / "data.json").exists()

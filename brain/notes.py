@@ -12,6 +12,52 @@ SEED_NOTES_DIR = Path(__file__).resolve().parent.parent / "seed_notes"
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
 TAG_RE = re.compile(r"(?:^|\s)#([a-zA-Z][\w/-]*)", re.MULTILINE)
+FENCED_CODE_RE = re.compile(r"^`{3,}[^\n]*\n.*?^`{3,}", re.MULTILINE | re.DOTALL)
+
+# File extensions that indicate embeds (images, attachments), not note links
+_EMBED_EXTENSIONS = frozenset(
+    {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".svg",
+        ".webp",
+        ".bmp",
+        ".pdf",
+        ".mp3",
+        ".mp4",
+        ".wav",
+        ".ogg",
+        ".webm",
+        ".mov",
+    }
+)
+
+
+def _strip_fenced_code(text: str) -> str:
+    """Remove fenced code blocks so tags inside them aren't extracted."""
+    return FENCED_CODE_RE.sub("", text)
+
+
+def _clean_wikilink(raw: str) -> str:
+    """Strip #heading anchors and ^block-id references, then take the last path component."""
+    name = raw.split("#")[0].split("^")[0]
+    return name.split("/")[-1].strip()
+
+
+def _extract_wikilinks(content: str) -> list[str]:
+    """Extract wikilink targets from content, skipping image/file embeds."""
+    links = []
+    for raw in WIKILINK_RE.findall(content):
+        cleaned = _clean_wikilink(raw)
+        if not cleaned:
+            continue
+        suffix = Path(cleaned).suffix.lower()
+        if suffix in _EMBED_EXTENSIONS:
+            continue
+        links.append(cleaned)
+    return links
 
 
 def _ensure_within_notes_dir(notes_path: Path, file_path: Path) -> Path:
@@ -47,16 +93,16 @@ def parse_note(file_path: Path, notes_path: Path) -> dict:
         metadata = {}
 
     # Extract wikilinks: [[Page Name]] or [[Page Name|display text]]
-    links = [link.split("/")[-1] for link in WIKILINK_RE.findall(content)]
+    links = _extract_wikilinks(content)
 
-    # Extract tags from content body
-    body_tags = TAG_RE.findall(content)
+    # Extract tags from content body (strip fenced code blocks first)
+    body_tags = TAG_RE.findall(_strip_fenced_code(content))
 
     # Tags may also be in frontmatter
     raw_fm_tags = metadata.get("tags", [])
     fm_tags: list[str] = [raw_fm_tags] if isinstance(raw_fm_tags, str) else list(raw_fm_tags)
 
-    all_tags = list(set(body_tags + fm_tags))
+    all_tags = list({t.lower() for t in body_tags + fm_tags})
 
     return {
         "path": str(file_path.relative_to(notes_path)),
@@ -120,7 +166,7 @@ def rewrite_note(notes_path: Path, title: str, new_content: str, relative_path: 
     post.content = new_content
 
     # Re-extract tags from new content and merge with frontmatter tags
-    body_tags = TAG_RE.findall(new_content)
+    body_tags = TAG_RE.findall(_strip_fenced_code(new_content))
     raw_fm_tags = post.metadata.get("tags", [])
     if isinstance(raw_fm_tags, str):
         fm_tags = [raw_fm_tags]
@@ -128,7 +174,7 @@ def rewrite_note(notes_path: Path, title: str, new_content: str, relative_path: 
         fm_tags = raw_fm_tags
     else:
         fm_tags = []
-    post.metadata["tags"] = list(set(body_tags + fm_tags))
+    post.metadata["tags"] = list({t.lower() for t in body_tags + fm_tags})
 
     with file_path.open("w") as f:
         f.write(frontmatter.dumps(post))
@@ -171,3 +217,64 @@ def init_notes(notes_path: Path) -> int:
         copied += 1
 
     return copied
+
+
+# Directories to skip during vault import
+_SKIP_DIRS = frozenset(
+    {
+        ".obsidian",
+        ".trash",
+        ".git",
+        ".github",
+        ".vscode",
+        "__pycache__",
+        "node_modules",
+    }
+)
+
+
+def import_vault(source_path: Path, notes_path: Path) -> dict:
+    """Import markdown notes from a source directory into the Brain notes directory.
+
+    Copies .md files preserving folder structure.  Skips hidden directories
+    and known non-note directories (.obsidian, .trash, .git, etc.).
+
+    Returns stats dict with files_copied, files_skipped, folders_created.
+    """
+    source_path = source_path.expanduser().resolve()
+    notes_path = notes_path.expanduser().resolve()
+
+    if not source_path.exists():
+        raise ValueError(f"Source path does not exist: {source_path}")
+    if not source_path.is_dir():
+        raise ValueError(f"Source path is not a directory: {source_path}")
+    if source_path == notes_path:
+        raise ValueError("Source and destination are the same directory")
+    if notes_path.is_relative_to(source_path):
+        raise ValueError("Notes directory is inside the source directory")
+    if source_path.is_relative_to(notes_path):
+        raise ValueError("Source directory is inside the notes directory")
+
+    notes_path.mkdir(parents=True, exist_ok=True)
+
+    stats: dict[str, int] = {"files_copied": 0, "files_skipped": 0, "folders_created": 0}
+    created_dirs: set[Path] = set()
+
+    for md_file in source_path.rglob("*.md"):
+        relative = md_file.relative_to(source_path)
+        parts = relative.parts
+        # Skip files inside hidden or excluded directories
+        if any(part.startswith(".") or part in _SKIP_DIRS for part in parts[:-1]):
+            stats["files_skipped"] += 1
+            continue
+
+        dest = notes_path / relative
+        if dest.parent not in created_dirs and not dest.parent.exists():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            created_dirs.add(dest.parent)
+            stats["folders_created"] += 1
+
+        shutil.copy2(md_file, dest)
+        stats["files_copied"] += 1
+
+    return stats

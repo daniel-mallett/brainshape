@@ -254,7 +254,7 @@ function App() {
                 minSize="12%"
                 maxSize="40%"
               >
-                <Chat />
+                <Chat onNavigateToNote={handleNavigateByTitle} />
               </Panel>
             </>
           )}

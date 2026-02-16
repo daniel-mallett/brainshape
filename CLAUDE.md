@@ -32,7 +32,7 @@ desktop/                  # Tauri 2 + React + TypeScript
 - `brain/agent.py` — agent factory (`create_brain_agent()`), interface-agnostic
 - `brain/tools.py` — 7 LangChain tools (search, semantic search, read, create, edit notes; query graph; find related)
 - `brain/graph_db.py` — Neo4j connection wrapper
-- `brain/notes.py` — notes reader/writer/parser (wikilinks, tags, frontmatter)
+- `brain/notes.py` — notes reader/writer/parser (wikilinks, tags, frontmatter), vault import
 - `brain/server.py` — FastAPI server (HTTP + SSE) for desktop app
 - `brain/kg_pipeline.py` — embedding pipeline: load → split → embed → write (no LLM entity extraction)
 - `brain/sync.py` — orchestrates incremental structural + semantic sync from notes to graph

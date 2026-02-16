@@ -6,15 +6,20 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
+import { remarkWikilinks } from "../lib/remarkWikilinks";
+import { createWikilinkComponents } from "../lib/WikilinkComponents";
 
 const streamdownPlugins = { code };
+const wikilinkRemarkPlugins = [remarkWikilinks];
 
 function MessageBubble({
   message,
   isAnimating,
+  onNavigateToNote,
 }: {
   message: Message;
   isAnimating: boolean;
+  onNavigateToNote?: (title: string) => void;
 }) {
   const isUser = message.role === "user";
 
@@ -46,6 +51,8 @@ function MessageBubble({
             <Streamdown
               animated
               plugins={streamdownPlugins}
+              remarkPlugins={wikilinkRemarkPlugins}
+              components={createWikilinkComponents(onNavigateToNote)}
               isAnimating={isAnimating}
             >
               {message.content}
@@ -56,7 +63,7 @@ function MessageBubble({
   );
 }
 
-export function Chat() {
+export function Chat({ onNavigateToNote }: { onNavigateToNote?: (title: string) => void }) {
   const { messages, isStreaming, streamingMessageIndex, sendMessage } =
     useAgentStream();
   const [input, setInput] = useState("");
@@ -94,6 +101,7 @@ export function Chat() {
               key={i}
               message={msg}
               isAnimating={i === streamingMessageIndex}
+              onNavigateToNote={onNavigateToNote}
             />
           ))}
           {isStreaming && (

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getSettings,
   updateSettings,
+  importVault,
   type Settings,
   type MCPServer,
 } from "../lib/api";
@@ -239,6 +240,12 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
   const [editorLineNumbers, setEditorLineNumbers] = useState(false);
   const [editorWordWrap, setEditorWordWrap] = useState(true);
 
+  // Import
+  const [importPath, setImportPath] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ files_copied: number; files_skipped: number; folders_created: number } | null>(null);
+  const [importError, setImportError] = useState("");
+
   const fetchSettings = useCallback(async () => {
     try {
       setLoading(true);
@@ -337,6 +344,21 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
   const handleResetColors = () => {
     setThemeOverrides({});
     markDirty();
+  };
+
+  const handleImport = async () => {
+    if (!importPath.trim()) return;
+    setImporting(true);
+    setImportResult(null);
+    setImportError("");
+    try {
+      const result = await importVault(importPath.trim());
+      setImportResult(result.stats);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
+    }
   };
 
   if (loading) {
@@ -482,6 +504,49 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
                 <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${editorWordWrap ? "translate-x-4" : ""}`} />
               </button>
             </section>
+          </div>
+
+          {/* ── Import Notes ── */}
+          <div className="space-y-4">
+            <SectionHeading>Import Notes</SectionHeading>
+            <FieldHint>
+              Copy markdown notes from another directory into your Brain notes folder.
+              Preserves folder structure. Only .md files are imported.
+            </FieldHint>
+
+            <section className="space-y-1.5">
+              <FieldLabel>Source Directory</FieldLabel>
+              <div className="flex gap-2">
+                <Input
+                  value={importPath}
+                  onChange={(e) => { setImportPath(e.target.value); setImportResult(null); setImportError(""); }}
+                  placeholder="~/Documents/Obsidian Vault"
+                  className="h-8 text-sm flex-1"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  onClick={handleImport}
+                  disabled={importing || !importPath.trim()}
+                >
+                  {importing ? "Importing..." : "Import"}
+                </Button>
+              </div>
+            </section>
+
+            {importResult && (
+              <div className="text-sm border border-border rounded-md p-3 space-y-1">
+                <p className="font-medium text-foreground">Import complete</p>
+                <p className="text-muted-foreground">
+                  {importResult.files_copied} files copied, {importResult.files_skipped} skipped, {importResult.folders_created} folders created
+                </p>
+              </div>
+            )}
+
+            {importError && (
+              <p className="text-sm text-destructive">{importError}</p>
+            )}
           </div>
 
           {/* ── Language Model ── */}

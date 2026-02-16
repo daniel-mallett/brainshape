@@ -34,23 +34,24 @@
 - MCP tools loaded at startup from settings configuration
 - File watcher started at startup, stopped on shutdown
 - Seed notes initialized on first run (copies from seed_notes/ if notes directory is empty)
+- **Vault import**: `POST /import/vault` copies .md files from any source directory (e.g., Obsidian vault), preserving folder structure. Skips `.obsidian/`, `.git/`, `.trash/`, and other non-note dirs. Auto-triggers structural sync after import
 
 ### Desktop App (Tauri 2 + React + TypeScript)
 - Scaffolded with official `create-tauri-app` (React+TS template)
 - CodeMirror 6 editor with configurable keybindings (Vim / Default), markdown syntax highlighting, CSS-variable-driven theme
 - **Wikilink autocomplete**: typing `[[` suggests existing note titles
 - **Tag autocomplete**: typing `#` suggests existing tags from the graph
-- **Clickable wikilinks**: Cmd/Ctrl+click navigates to linked notes; wikilinks highlighted in blue, tags in purple
+- **Clickable wikilinks**: Cmd/Ctrl+click navigates to linked notes in Edit/Inline mode; single-click navigation in Preview mode and Chat. Wikilinks highlighted in blue, tags in purple
 - Auto-save on edit (debounced 1s PUT to server)
 - File tree sidebar with folder grouping, expand/collapse
 - Agent chat panel with SSE streaming, tool call indicators
 - **Voice recording**: mic button in chat, records audio, transcribes locally, populates input
 - Graph visualization: force-directed graph view (full graph, local per-note neighborhood)
 - Memory management panel: browse, edit, delete agent memories
-- **Markdown rendering in chat**: Streamdown (streaming-aware markdown renderer) + Shiki code highlighting for agent messages
+- **Markdown rendering in chat**: Streamdown (streaming-aware markdown renderer) + Shiki code highlighting for agent messages. Wikilinks in agent responses are clickable and navigate to the referenced note
 - **Editor three-mode toggle**: Edit (plain CodeMirror), Inline (WYSIWYG decorations that hide syntax on non-cursor lines), Preview (read-only Streamdown rendering)
 - **Token-by-token SSE streaming**: server streams via `stream_mode="messages"`, JSON-encoded tokens preserve newlines across SSE transport
-- **Settings panel**: Appearance (theme selector + per-property color customizer), Fonts (unified font family + editor font size), Editor (keybindings, line numbers, word wrap), LLM provider, transcription provider, MCP server editor
+- **Settings panel**: Appearance (theme selector + per-property color customizer), Fonts (unified font family + editor font size), Editor (keybindings, line numbers, word wrap), Import Notes (vault/directory import), LLM provider, transcription provider, MCP server editor
 - **Theme engine**: 4 built-in themes (Midnight, Dawn, Nord, Solarized Dark), ~40 CSS variables covering all UI elements (base colors, surfaces, editor syntax, graph nodes, sidebar). Full per-property customization with color pickers and live preview. Themes persist to backend settings.
 - **Meeting recording**: Header button opens modal recorder — captures audio, shows elapsed time, then transcribes via `/transcribe/meeting` and creates a timestamped note
 - **Resizable panels**: Sidebar and Chat panels are resizable and collapsible via drag handles (`react-resizable-panels`), sizes persist to localStorage
@@ -61,7 +62,7 @@
 - Health check with auto-reconnect polling
 
 ### Testing & CI
-- 208+ unit tests covering all modules including server, settings, transcription providers, watcher, MCP client
+- 234 unit tests covering all modules including server, settings, transcription providers, watcher, MCP client, vault import
 - Server tests properly isolated (noop lifespan, no Neo4j connection required)
 - CI: GitHub Actions workflow runs ruff, ty, and pytest (with coverage) on push/PR to main
 - Pre-commit hooks: ruff lint, ruff format, gitleaks secret detection, pytest
@@ -70,12 +71,12 @@
 
 ## Known Issues
 
-- **`notes.py` regex parsing**: could be enhanced with richer metadata extraction in the future
+- None currently tracked
 
 ## Next Steps
 
 ### Critical Path (adoption blockers)
-1. **Obsidian vault compatibility** — first-class support for coexisting with Obsidian. Read Obsidian vaults directly, respect `.obsidian/` config, handle Obsidian-style links and frontmatter conventions. Position as a companion to Obsidian, not a replacement.
+1. ~~**Obsidian vault compatibility**~~ — **DONE** (vault import copies .md files from any directory, wikilink parsing handles `[[Note#Heading]]` anchors and `[[Note^block]]` refs, image embeds skipped, tags case-normalized). Remaining: reading Obsidian aliases from frontmatter, `.obsidian/` config awareness.
 2. **Killer demo** — build a showcase that demonstrates the agent's long-term memory and cross-note intelligence (e.g., surfacing a forgotten connection, recalling a preference from months ago, answering "what did I write about X last quarter?"). The value of structured memory over flat RAG needs to be felt immediately.
 
 ### Product

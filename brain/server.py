@@ -21,6 +21,7 @@ from brain.mcp_client import load_mcp_tools as load_mcp
 from brain.notes import (
     _ensure_within_notes_dir,
     delete_note,
+    import_vault,
     init_notes,
     list_notes,
     parse_note,
@@ -811,6 +812,33 @@ async def sync_full_endpoint():
     structural_stats = sync_structural(_db, notes_path)
     semantic_stats = await sync_semantic_async(_db, _pipeline, notes_path)
     return {"status": "ok", "stats": {"structural": structural_stats, "semantic": semantic_stats}}
+
+
+# --- Import ---
+
+
+class ImportVaultRequest(BaseModel):
+    source_path: str
+
+
+@app.post("/import/vault")
+def import_vault_endpoint(req: ImportVaultRequest):
+    if _db is None:
+        raise HTTPException(status_code=503, detail="Server not initialized")
+
+    notes_path = _notes_path()
+    source = Path(req.source_path).expanduser()
+
+    try:
+        stats = import_vault(source, notes_path)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
+
+    # Auto-trigger structural sync after import
+    if stats["files_copied"] > 0:
+        sync_structural(_db, notes_path)
+
+    return {"status": "ok", "stats": stats}
 
 
 # --- Entry point ---

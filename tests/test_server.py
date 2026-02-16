@@ -655,6 +655,10 @@ class TestUninitializedServer:
         resp = bare_client.post("/agent/message", json={"session_id": "x", "message": "hi"})
         assert resp.status_code == 503
 
+    def test_import_vault_503(self, bare_client):
+        resp = bare_client.post("/import/vault", json={"source_path": "/nonexistent"})
+        assert resp.status_code == 503
+
 
 class TestSync:
     def test_structural_sync(self, client):
@@ -675,3 +679,41 @@ class TestSync:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
+
+
+class TestImportVault:
+    def test_import_vault(self, client, tmp_notes, tmp_path_factory):
+        source = tmp_path_factory.mktemp("vault")
+        (source / "imported.md").write_text("# Imported Note")
+
+        resp = client.post("/import/vault", json={"source_path": str(source)})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["stats"]["files_copied"] == 1
+        assert (tmp_notes / "imported.md").exists()
+
+    def test_import_vault_invalid_source(self, client):
+        resp = client.post("/import/vault", json={"source_path": "/nonexistent/path"})
+        assert resp.status_code == 400
+
+    def test_import_vault_triggers_sync(self, client, tmp_path_factory, monkeypatch):
+        source = tmp_path_factory.mktemp("vault")
+        (source / "note.md").write_text("# Note")
+
+        mock_sync = MagicMock(return_value={"notes": 1, "tags": 0, "links": 0})
+        monkeypatch.setattr("brain.server.sync_structural", mock_sync)
+
+        resp = client.post("/import/vault", json={"source_path": str(source)})
+        assert resp.status_code == 200
+        mock_sync.assert_called_once()
+
+    def test_import_vault_no_sync_when_nothing_copied(self, client, tmp_path_factory, monkeypatch):
+        source = tmp_path_factory.mktemp("empty_vault")
+
+        mock_sync = MagicMock()
+        monkeypatch.setattr("brain.server.sync_structural", mock_sync)
+
+        resp = client.post("/import/vault", json={"source_path": str(source)})
+        assert resp.status_code == 200
+        mock_sync.assert_not_called()
