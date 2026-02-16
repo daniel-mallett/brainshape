@@ -927,3 +927,27 @@ class TestImportVault:
         resp = client.post("/import/vault", json={"source_path": str(source)})
         assert resp.status_code == 200
         mock_sync.assert_not_called()
+
+
+class TestNotesPathSettings:
+    def test_update_notes_path(self, client, tmp_path):
+        new_path = str(tmp_path / "new-notes")
+        resp = client.put("/settings", json={"notes_path": new_path})
+        assert resp.status_code == 200
+        assert resp.json()["notes_path"] == new_path
+        from pathlib import Path
+
+        assert Path(new_path).exists()
+
+    def test_get_settings_includes_notes_path(self, client):
+        resp = client.get("/settings")
+        assert resp.status_code == 200
+        assert "notes_path" in resp.json()
+
+    def test_notes_path_rejects_project_dir(self, client):
+        from pathlib import Path
+
+        project_root = str(Path(__file__).resolve().parent.parent)
+        resp = client.put("/settings", json={"notes_path": project_root})
+        assert resp.status_code == 400
+        assert "project directory" in resp.json()["detail"]

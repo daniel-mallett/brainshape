@@ -15,7 +15,6 @@ import argparse
 import sys
 from pathlib import Path
 
-from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import create_kg_pipeline
 from brain.sync import sync_all, sync_semantic, sync_structural
@@ -27,7 +26,9 @@ def main():
     parser.add_argument("--full", action="store_true", help="Run structural + semantic sync")
     args = parser.parse_args()
 
-    notes_path = Path(settings.notes_path).expanduser()
+    from brain.settings import get_notes_path
+
+    notes_path = Path(get_notes_path()).expanduser()
     if not notes_path.exists():
         print(f"Error: notes path {notes_path} does not exist", file=sys.stderr)
         sys.exit(1)

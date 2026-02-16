@@ -18,7 +18,6 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 from brain import tools as tools_mod
-from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import create_kg_pipeline
 from brain.tools import ALL_TOOLS
@@ -51,7 +50,9 @@ async def _lifespan(server: FastMCP) -> AsyncIterator[None]:
     """Initialize Brain resources on startup, clean up on shutdown (stdio only)."""
     db = GraphDB()
     db.bootstrap_schema()
-    notes_path = Path(settings.notes_path).expanduser()
+    from brain.settings import get_notes_path
+
+    notes_path = Path(get_notes_path()).expanduser()
     pipeline = create_kg_pipeline(db._driver, notes_path)
 
     tools_mod.db = db

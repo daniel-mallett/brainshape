@@ -150,6 +150,7 @@ export interface MCPServer {
 }
 
 export interface Settings {
+  notes_path: string;
   llm_provider: string;
   llm_model: string;
   ollama_base_url: string;
@@ -173,6 +174,7 @@ export function getSettings(): Promise<Settings> {
 
 export function updateSettings(
   updates: Partial<{
+    notes_path: string;
     llm_provider: string;
     llm_model: string;
     ollama_base_url: string;

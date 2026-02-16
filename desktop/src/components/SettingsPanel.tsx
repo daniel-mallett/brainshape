@@ -13,6 +13,7 @@ import {
   applyTheme,
   type Theme,
 } from "../lib/themes";
+import { isTauri, pickDirectory } from "../lib/tauri";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
@@ -217,6 +218,9 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
 
+  // Notes directory
+  const [notesPath, setNotesPath] = useState("");
+
   // LLM settings
   const [provider, setProvider] = useState("anthropic");
   const [model, setModel] = useState("");
@@ -251,6 +255,7 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
       setLoading(true);
       const s = await getSettings();
       setSettings(s);
+      setNotesPath(s.notes_path || "");
       setProvider(s.llm_provider);
       setModel(s.llm_model);
       setOllamaUrl(s.ollama_base_url);
@@ -297,6 +302,7 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
     try {
       const themeData: Record<string, string> = { name: themeName, ...themeOverrides };
       const updates: Record<string, unknown> = {
+        notes_path: notesPath,
         llm_provider: provider,
         llm_model: model,
         ollama_base_url: ollamaUrl,
@@ -377,6 +383,36 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
     <div className="flex-1 flex flex-col min-h-0">
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-lg mx-auto p-6 space-y-8">
+
+          {/* ── Notes Directory ── */}
+          <div className="space-y-4">
+            <SectionHeading>Notes Directory</SectionHeading>
+            <section className="space-y-1.5">
+              <FieldLabel>Path</FieldLabel>
+              <div className="flex gap-2">
+                <Input
+                  value={notesPath}
+                  onChange={(e) => { setNotesPath(e.target.value); markDirty(); }}
+                  placeholder="~/brain"
+                  className="h-8 text-sm flex-1"
+                />
+                {isTauri() && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={async () => {
+                      const dir = await pickDirectory("Select Notes Directory");
+                      if (dir) { setNotesPath(dir); markDirty(); }
+                    }}
+                  >
+                    Browse
+                  </Button>
+                )}
+              </div>
+              <FieldHint>Directory where your markdown notes are stored.</FieldHint>
+            </section>
+          </div>
 
           {/* ── Appearance ── */}
           <div className="space-y-4">
@@ -523,6 +559,19 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
                   placeholder="~/Documents/Obsidian Vault"
                   className="h-8 text-sm flex-1"
                 />
+                {isTauri() && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={async () => {
+                      const dir = await pickDirectory("Select Vault to Import");
+                      if (dir) { setImportPath(dir); setImportResult(null); setImportError(""); }
+                    }}
+                  >
+                    Browse
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"

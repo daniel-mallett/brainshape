@@ -8,6 +8,7 @@ from brain.settings import (
     VALID_TRANSCRIPTION_PROVIDERS,
     _migrate_settings,
     get_llm_model_string,
+    get_notes_path,
     load_settings,
     save_settings,
     update_settings,
@@ -128,6 +129,20 @@ class TestEmbeddingSettings:
     def test_update_embedding_dimensions(self):
         result = update_settings({"embedding_dimensions": 384})
         assert result["embedding_dimensions"] == 384
+
+
+class TestGetNotesPath:
+    def test_returns_settings_value_when_set(self):
+        update_settings({"notes_path": "~/my-notes"})
+        assert get_notes_path() == "~/my-notes"
+
+    def test_falls_back_to_config_when_empty(self, monkeypatch):
+        monkeypatch.setattr("brain.config.settings.notes_path", "~/env-notes")
+        assert get_notes_path() == "~/env-notes"
+
+    def test_defaults_include_notes_path(self):
+        assert "notes_path" in DEFAULTS
+        assert DEFAULTS["notes_path"] == ""
 
 
 def test_valid_providers():

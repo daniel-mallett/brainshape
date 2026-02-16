@@ -2,7 +2,6 @@ from pathlib import Path
 
 from langchain_core.tools import tool
 
-from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline
 from brain.notes import parse_note, rewrite_note, write_note
@@ -27,7 +26,9 @@ def _get_pipeline() -> KGPipeline:
 
 
 def _notes_path() -> Path:
-    return Path(settings.notes_path).expanduser()
+    from brain.settings import get_notes_path
+
+    return Path(get_notes_path()).expanduser()
 
 
 def _sync_note_structural(note_data: dict) -> None:

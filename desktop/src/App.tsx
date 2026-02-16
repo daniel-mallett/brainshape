@@ -10,6 +10,7 @@ import { MemoryPanel } from "./components/MemoryPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import { MeetingRecorder } from "./components/MeetingRecorder";
+import { SetupScreen } from "./components/SetupScreen";
 import { Button } from "@/components/ui/button";
 import "./App.css";
 
@@ -53,6 +54,7 @@ function App() {
   const historyIndexRef = useRef(-1);
   const isHistoryNavRef = useRef(false);
   const [historyPos, setHistoryPos] = useState({ index: -1, length: 0 });
+  const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
   const [chatOpen, setChatOpen] = useState(true);
   const [activeView, setActiveView] = useState<ActiveView>("editor");
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -96,6 +98,7 @@ function App() {
           const s = await getSettings();
           setSettings(s);
           settingsLoaded = true;
+          setNeedsSetup(!s.notes_path);
         }
       } catch {
         setConnected(false);
@@ -209,6 +212,14 @@ function App() {
     getSettings().then(setSettings).catch(console.error);
   }, []);
 
+  const handleSetupComplete = useCallback(async () => {
+    setNeedsSetup(false);
+    const [s, cfg] = await Promise.all([getSettings(), getConfig()]);
+    setSettings(s);
+    setConfig(cfg);
+    sidebarRef.current?.refresh();
+  }, []);
+
   const handleMeetingComplete = useCallback(
     (path: string) => {
       setMeetingOpen(false);
@@ -228,6 +239,10 @@ function App() {
         </div>
       </div>
     );
+  }
+
+  if (needsSetup) {
+    return <SetupScreen onComplete={handleSetupComplete} />;
   }
 
   return (
@@ -312,17 +327,6 @@ function App() {
           )}
         </Group>
 
-        {!chatOpen && (
-          <button
-            onClick={() => setChatOpen(true)}
-            className="absolute bottom-4 right-4 w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity"
-            title="Open Chat"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-              <path fillRule="evenodd" d="M3.43 2.524A41.29 41.29 0 0 1 10 2c2.236 0 4.43.18 6.57.524 1.437.231 2.43 1.49 2.43 2.902v5.148c0 1.413-.993 2.67-2.43 2.902a41.102 41.102 0 0 1-3.55.414c-.28.02-.521.18-.643.413l-1.712 3.293a.75.75 0 0 1-1.33 0l-1.713-3.293a.783.783 0 0 0-.642-.413 41.108 41.108 0 0 1-3.55-.414C1.993 13.245 1 11.986 1 10.574V5.426c0-1.413.993-2.67 2.43-2.902Z" clipRule="evenodd" />
-            </svg>
-          </button>
-        )}
       </div>
 
       {meetingOpen && <MeetingRecorder onClose={() => setMeetingOpen(false)} onComplete={handleMeetingComplete} />}

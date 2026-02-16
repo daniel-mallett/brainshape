@@ -5,7 +5,6 @@ from langchain.agents import create_agent
 from langgraph.checkpoint.memory import MemorySaver
 
 from brain import tools
-from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline, create_kg_pipeline
 from brain.settings import get_llm_model_string
@@ -88,7 +87,9 @@ def create_brain_agent(
         return None, None, None
 
     if pipeline is None:
-        notes_path = Path(settings.notes_path).expanduser()
+        from brain.settings import get_notes_path
+
+        notes_path = Path(get_notes_path()).expanduser()
         pipeline = create_kg_pipeline(db._driver, notes_path)
 
     tools.db = db

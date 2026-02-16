@@ -14,6 +14,8 @@ SETTINGS_FILE = Path("~/.config/brain/settings.json").expanduser()
 
 # Defaults for all settings
 DEFAULTS: dict[str, Any] = {
+    # Notes directory path (empty = use .env or default ~/brain)
+    "notes_path": "",
     # LLM provider: "anthropic", "openai", "ollama"
     "llm_provider": "anthropic",
     # Model name per provider
@@ -132,3 +134,17 @@ def get_llm_model_string(settings: dict[str, Any] | None = None) -> str:
     elif provider == "ollama":
         return f"ollama:{model}"
     return f"anthropic:{model}"
+
+
+def get_notes_path() -> str:
+    """Resolve the notes path: settings.json > .env > default.
+
+    Returns the raw path string (not expanded).
+    """
+    from brain.config import settings as config_settings
+
+    runtime = load_settings()
+    path = runtime.get("notes_path", "")
+    if path:
+        return path
+    return config_settings.notes_path

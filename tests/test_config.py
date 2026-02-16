@@ -14,7 +14,7 @@ class TestSettings:
         assert s.neo4j_uri == "bolt://localhost:7687"
         assert s.neo4j_user == "neo4j"
         assert s.neo4j_password == "brain-dev-password"
-        assert s.notes_path == "~/Brain"
+        assert s.notes_path == "~/brain"
         assert s.model_name == "claude-haiku-4-5-20251001"
 
     def test_env_override(self, monkeypatch):

@@ -2,14 +2,15 @@ import sys
 from pathlib import Path
 
 from brain.agent import create_brain_agent
-from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline
 from brain.sync import sync_all, sync_semantic, sync_structural
 
 
 def _run_sync(db: GraphDB, pipeline: KGPipeline, args: list[str]) -> None:
-    notes_path = Path(settings.notes_path).expanduser()
+    from brain.settings import get_notes_path
+
+    notes_path = Path(get_notes_path()).expanduser()
     if not notes_path.exists():
         print(f"Notes path {notes_path} not found.")
         return
@@ -53,7 +54,9 @@ def run_cli():
     agent, db, pipeline = create_brain_agent()
 
     # Structural sync on startup
-    notes_path = Path(settings.notes_path).expanduser()
+    from brain.settings import get_notes_path
+
+    notes_path = Path(get_notes_path()).expanduser()
     if notes_path.exists():
         notes = list(notes_path.rglob("*.md"))
         if notes:

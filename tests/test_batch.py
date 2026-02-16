@@ -16,8 +16,10 @@ class TestBatchMain:
         mock_pipeline.return_value = MagicMock()
         mock_sync.return_value = {"processed": 3, "skipped": 1}
 
-        with patch("brain.batch.settings") as mock_settings, patch("sys.argv", ["batch"]):
-            mock_settings.notes_path = str(tmp_path)
+        with (
+            patch("brain.settings.get_notes_path", return_value=str(tmp_path)),
+            patch("sys.argv", ["batch"]),
+        ):
             (tmp_path / "note.md").write_text("# Note")
 
             from brain.batch import main
@@ -36,10 +38,9 @@ class TestBatchMain:
         mock_sync.return_value = {"notes": 5, "tags": 2, "links": 1}
 
         with (
-            patch("brain.batch.settings") as mock_settings,
+            patch("brain.settings.get_notes_path", return_value=str(tmp_path)),
             patch("sys.argv", ["batch", "--structural"]),
         ):
-            mock_settings.notes_path = str(tmp_path)
             (tmp_path / "note.md").write_text("# Note")
 
             from brain.batch import main
@@ -62,8 +63,10 @@ class TestBatchMain:
             "semantic": {"processed": 3, "skipped": 2},
         }
 
-        with patch("brain.batch.settings") as mock_settings, patch("sys.argv", ["batch", "--full"]):
-            mock_settings.notes_path = str(tmp_path)
+        with (
+            patch("brain.settings.get_notes_path", return_value=str(tmp_path)),
+            patch("sys.argv", ["batch", "--full"]),
+        ):
             (tmp_path / "note.md").write_text("# Note")
 
             from brain.batch import main
@@ -76,9 +79,10 @@ class TestBatchMain:
     @patch("brain.batch.GraphDB")
     def test_missing_notes_path_exits(self, mock_db):
         """Exits with code 1 if notes path doesn't exist."""
-        with patch("brain.batch.settings") as mock_settings, patch("sys.argv", ["batch"]):
-            mock_settings.notes_path = "/nonexistent/path"
-
+        with (
+            patch("brain.settings.get_notes_path", return_value="/nonexistent/path"),
+            patch("sys.argv", ["batch"]),
+        ):
             from brain.batch import main
 
             with pytest.raises(SystemExit) as exc_info:
@@ -95,8 +99,10 @@ class TestBatchMain:
         mock_pipeline.return_value = MagicMock()
         mock_sync.side_effect = RuntimeError("sync failed")
 
-        with patch("brain.batch.settings") as mock_settings, patch("sys.argv", ["batch"]):
-            mock_settings.notes_path = str(tmp_path)
+        with (
+            patch("brain.settings.get_notes_path", return_value=str(tmp_path)),
+            patch("sys.argv", ["batch"]),
+        ):
             (tmp_path / "note.md").write_text("# Note")
 
             from brain.batch import main

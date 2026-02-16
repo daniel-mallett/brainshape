@@ -35,7 +35,7 @@ from brain.notes import (
     rewrite_wikilinks,
     write_note,
 )
-from brain.settings import VALID_PROVIDERS, load_settings, update_settings
+from brain.settings import VALID_PROVIDERS, get_notes_path, load_settings, update_settings
 from brain.sync import sync_semantic, sync_semantic_async, sync_structural
 from brain.watcher import start_watcher
 
@@ -64,7 +64,7 @@ async def lifespan(app: FastAPI):
         logger.warning("Server starting in degraded mode — no Neo4j connection")
         logger.warning("Notes CRUD will work, but agent and graph features are unavailable")
 
-    notes_path = Path(settings.notes_path).expanduser()
+    notes_path = Path(get_notes_path()).expanduser()
     init_notes(notes_path)
     if notes_path.exists() and _db is not None:
         notes = list_notes(notes_path)
@@ -149,6 +149,7 @@ class UpdateMemoryRequest(BaseModel):
 
 
 class UpdateSettingsRequest(BaseModel):
+    notes_path: str | None = None
     llm_provider: str | None = None
     llm_model: str | None = None
     ollama_base_url: str | None = None
@@ -186,7 +187,7 @@ def health():
 @app.get("/config")
 def get_config():
     return {
-        "notes_path": settings.notes_path,
+        "notes_path": get_notes_path(),
         "model_name": settings.model_name,
         "neo4j_uri": settings.neo4j_uri,
     }
@@ -254,7 +255,7 @@ async def agent_message(req: MessageRequest):
 
 
 def _notes_path() -> Path:
-    return Path(settings.notes_path).expanduser()
+    return Path(get_notes_path()).expanduser()
 
 
 @app.get("/notes/files")
@@ -708,7 +709,7 @@ async def transcribe_meeting(
         [t.strip() for t in tags.split(",") if t.strip()] if tags else ["meeting", "transcription"]
     )
 
-    notes_path = Path(settings.notes_path).expanduser()
+    notes_path = Path(get_notes_path()).expanduser()
     try:
         note_path = write_note(notes_path, title, content, folder=folder, tags=tag_list)
     except (ValueError, OSError) as e:
@@ -786,6 +787,20 @@ def get_settings():
 async def put_settings(req: UpdateSettingsRequest):
     global _agent, _pipeline
     updates = {}
+    if req.notes_path is not None:
+        np = Path(req.notes_path).expanduser().resolve()
+        # Prevent setting notes_path to the project directory (security)
+        project_root = Path(__file__).resolve().parent.parent
+        if np == project_root or np.is_relative_to(project_root):
+            raise HTTPException(
+                status_code=400,
+                detail="Notes path cannot overlap with the project directory",
+            )
+        try:
+            np.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            raise HTTPException(status_code=400, detail="Cannot create notes directory") from None
+        updates["notes_path"] = req.notes_path
     if req.llm_provider is not None:
         if req.llm_provider not in VALID_PROVIDERS:
             raise HTTPException(status_code=400, detail=f"Invalid provider: {req.llm_provider}")
@@ -883,6 +898,33 @@ async def put_settings(req: UpdateSettingsRequest):
         mcp_tools = await reload_mcp_tools()
         _agent = recreate_agent(_db, _pipeline, mcp_tools=mcp_tools or None)
         _sessions.clear()  # Clear stale sessions since agent was recreated
+
+    # Hot-reload notes directory when notes_path changes
+    if req.notes_path is not None:
+        new_path = Path(req.notes_path).expanduser()
+        init_notes(new_path)
+
+        # Restart file watcher for new path
+        global _observer
+        if _observer is not None:
+            _observer.stop()
+            _observer = None
+
+        if _db is not None:
+            sync_structural(_db, new_path)
+
+            def on_notes_changed():
+                sync_structural(_db, new_path)
+                if _pipeline is not None:
+                    import threading
+
+                    threading.Thread(
+                        target=sync_semantic,
+                        args=(_db, _pipeline, new_path),
+                        daemon=True,
+                    ).start()
+
+            _observer = start_watcher(new_path, on_notes_changed)
 
     safe = {k: v for k, v in updated.items() if "api_key" not in k}
     _add_key_flags(safe, updated)

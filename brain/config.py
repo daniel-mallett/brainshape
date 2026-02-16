@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     neo4j_password: str = "brain-dev-password"  # noqa: S105
 
     # Notes
-    notes_path: str = "~/Brain"
+    notes_path: str = "~/brain"
 
 
 settings = Settings()
