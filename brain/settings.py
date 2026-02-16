@@ -37,6 +37,16 @@ DEFAULTS: dict[str, Any] = {
     # MCP servers: list of server configs
     # Each: {"name", "transport": "stdio"|"http", "command", "args", "url"}
     "mcp_servers": [],
+    # Theme: full theme object (JSON) — see desktop/src/lib/themes.ts
+    "theme": {},
+    # Font settings
+    "ui_font_family": "",
+    "editor_font_family": "",
+    "editor_font_size": 14,
+    # Editor settings
+    "editor_keymap": "vim",
+    "editor_line_numbers": False,
+    "editor_word_wrap": True,
 }
 
 # Valid LLM providers

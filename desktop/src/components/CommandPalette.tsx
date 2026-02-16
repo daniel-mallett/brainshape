@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getNoteFiles, type NoteFile } from "../lib/api";
+import { getNoteFiles, createNoteFile, syncStructural, type NoteFile } from "../lib/api";
 import { Input } from "./ui/input";
 
 interface Command {
@@ -16,6 +16,7 @@ interface CommandPaletteProps {
   onCreateNote: () => void;
   onSwitchView: (view: string) => void;
   onSync: () => void;
+  onOpenSettings?: () => void;
 }
 
 export function CommandPalette({
@@ -25,6 +26,7 @@ export function CommandPalette({
   onCreateNote,
   onSwitchView,
   onSync,
+  onOpenSettings,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [notes, setNotes] = useState<NoteFile[]>([]);
@@ -44,16 +46,32 @@ export function CommandPalette({
     }
   }, [open]);
 
+  const handleCreateNote = useCallback(async () => {
+    const title = query.trim();
+    if (!title) {
+      // No title typed — just switch to editor so the sidebar + button is visible
+      onClose();
+      onCreateNote();
+      return;
+    }
+    try {
+      const { path } = await createNoteFile(title);
+      onClose();
+      onSelectNote(path);
+      syncStructural().catch(console.error);
+    } catch (err) {
+      console.error("Failed to create note:", err);
+      onClose();
+    }
+  }, [query, onClose, onCreateNote, onSelectNote]);
+
   const actionCommands: Command[] = useMemo(
     () => [
       {
         id: "new-note",
-        label: "New Note",
+        label: query.trim() ? `New Note: "${query.trim()}"` : "New Note",
         category: "action",
-        action: () => {
-          onClose();
-          onCreateNote();
-        },
+        action: handleCreateNote,
       },
       {
         id: "view-editor",
@@ -84,11 +102,11 @@ export function CommandPalette({
       },
       {
         id: "view-settings",
-        label: "Switch to Settings",
+        label: "Open Settings",
         category: "action",
         action: () => {
           onClose();
-          onSwitchView("settings");
+          onOpenSettings?.();
         },
       },
       {
@@ -101,7 +119,7 @@ export function CommandPalette({
         },
       },
     ],
-    [onClose, onCreateNote, onSwitchView, onSync]
+    [query, handleCreateNote, onClose, onSwitchView, onSync, onOpenSettings]
   );
 
   const noteCommands: Command[] = useMemo(

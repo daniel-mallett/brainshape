@@ -69,6 +69,28 @@ class TestUpdateSettings:
         assert "unknown" not in result
 
 
+class TestThemeAndEditorDefaults:
+    def test_defaults_include_theme_fields(self, tmp_settings_file):
+        settings = load_settings()
+        assert settings["theme"] == {}
+        assert settings["editor_keymap"] == "vim"
+        assert settings["editor_font_size"] == 14
+        assert settings["editor_line_numbers"] is False
+        assert settings["editor_word_wrap"] is True
+        assert settings["ui_font_family"] == ""
+        assert settings["editor_font_family"] == ""
+
+    def test_theme_round_trip(self, tmp_settings_file):
+        theme = {"name": "Nord", "background": "#2e3440"}
+        result = update_settings({"theme": theme, "editor_keymap": "default"})
+        assert result["theme"]["name"] == "Nord"
+        assert result["editor_keymap"] == "default"
+        # Verify persistence
+        reloaded = load_settings()
+        assert reloaded["theme"]["name"] == "Nord"
+        assert reloaded["editor_keymap"] == "default"
+
+
 class TestGetLlmModelString:
     def test_anthropic(self):
         s = {"llm_provider": "anthropic", "llm_model": "claude-haiku-4-5-20251001"}

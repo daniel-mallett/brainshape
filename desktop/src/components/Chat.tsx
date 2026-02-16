@@ -77,7 +77,7 @@ export function Chat() {
   };
 
   return (
-    <div className="w-80 flex-shrink-0 border-l border-border bg-card/30 flex flex-col min-h-0">
+    <div className="h-full flex flex-col min-h-0 bg-card/30">
       <div className="px-3 py-2 border-b border-border">
         <span className="text-sm font-medium">Chat</span>
       </div>

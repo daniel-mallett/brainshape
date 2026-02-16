@@ -106,6 +106,13 @@ export interface Settings {
   transcription_provider: string;
   transcription_model: string;
   mcp_servers: MCPServer[];
+  theme: Record<string, string>;
+  ui_font_family: string;
+  editor_font_family: string;
+  editor_font_size: number;
+  editor_keymap: string;
+  editor_line_numbers: boolean;
+  editor_word_wrap: boolean;
 }
 
 export function getSettings(): Promise<Settings> {
@@ -123,6 +130,13 @@ export function updateSettings(
     transcription_provider: string;
     transcription_model: string;
     mcp_servers: MCPServer[];
+    theme: Record<string, string>;
+    ui_font_family: string;
+    editor_font_family: string;
+    editor_font_size: number;
+    editor_keymap: string;
+    editor_line_numbers: boolean;
+    editor_word_wrap: boolean;
   }>
 ): Promise<Settings> {
   return request("/settings", {
@@ -144,6 +158,35 @@ export async function transcribeAudio(
   const formData = new FormData();
   formData.append("audio", audioBlob, "recording.wav");
   const res = await fetch(`${BASE_URL}/transcribe`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`${res.status}: ${detail}`);
+  }
+  return res.json();
+}
+
+export interface MeetingResult {
+  path: string;
+  title: string;
+  text: string;
+  segment_count: number;
+}
+
+export async function transcribeMeeting(
+  audioBlob: Blob,
+  title = "",
+  folder = "",
+  tags = ""
+): Promise<MeetingResult> {
+  const formData = new FormData();
+  formData.append("audio", audioBlob, "recording.wav");
+  if (title) formData.append("title", title);
+  if (folder) formData.append("folder", folder);
+  if (tags) formData.append("tags", tags);
+  const res = await fetch(`${BASE_URL}/transcribe/meeting`, {
     method: "POST",
     body: formData,
   });

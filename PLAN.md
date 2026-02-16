@@ -37,7 +37,7 @@
 
 ### Desktop App (Tauri 2 + React + TypeScript)
 - Scaffolded with official `create-tauri-app` (React+TS template)
-- CodeMirror 6 editor with vim motions (`@replit/codemirror-vim`), markdown syntax highlighting, one-dark theme
+- CodeMirror 6 editor with configurable keybindings (Vim / Default), markdown syntax highlighting, CSS-variable-driven theme
 - **Wikilink autocomplete**: typing `[[` suggests existing note titles
 - **Tag autocomplete**: typing `#` suggests existing tags from the graph
 - **Clickable wikilinks**: Cmd/Ctrl+click navigates to linked notes; wikilinks highlighted in blue, tags in purple
@@ -50,15 +50,17 @@
 - **Markdown rendering in chat**: Streamdown (streaming-aware markdown renderer) + Shiki code highlighting for agent messages
 - **Editor three-mode toggle**: Edit (plain CodeMirror), Inline (WYSIWYG decorations that hide syntax on non-cursor lines), Preview (read-only Streamdown rendering)
 - **Token-by-token SSE streaming**: server streams via `stream_mode="messages"`, JSON-encoded tokens preserve newlines across SSE transport
-- **Settings panel**: LLM provider dropdown, model dropdown with suggestions per provider, API key fields (Anthropic/OpenAI), Ollama URL, Whisper model, MCP server editor — organized into logical sections
+- **Settings panel**: Appearance (theme selector + per-property color customizer), Fonts (UI font, editor font, font size), Editor (keybindings, line numbers, word wrap), LLM provider, transcription provider, MCP server editor
+- **Theme engine**: 4 built-in themes (Midnight, Dawn, Nord, Solarized Dark), ~40 CSS variables covering all UI elements (base colors, surfaces, editor syntax, graph nodes, sidebar). Full per-property customization with color pickers and live preview. Themes persist to backend settings.
+- **Meeting recording**: Header button opens modal recorder — captures audio, shows elapsed time, then transcribes via `/transcribe/meeting` and creates a timestamped note
+- **Resizable panels**: Sidebar and Chat panels are resizable and collapsible via drag handles (`react-resizable-panels`), sizes persist to localStorage
 - **Command palette**: Cmd+K to search notes and run actions (switch views, create note, sync, etc.)
-- View switching: Editor / Graph / Memory / Settings views in header
+- View switching: Editor / Graph / Memory views in header
 - ShadCN UI components (button, input, scroll-area) + Tailwind v4
-- Dark mode by default via ShadCN design tokens
 - Health check with auto-reconnect polling
 
 ### Testing & CI
-- 193+ unit tests covering all modules including server, settings, transcription providers, watcher, MCP client
+- 202+ unit tests covering all modules including server, settings, transcription providers, watcher, MCP client
 - Server tests properly isolated (noop lifespan, no Neo4j connection required)
 - CI: GitHub Actions workflow runs ruff, ty, and pytest (with coverage) on push/PR to main
 - Pre-commit hooks: ruff lint, ruff format, gitleaks secret detection, pytest

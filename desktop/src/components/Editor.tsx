@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { EditorState } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorView, keymap, lineNumbers as lineNumbersExt } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { vim } from "@replit/codemirror-vim";
-import { oneDark } from "@codemirror/theme-one-dark";
 import { updateNoteFile } from "../lib/api";
 import { brainAutocompletion, prefetchCompletions } from "../lib/completions";
 import { wikilinkExtension, setWikilinkNavigate } from "../lib/wikilinks";
 import { inlineMarkdownExtension } from "../lib/inlineMarkdown";
+import { brainThemeExtension } from "../lib/editorTheme";
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -23,9 +23,12 @@ interface EditorProps {
   filePath: string | null;
   content: string;
   onNavigateToNote?: (title: string) => void;
+  keymap?: string;
+  lineNumbers?: boolean;
+  wordWrap?: boolean;
 }
 
-export function Editor({ filePath, content, onNavigateToNote }: EditorProps) {
+export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode = "vim", lineNumbers = false, wordWrap = true }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -35,7 +38,6 @@ export function Editor({ filePath, content, onNavigateToNote }: EditorProps) {
 
   filePathRef.current = filePath;
 
-  // Sync content prop into liveContent when file changes
   useEffect(() => {
     setLiveContent(content);
   }, [content]);
@@ -48,12 +50,10 @@ export function Editor({ filePath, content, onNavigateToNote }: EditorProps) {
     }, 1000);
   }
 
-  // Pre-fetch completions cache on mount so first keystroke has data
   useEffect(() => {
     prefetchCompletions();
   }, []);
 
-  // Set up wikilink navigation callback
   useEffect(() => {
     if (onNavigateToNote) {
       setWikilinkNavigate(onNavigateToNote);
@@ -64,14 +64,12 @@ export function Editor({ filePath, content, onNavigateToNote }: EditorProps) {
     if (!containerRef.current || editorMode === "preview") return;
 
     const extensions = [
-      vim(),
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       markdown({ codeLanguages: languages }),
-      oneDark,
+      brainThemeExtension,
       brainAutocompletion,
       wikilinkExtension,
-      EditorView.lineWrapping,
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           const text = update.state.doc.toString();
@@ -79,24 +77,22 @@ export function Editor({ filePath, content, onNavigateToNote }: EditorProps) {
           saveToServer(text);
         }
       }),
-      EditorView.theme({
-        "&": {
-          height: "100%",
-          fontSize: "14px",
-        },
-        ".cm-scroller": {
-          fontFamily:
-            "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-        },
-        ".cm-content": {
-          padding: "16px 0",
-        },
-        ".cm-gutters": {
-          backgroundColor: "transparent",
-          border: "none",
-        },
-      }),
     ];
+
+    // Keybinding mode
+    if (keymapMode === "vim") {
+      extensions.unshift(vim());
+    }
+
+    // Line numbers
+    if (lineNumbers) {
+      extensions.push(lineNumbersExt());
+    }
+
+    // Word wrap
+    if (wordWrap) {
+      extensions.push(EditorView.lineWrapping);
+    }
 
     if (editorMode === "inline") {
       extensions.push(inlineMarkdownExtension);
@@ -118,18 +114,24 @@ export function Editor({ filePath, content, onNavigateToNote }: EditorProps) {
       view.destroy();
       viewRef.current = null;
     };
-  }, [filePath, editorMode]); // Re-create editor when file or mode changes
+  }, [filePath, editorMode, keymapMode, lineNumbers, wordWrap]);
 
   if (!filePath) {
     return (
-      <div className="flex-1 flex items-center justify-center text-muted-foreground">
-        <p>Select a note to edit</p>
+      <div className="h-full flex items-center justify-center text-muted-foreground">
+        <div className="text-center space-y-3">
+          <p className="text-sm">Select a note from the sidebar to start editing</p>
+          <div className="text-xs space-y-1 text-muted-foreground/60">
+            <p><kbd className="bg-muted px-1.5 py-0.5 rounded text-[11px]">Cmd+K</kbd> to search notes</p>
+            <p><kbd className="bg-muted px-1.5 py-0.5 rounded text-[11px]">+</kbd> in sidebar to create a new note</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0">
+    <div className="h-full flex flex-col min-w-0">
       <div className="px-4 py-1.5 border-b border-border text-sm text-muted-foreground flex items-center justify-between">
         <span>{filePath}</span>
         <div className="flex gap-0.5">

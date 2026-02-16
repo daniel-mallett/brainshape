@@ -1,12 +1,24 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getSettings,
   updateSettings,
   type Settings,
   type MCPServer,
 } from "../lib/api";
+import {
+  BUILTIN_THEMES,
+  THEME_GROUPS,
+  THEME_KEY_LABELS,
+  applyTheme,
+  type Theme,
+} from "../lib/themes";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+
+interface ModelOption {
+  value: string;
+  label: string;
+}
 
 const PROVIDERS = [
   { value: "anthropic", label: "Anthropic" },
@@ -14,14 +26,22 @@ const PROVIDERS = [
   { value: "ollama", label: "Ollama" },
 ] as const;
 
-const SUGGESTED_MODELS: Record<string, string[]> = {
+const SUGGESTED_MODELS: Record<string, ModelOption[]> = {
   anthropic: [
-    "claude-opus-4-6",
-    "claude-sonnet-4-5-20250929",
-    "claude-haiku-4-5-20251001",
+    { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
+    { value: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5" },
+    { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
   ],
-  openai: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
-  ollama: ["llama3.3", "mistral", "deepseek-r1"],
+  openai: [
+    { value: "gpt-4o", label: "GPT-4o" },
+    { value: "gpt-4o-mini", label: "GPT-4o Mini" },
+    { value: "o3-mini", label: "o3 Mini" },
+  ],
+  ollama: [
+    { value: "llama3.3", label: "Llama 3.3" },
+    { value: "mistral", label: "Mistral" },
+    { value: "deepseek-r1", label: "DeepSeek R1" },
+  ],
 };
 
 const TRANSCRIPTION_PROVIDERS = [
@@ -30,11 +50,37 @@ const TRANSCRIPTION_PROVIDERS = [
   { value: "mistral", label: "Mistral Voxtral" },
 ] as const;
 
-const SUGGESTED_TRANSCRIPTION_MODELS: Record<string, string[]> = {
-  local: ["mlx-community/whisper-small", "mlx-community/whisper-large-v3-turbo"],
-  openai: ["gpt-4o-mini-transcribe", "gpt-4o-transcribe", "whisper-1"],
-  mistral: ["voxtral-mini-latest"],
+const SUGGESTED_TRANSCRIPTION_MODELS: Record<string, ModelOption[]> = {
+  local: [
+    { value: "mlx-community/whisper-small", label: "Whisper Small" },
+    { value: "mlx-community/whisper-large-v3-turbo", label: "Whisper Large v3 Turbo" },
+  ],
+  openai: [
+    { value: "gpt-4o-mini-transcribe", label: "GPT-4o Mini Transcribe" },
+    { value: "gpt-4o-transcribe", label: "GPT-4o Transcribe" },
+    { value: "whisper-1", label: "Whisper 1" },
+  ],
+  mistral: [
+    { value: "voxtral-mini-latest", label: "Voxtral Mini" },
+  ],
 };
+
+const UI_FONTS = [
+  { value: "", label: "System Default" },
+  { value: "Inter, system-ui, sans-serif", label: "Inter" },
+  { value: "'SF Pro Display', system-ui, sans-serif", label: "SF Pro" },
+  { value: "'JetBrains Mono', monospace", label: "JetBrains Mono" },
+];
+
+const EDITOR_FONTS = [
+  { value: "", label: "Default (JetBrains Mono)" },
+  { value: "JetBrains Mono", label: "JetBrains Mono" },
+  { value: "Fira Code", label: "Fira Code" },
+  { value: "Cascadia Code", label: "Cascadia Code" },
+  { value: "SF Mono", label: "SF Mono" },
+  { value: "Menlo", label: "Menlo" },
+  { value: "Monaco", label: "Monaco" },
+];
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
@@ -52,13 +98,130 @@ function FieldHint({ children }: { children: React.ReactNode }) {
   return <p className="text-xs text-muted-foreground">{children}</p>;
 }
 
-export function SettingsPanel() {
+function ModelSelect({
+  value,
+  suggestions,
+  onChange,
+  includeDefault,
+}: {
+  value: string;
+  suggestions: ModelOption[];
+  onChange: (value: string) => void;
+  includeDefault?: boolean;
+}) {
+  const [customMode, setCustomMode] = useState(false);
+  const customInputRef = useRef<HTMLInputElement>(null);
+  const suggestionValues = suggestions.map((s) => s.value);
+  const isCustomValue = value !== "" && !suggestionValues.includes(value);
+  const showCustomInput = customMode || isCustomValue;
+
+  return (
+    <div className="space-y-1.5">
+      <select
+        value={showCustomInput ? "__custom__" : value}
+        onChange={(e) => {
+          if (e.target.value === "__custom__") {
+            setCustomMode(true);
+            if (suggestionValues.includes(value)) onChange("");
+            setTimeout(() => customInputRef.current?.focus(), 0);
+          } else {
+            setCustomMode(false);
+            onChange(e.target.value);
+          }
+        }}
+        className="w-full h-8 text-sm rounded-md border border-input bg-background px-3 text-foreground"
+      >
+        {includeDefault && <option value="">Provider default</option>}
+        {suggestions.map((s) => (
+          <option key={s.value} value={s.value}>{s.label}</option>
+        ))}
+        {showCustomInput && <option value="__custom__">{isCustomValue ? value : "Custom..."}</option>}
+        {!showCustomInput && <option value="__custom__">Custom...</option>}
+      </select>
+      {showCustomInput && (
+        <Input
+          ref={customInputRef}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Enter model name..."
+          className="h-8 text-sm"
+          autoFocus={customMode && !isCustomValue}
+        />
+      )}
+    </div>
+  );
+}
+
+function ApiKeyField({
+  label, value, isSet, onChange, placeholder, hint,
+}: {
+  label: string; value: string; isSet: boolean; onChange: (value: string) => void; placeholder: string; hint?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  if (isSet && !editing && !value) {
+    return (
+      <section className="space-y-1.5">
+        <FieldLabel>{label}</FieldLabel>
+        <div className="flex items-center gap-2 h-8">
+          <span className="text-sm text-muted-foreground">Configured</span>
+          <button onClick={() => { setEditing(true); setTimeout(() => inputRef.current?.focus(), 0); }} className="text-xs text-muted-foreground hover:text-foreground underline">Change</button>
+        </div>
+        {hint && <FieldHint>{hint}</FieldHint>}
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-1.5">
+      <FieldLabel>{label}</FieldLabel>
+      <Input ref={inputRef} type="password" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="h-8 text-sm" autoFocus={editing} />
+      {hint && <FieldHint>{hint}</FieldHint>}
+    </section>
+  );
+}
+
+/** Color swatch with native color picker */
+function ColorPicker({
+  label, value, onChange,
+}: {
+  label: string; value: string; onChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-xs text-muted-foreground truncate">{label}</span>
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <span className="text-[10px] font-mono text-muted-foreground/60 w-16 text-right">{value}</span>
+        <label className="relative cursor-pointer">
+          <span
+            className="block w-6 h-6 rounded border border-border"
+            style={{ backgroundColor: value }}
+          />
+          <input
+            type="color"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+export interface SettingsPanelProps {
+  dirty: boolean;
+  setDirty: (dirty: boolean) => void;
+}
+
+export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [dirty, setDirty] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
 
-  // Local form state
+  // LLM settings
   const [provider, setProvider] = useState("anthropic");
   const [model, setModel] = useState("");
   const [ollamaUrl, setOllamaUrl] = useState("");
@@ -68,6 +231,19 @@ export function SettingsPanel() {
   const [txProvider, setTxProvider] = useState("local");
   const [txModel, setTxModel] = useState("");
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
+
+  // Theme & appearance
+  const [themeName, setThemeName] = useState("Midnight");
+  const [themeOverrides, setThemeOverrides] = useState<Record<string, string>>({});
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [uiFont, setUiFont] = useState("");
+  const [editorFont, setEditorFont] = useState("");
+  const [editorFontSize, setEditorFontSize] = useState(14);
+
+  // Editor
+  const [editorKeymap, setEditorKeymap] = useState("vim");
+  const [editorLineNumbers, setEditorLineNumbers] = useState(false);
+  const [editorWordWrap, setEditorWordWrap] = useState(true);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -83,6 +259,21 @@ export function SettingsPanel() {
       setAnthropicKey("");
       setOpenaiKey("");
       setMistralKey("");
+
+      // Theme
+      const t = s.theme || {};
+      setThemeName(t.name || "Midnight");
+      const overrides = { ...t };
+      delete overrides.name;
+      setThemeOverrides(overrides);
+
+      // Fonts & editor
+      setUiFont(s.ui_font_family || "");
+      setEditorFont(s.editor_font_family || "");
+      setEditorFontSize(s.editor_font_size || 14);
+      setEditorKeymap(s.editor_keymap || "vim");
+      setEditorLineNumbers(s.editor_line_numbers ?? false);
+      setEditorWordWrap(s.editor_word_wrap ?? true);
     } catch (err) {
       console.error("Failed to load settings:", err);
     } finally {
@@ -90,13 +281,21 @@ export function SettingsPanel() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
+  useEffect(() => { fetchSettings(); }, [fetchSettings]);
+
+  // Live preview: apply theme as user changes colors
+  const livePreviewTheme = useCallback(() => {
+    const base = BUILTIN_THEMES.find((t) => t.name === themeName) || BUILTIN_THEMES[0];
+    const merged = { ...base, ...themeOverrides, name: themeName } as Theme;
+    applyTheme(merged);
+  }, [themeName, themeOverrides]);
+
+  useEffect(() => { livePreviewTheme(); }, [livePreviewTheme]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      const themeData: Record<string, string> = { name: themeName, ...themeOverrides };
       const updates: Record<string, unknown> = {
         llm_provider: provider,
         llm_model: model,
@@ -104,18 +303,25 @@ export function SettingsPanel() {
         transcription_provider: txProvider,
         transcription_model: txModel,
         mcp_servers: mcpServers,
+        theme: themeData,
+        ui_font_family: uiFont,
+        editor_font_family: editorFont,
+        editor_font_size: editorFontSize,
+        editor_keymap: editorKeymap,
+        editor_line_numbers: editorLineNumbers,
+        editor_word_wrap: editorWordWrap,
       };
       if (anthropicKey) updates.anthropic_api_key = anthropicKey;
       if (openaiKey) updates.openai_api_key = openaiKey;
       if (mistralKey) updates.mistral_api_key = mistralKey;
-      const s = await updateSettings(
-        updates as Parameters<typeof updateSettings>[0]
-      );
+      const s = await updateSettings(updates as Parameters<typeof updateSettings>[0]);
       setSettings(s);
       setDirty(false);
       setAnthropicKey("");
       setOpenaiKey("");
       setMistralKey("");
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 2000);
     } catch (err) {
       console.error("Failed to save settings:", err);
     } finally {
@@ -124,6 +330,22 @@ export function SettingsPanel() {
   };
 
   const markDirty = () => setDirty(true);
+
+  const handleThemeChange = (name: string) => {
+    setThemeName(name);
+    setThemeOverrides({});
+    markDirty();
+  };
+
+  const handleColorChange = (key: string, value: string) => {
+    setThemeOverrides((prev) => ({ ...prev, [key]: value }));
+    markDirty();
+  };
+
+  const handleResetColors = () => {
+    setThemeOverrides({});
+    markDirty();
+  };
 
   if (loading) {
     return (
@@ -134,15 +356,154 @@ export function SettingsPanel() {
   }
 
   const suggestions = SUGGESTED_MODELS[provider] || [];
+  const txSuggestions = SUGGESTED_TRANSCRIPTION_MODELS[txProvider] || [];
+  const currentBaseTheme = BUILTIN_THEMES.find((t) => t.name === themeName) || BUILTIN_THEMES[0];
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <div className="px-3 py-1.5 border-b border-border text-xs text-muted-foreground">
-        Settings
-      </div>
-
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-lg mx-auto p-6 space-y-8">
+
+          {/* ── Appearance ── */}
+          <div className="space-y-4">
+            <SectionHeading>Appearance</SectionHeading>
+
+            <section className="space-y-1.5">
+              <FieldLabel>Theme</FieldLabel>
+              <div className="flex gap-2">
+                <select
+                  value={themeName}
+                  onChange={(e) => handleThemeChange(e.target.value)}
+                  className="flex-1 h-8 text-sm rounded-md border border-input bg-background px-3 text-foreground"
+                >
+                  {BUILTIN_THEMES.map((t) => (
+                    <option key={t.name} value={t.name}>{t.name}</option>
+                  ))}
+                </select>
+                <Button
+                  variant={customizeOpen ? "secondary" : "outline"}
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => setCustomizeOpen(!customizeOpen)}
+                >
+                  {customizeOpen ? "Close" : "Customize"}
+                </Button>
+              </div>
+            </section>
+
+            {customizeOpen && (
+              <div className="border border-border rounded-md p-3 space-y-4">
+                {THEME_GROUPS.map((group) => (
+                  <div key={group.label} className="space-y-2">
+                    <p className="text-xs font-medium text-foreground">{group.label}</p>
+                    <div className="space-y-1.5">
+                      {group.keys.map((key) => (
+                        <ColorPicker
+                          key={key}
+                          label={THEME_KEY_LABELS[key]}
+                          value={themeOverrides[key] || currentBaseTheme[key]}
+                          onChange={(v) => handleColorChange(key, v)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <Button variant="ghost" size="sm" className="text-xs w-full" onClick={handleResetColors}>
+                  Reset to theme defaults
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* ── Fonts ── */}
+          <div className="space-y-4">
+            <SectionHeading>Fonts</SectionHeading>
+
+            <section className="space-y-1.5">
+              <FieldLabel>UI Font</FieldLabel>
+              <select
+                value={uiFont}
+                onChange={(e) => { setUiFont(e.target.value); markDirty(); }}
+                className="w-full h-8 text-sm rounded-md border border-input bg-background px-3 text-foreground"
+              >
+                {UI_FONTS.map((f) => (
+                  <option key={f.value} value={f.value}>{f.label}</option>
+                ))}
+              </select>
+            </section>
+
+            <section className="space-y-1.5">
+              <FieldLabel>Editor Font</FieldLabel>
+              <select
+                value={editorFont}
+                onChange={(e) => { setEditorFont(e.target.value); markDirty(); }}
+                className="w-full h-8 text-sm rounded-md border border-input bg-background px-3 text-foreground"
+              >
+                {EDITOR_FONTS.map((f) => (
+                  <option key={f.value} value={f.value}>{f.label}</option>
+                ))}
+              </select>
+            </section>
+
+            <section className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <FieldLabel>Editor Font Size</FieldLabel>
+                <span className="text-xs text-muted-foreground tabular-nums">{editorFontSize}px</span>
+              </div>
+              <input
+                type="range"
+                min={10}
+                max={24}
+                step={1}
+                value={editorFontSize}
+                onChange={(e) => { setEditorFontSize(Number(e.target.value)); markDirty(); }}
+                className="w-full h-1.5 accent-primary"
+              />
+            </section>
+          </div>
+
+          {/* ── Editor ── */}
+          <div className="space-y-4">
+            <SectionHeading>Editor</SectionHeading>
+
+            <section className="space-y-1.5">
+              <FieldLabel>Keybindings</FieldLabel>
+              <div className="flex gap-1">
+                {(["default", "vim"] as const).map((mode) => (
+                  <Button
+                    key={mode}
+                    variant={editorKeymap === mode ? "secondary" : "outline"}
+                    size="sm"
+                    className="h-7 text-xs flex-1"
+                    onClick={() => { setEditorKeymap(mode); markDirty(); }}
+                  >
+                    {mode === "default" ? "Default" : "Vim"}
+                  </Button>
+                ))}
+              </div>
+            </section>
+
+            <section className="flex items-center justify-between">
+              <FieldLabel>Line Numbers</FieldLabel>
+              <button
+                onClick={() => { setEditorLineNumbers(!editorLineNumbers); markDirty(); }}
+                className={`relative w-9 h-5 rounded-full transition-colors ${editorLineNumbers ? "bg-primary" : "bg-muted"}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${editorLineNumbers ? "translate-x-4" : ""}`} />
+              </button>
+            </section>
+
+            <section className="flex items-center justify-between">
+              <FieldLabel>Word Wrap</FieldLabel>
+              <button
+                onClick={() => { setEditorWordWrap(!editorWordWrap); markDirty(); }}
+                className={`relative w-9 h-5 rounded-full transition-colors ${editorWordWrap ? "bg-primary" : "bg-muted"}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${editorWordWrap ? "translate-x-4" : ""}`} />
+              </button>
+            </section>
+          </div>
+
           {/* ── Language Model ── */}
           <div className="space-y-4">
             <SectionHeading>Language Model</SectionHeading>
@@ -154,123 +515,38 @@ export function SettingsPanel() {
                 onChange={(e) => {
                   setProvider(e.target.value);
                   const defaults = SUGGESTED_MODELS[e.target.value];
-                  if (defaults?.length) setModel(defaults[0]);
+                  if (defaults?.length) setModel(defaults[0].value);
                   markDirty();
                 }}
                 className="w-full h-8 text-sm rounded-md border border-input bg-background px-3 text-foreground"
               >
                 {PROVIDERS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
+                  <option key={p.value} value={p.value}>{p.label}</option>
                 ))}
               </select>
             </section>
 
             <section className="space-y-1.5">
               <FieldLabel>Model</FieldLabel>
-              <select
-                value={suggestions.includes(model) ? model : "__custom__"}
-                onChange={(e) => {
-                  if (e.target.value !== "__custom__") {
-                    setModel(e.target.value);
-                    markDirty();
-                  }
-                }}
-                className="w-full h-8 text-sm rounded-md border border-input bg-background px-3 text-foreground"
-              >
-                {suggestions.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-                {!suggestions.includes(model) && (
-                  <option value="__custom__">{model || "Custom..."}</option>
-                )}
-                {suggestions.includes(model) && (
-                  <option value="__custom__">Custom...</option>
-                )}
-              </select>
-              {(!suggestions.includes(model) ||
-                model === "__custom__") && (
-                <Input
-                  value={model === "__custom__" ? "" : model}
-                  onChange={(e) => {
-                    setModel(e.target.value);
-                    markDirty();
-                  }}
-                  placeholder="Enter custom model name..."
-                  className="h-8 text-sm"
-                />
-              )}
+              <ModelSelect value={model} suggestions={suggestions} onChange={(v) => { setModel(v); markDirty(); }} />
             </section>
-          </div>
-
-          {/* ── API Keys ── */}
-          <div className="space-y-4">
-            <SectionHeading>API Keys</SectionHeading>
 
             {provider === "anthropic" && (
-              <section className="space-y-1.5">
-                <FieldLabel>Anthropic API Key</FieldLabel>
-                <Input
-                  type="password"
-                  value={anthropicKey}
-                  onChange={(e) => {
-                    setAnthropicKey(e.target.value);
-                    markDirty();
-                  }}
-                  placeholder={
-                    settings?.anthropic_api_key_set
-                      ? "Key is set (enter new to update)"
-                      : "sk-ant-..."
-                  }
-                  className="h-8 text-sm"
-                />
-                <FieldHint>
-                  Can also be set via ANTHROPIC_API_KEY environment variable.
-                </FieldHint>
-              </section>
+              <ApiKeyField label="API Key" value={anthropicKey} isSet={!!settings?.anthropic_api_key_set} onChange={(v) => { setAnthropicKey(v); markDirty(); }} placeholder="sk-ant-..." hint="Can also be set via ANTHROPIC_API_KEY environment variable." />
             )}
-
             {provider === "openai" && (
-              <section className="space-y-1.5">
-                <FieldLabel>OpenAI API Key</FieldLabel>
-                <Input
-                  type="password"
-                  value={openaiKey}
-                  onChange={(e) => {
-                    setOpenaiKey(e.target.value);
-                    markDirty();
-                  }}
-                  placeholder={
-                    settings?.openai_api_key_set
-                      ? "Key is set (enter new to update)"
-                      : "sk-..."
-                  }
-                  className="h-8 text-sm"
-                />
-              </section>
+              <ApiKeyField label="API Key" value={openaiKey} isSet={!!settings?.openai_api_key_set} onChange={(v) => { setOpenaiKey(v); markDirty(); }} placeholder="sk-..." />
             )}
-
             {provider === "ollama" && (
               <section className="space-y-1.5">
-                <FieldLabel>Ollama Base URL</FieldLabel>
-                <Input
-                  value={ollamaUrl}
-                  onChange={(e) => {
-                    setOllamaUrl(e.target.value);
-                    markDirty();
-                  }}
-                  placeholder="http://localhost:11434"
-                  className="h-8 text-sm"
-                />
+                <FieldLabel>Base URL</FieldLabel>
+                <Input value={ollamaUrl} onChange={(e) => { setOllamaUrl(e.target.value); markDirty(); }} placeholder="http://localhost:11434" className="h-8 text-sm" />
                 <FieldHint>No API key needed for local Ollama.</FieldHint>
               </section>
             )}
           </div>
 
-          {/* ── Voice ── */}
+          {/* ── Voice Transcription ── */}
           <div className="space-y-4">
             <SectionHeading>Voice Transcription</SectionHeading>
 
@@ -278,122 +554,27 @@ export function SettingsPanel() {
               <FieldLabel>Provider</FieldLabel>
               <select
                 value={txProvider}
-                onChange={(e) => {
-                  setTxProvider(e.target.value);
-                  setTxModel("");
-                  markDirty();
-                }}
+                onChange={(e) => { setTxProvider(e.target.value); setTxModel(""); markDirty(); }}
                 className="w-full h-8 text-sm rounded-md border border-input bg-background px-3 text-foreground"
               >
                 {TRANSCRIPTION_PROVIDERS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
+                  <option key={p.value} value={p.value}>{p.label}</option>
                 ))}
               </select>
-              {txProvider === "local" && (
-                <FieldHint>
-                  Runs locally via mlx-whisper. Requires Apple Silicon.
-                </FieldHint>
-              )}
+              {txProvider === "local" && <FieldHint>Runs locally via mlx-whisper. Requires Apple Silicon.</FieldHint>}
             </section>
 
             <section className="space-y-1.5">
               <FieldLabel>Model</FieldLabel>
-              {(() => {
-                const txSuggestions =
-                  SUGGESTED_TRANSCRIPTION_MODELS[txProvider] || [];
-                return (
-                  <>
-                    <select
-                      value={
-                        txSuggestions.includes(txModel) ? txModel : "__custom__"
-                      }
-                      onChange={(e) => {
-                        if (e.target.value !== "__custom__") {
-                          setTxModel(e.target.value);
-                          markDirty();
-                        }
-                      }}
-                      className="w-full h-8 text-sm rounded-md border border-input bg-background px-3 text-foreground"
-                    >
-                      <option value="">Provider default</option>
-                      {txSuggestions.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                      {txModel && !txSuggestions.includes(txModel) && (
-                        <option value="__custom__">{txModel}</option>
-                      )}
-                      {(txModel === "" || txSuggestions.includes(txModel)) && (
-                        <option value="__custom__">Custom...</option>
-                      )}
-                    </select>
-                    {txModel !== "" &&
-                      !txSuggestions.includes(txModel) && (
-                        <Input
-                          value={txModel === "__custom__" ? "" : txModel}
-                          onChange={(e) => {
-                            setTxModel(e.target.value);
-                            markDirty();
-                          }}
-                          placeholder="Enter custom model name..."
-                          className="h-8 text-sm"
-                        />
-                      )}
-                  </>
-                );
-              })()}
-              <FieldHint>
-                Leave empty to use the provider's default model.
-              </FieldHint>
+              <ModelSelect value={txModel} suggestions={txSuggestions} onChange={(v) => { setTxModel(v); markDirty(); }} includeDefault />
+              <FieldHint>Leave empty to use the provider's default model.</FieldHint>
             </section>
 
             {txProvider === "openai" && (
-              <section className="space-y-1.5">
-                <FieldLabel>OpenAI API Key</FieldLabel>
-                <Input
-                  type="password"
-                  value={openaiKey}
-                  onChange={(e) => {
-                    setOpenaiKey(e.target.value);
-                    markDirty();
-                  }}
-                  placeholder={
-                    settings?.openai_api_key_set
-                      ? "Key is set (enter new to update)"
-                      : "sk-..."
-                  }
-                  className="h-8 text-sm"
-                />
-                <FieldHint>
-                  Shared with the OpenAI LLM provider above.
-                </FieldHint>
-              </section>
+              <ApiKeyField label="OpenAI API Key" value={openaiKey} isSet={!!settings?.openai_api_key_set} onChange={(v) => { setOpenaiKey(v); markDirty(); }} placeholder="sk-..." hint="Shared with the OpenAI LLM provider above." />
             )}
-
             {txProvider === "mistral" && (
-              <section className="space-y-1.5">
-                <FieldLabel>Mistral API Key</FieldLabel>
-                <Input
-                  type="password"
-                  value={mistralKey}
-                  onChange={(e) => {
-                    setMistralKey(e.target.value);
-                    markDirty();
-                  }}
-                  placeholder={
-                    settings?.mistral_api_key_set
-                      ? "Key is set (enter new to update)"
-                      : "mk-..."
-                  }
-                  className="h-8 text-sm"
-                />
-                <FieldHint>
-                  Can also be set via MISTRAL_API_KEY environment variable.
-                </FieldHint>
-              </section>
+              <ApiKeyField label="Mistral API Key" value={mistralKey} isSet={!!settings?.mistral_api_key_set} onChange={(v) => { setMistralKey(v); markDirty(); }} placeholder="mk-..." hint="Can also be set via MISTRAL_API_KEY environment variable." />
             )}
           </div>
 
@@ -401,132 +582,61 @@ export function SettingsPanel() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <SectionHeading>MCP Servers</SectionHeading>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 text-xs"
-                onClick={() => {
-                  setMcpServers([
-                    ...mcpServers,
-                    { name: "", transport: "stdio", command: "", args: [] },
-                  ]);
-                  markDirty();
-                }}
-              >
+              <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => { setMcpServers([...mcpServers, { name: "", transport: "stdio", command: "", args: [] }]); markDirty(); }}>
                 + Add
               </Button>
             </div>
-            <FieldHint>
-              Connect external MCP servers to extend the agent with additional
-              tools.
-            </FieldHint>
+            <FieldHint>Connect external MCP servers to extend the agent with additional tools.</FieldHint>
 
             {mcpServers.map((server, i) => (
-              <div
-                key={i}
-                className="border border-border rounded-md p-3 space-y-2"
-              >
+              <div key={i} className="border border-border rounded-md p-3 space-y-2">
                 <div className="flex items-center gap-2">
                   <Input
                     value={server.name}
-                    onChange={(e) => {
-                      const updated = [...mcpServers];
-                      updated[i] = { ...updated[i], name: e.target.value };
-                      setMcpServers(updated);
-                      markDirty();
-                    }}
+                    onChange={(e) => { const u = [...mcpServers]; u[i] = { ...u[i], name: e.target.value }; setMcpServers(u); markDirty(); }}
                     placeholder="Server name"
-                    className="h-7 text-sm flex-1"
+                    className="h-7 text-sm flex-1 font-medium"
                   />
                   <select
                     value={server.transport}
-                    onChange={(e) => {
-                      const updated = [...mcpServers];
-                      updated[i] = {
-                        ...updated[i],
-                        transport: e.target.value as "stdio" | "http",
-                      };
-                      setMcpServers(updated);
-                      markDirty();
-                    }}
+                    onChange={(e) => { const u = [...mcpServers]; u[i] = { ...u[i], transport: e.target.value as "stdio" | "http" }; setMcpServers(u); markDirty(); }}
                     className="h-7 text-xs rounded-md border border-input bg-background px-2 text-foreground"
                   >
                     <option value="stdio">stdio</option>
                     <option value="http">http</option>
                   </select>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs text-destructive px-2"
-                    onClick={() => {
-                      setMcpServers(mcpServers.filter((_, j) => j !== i));
-                      markDirty();
-                    }}
-                  >
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive px-2" onClick={() => { setMcpServers(mcpServers.filter((_, j) => j !== i)); markDirty(); }}>
                     Remove
                   </Button>
                 </div>
                 {server.transport === "stdio" ? (
                   <>
-                    <Input
-                      value={server.command || ""}
-                      onChange={(e) => {
-                        const updated = [...mcpServers];
-                        updated[i] = {
-                          ...updated[i],
-                          command: e.target.value,
-                        };
-                        setMcpServers(updated);
-                        markDirty();
-                      }}
-                      placeholder="Command (e.g., npx, python, node)"
-                      className="h-7 text-sm"
-                    />
-                    <Input
-                      value={(server.args || []).join(" ")}
-                      onChange={(e) => {
-                        const updated = [...mcpServers];
-                        updated[i] = {
-                          ...updated[i],
-                          args: e.target.value.split(" ").filter(Boolean),
-                        };
-                        setMcpServers(updated);
-                        markDirty();
-                      }}
-                      placeholder="Args (space-separated)"
-                      className="h-7 text-sm"
-                    />
+                    <div className="space-y-0.5">
+                      <label className="text-xs text-muted-foreground">Executable</label>
+                      <Input value={server.command || ""} onChange={(e) => { const u = [...mcpServers]; u[i] = { ...u[i], command: e.target.value }; setMcpServers(u); markDirty(); }} placeholder="e.g., npx, python, node" className="h-7 text-sm" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <label className="text-xs text-muted-foreground">Arguments</label>
+                      <Input value={(server.args || []).join(" ")} onChange={(e) => { const u = [...mcpServers]; u[i] = { ...u[i], args: e.target.value.split(" ").filter(Boolean) }; setMcpServers(u); markDirty(); }} placeholder="Space-separated arguments" className="h-7 text-sm" />
+                    </div>
                   </>
                 ) : (
-                  <Input
-                    value={server.url || ""}
-                    onChange={(e) => {
-                      const updated = [...mcpServers];
-                      updated[i] = { ...updated[i], url: e.target.value };
-                      setMcpServers(updated);
-                      markDirty();
-                    }}
-                    placeholder="URL (e.g., http://localhost:8000/mcp)"
-                    className="h-7 text-sm"
-                  />
+                  <div className="space-y-0.5">
+                    <label className="text-xs text-muted-foreground">URL</label>
+                    <Input value={server.url || ""} onChange={(e) => { const u = [...mcpServers]; u[i] = { ...u[i], url: e.target.value }; setMcpServers(u); markDirty(); }} placeholder="e.g., http://localhost:8000/mcp" className="h-7 text-sm" />
+                  </div>
                 )}
               </div>
             ))}
             {mcpServers.length === 0 && (
-              <p className="text-xs text-muted-foreground/60 text-center py-2">
-                No MCP servers configured.
-              </p>
+              <p className="text-xs text-muted-foreground/60 text-center py-2">No MCP servers configured.</p>
             )}
           </div>
 
           {/* ── Save ── */}
           <div className="pt-2 pb-4">
-            <Button
-              onClick={handleSave}
-              disabled={!dirty || saving}
-              className="w-full"
-            >
-              {saving ? "Saving..." : dirty ? "Save Settings" : "Settings Saved"}
+            <Button onClick={handleSave} disabled={!dirty || saving} className="w-full">
+              {saving ? "Saving..." : savedFlash ? "Saved" : "Save Settings"}
             </Button>
             {dirty && (
               <p className="text-xs text-muted-foreground mt-1 text-center">

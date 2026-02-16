@@ -61,7 +61,7 @@ export function GraphPanel({ onNavigateToNote }: GraphPanelProps) {
     : 0;
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="h-full flex flex-col min-h-0">
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border text-xs">
         {/* Label filters */}
@@ -97,7 +97,7 @@ export function GraphPanel({ onNavigateToNote }: GraphPanelProps) {
                 <span
                   className={`inline-block w-2 h-2 rounded-full ${LABEL_BADGE_COLORS[label] || "bg-gray-500"}`}
                 />
-                {count} {label}s
+                {count} {label === "Memory" ? "Memories" : `${label}s`}
               </span>
             ))}
             <span className="text-muted-foreground/60">

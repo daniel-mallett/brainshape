@@ -1,6 +1,7 @@
 """FastAPI server exposing Brain agent, notes, and sync operations over HTTP + SSE."""
 
 import json
+import os
 import tempfile
 import uuid
 from contextlib import asynccontextmanager
@@ -135,6 +136,13 @@ class UpdateSettingsRequest(BaseModel):
     embedding_model: str | None = None
     embedding_dimensions: int | None = None
     mcp_servers: list[dict] | None = None
+    theme: dict | None = None
+    ui_font_family: str | None = None
+    editor_font_family: str | None = None
+    editor_font_size: int | None = None
+    editor_keymap: str | None = None
+    editor_line_numbers: bool | None = None
+    editor_word_wrap: bool | None = None
 
 
 # --- Health ---
@@ -633,14 +641,24 @@ def _validate_mcp_servers(servers: list[dict]) -> None:
                 )
 
 
+def _add_key_flags(safe: dict, data: dict) -> None:
+    """Add *_api_key_set booleans (checks settings + env vars)."""
+    env = {
+        "anthropic": "ANTHROPIC_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "mistral": "MISTRAL_API_KEY",
+    }
+    for name, env_var in env.items():
+        key = f"{name}_api_key"
+        safe[f"{key}_set"] = bool(data.get(key) or os.environ.get(env_var))
+
+
 @app.get("/settings")
 def get_settings():
     s = load_settings()
     # Never expose API keys to the frontend
     safe = {k: v for k, v in s.items() if "api_key" not in k}
-    safe["anthropic_api_key_set"] = bool(s.get("anthropic_api_key"))
-    safe["openai_api_key_set"] = bool(s.get("openai_api_key"))
-    safe["mistral_api_key_set"] = bool(s.get("mistral_api_key"))
+    _add_key_flags(safe, s)
     return safe
 
 
@@ -685,6 +703,20 @@ async def put_settings(req: UpdateSettingsRequest):
     if req.mcp_servers is not None:
         _validate_mcp_servers(req.mcp_servers)
         updates["mcp_servers"] = req.mcp_servers
+    if req.theme is not None:
+        updates["theme"] = req.theme
+    if req.ui_font_family is not None:
+        updates["ui_font_family"] = req.ui_font_family
+    if req.editor_font_family is not None:
+        updates["editor_font_family"] = req.editor_font_family
+    if req.editor_font_size is not None:
+        updates["editor_font_size"] = req.editor_font_size
+    if req.editor_keymap is not None:
+        updates["editor_keymap"] = req.editor_keymap
+    if req.editor_line_numbers is not None:
+        updates["editor_line_numbers"] = req.editor_line_numbers
+    if req.editor_word_wrap is not None:
+        updates["editor_word_wrap"] = req.editor_word_wrap
 
     updated = update_settings(updates)
 
@@ -697,8 +729,6 @@ async def put_settings(req: UpdateSettingsRequest):
         ]
     )
     if any_key_changed:
-        import os
-
         from brain.config import export_api_keys
 
         # Clear existing values so export_api_keys' setdefault can update them
@@ -728,9 +758,7 @@ async def put_settings(req: UpdateSettingsRequest):
         _sessions.clear()  # Clear stale sessions since agent was recreated
 
     safe = {k: v for k, v in updated.items() if "api_key" not in k}
-    safe["anthropic_api_key_set"] = bool(updated.get("anthropic_api_key"))
-    safe["openai_api_key_set"] = bool(updated.get("openai_api_key"))
-    safe["mistral_api_key_set"] = bool(updated.get("mistral_api_key"))
+    _add_key_flags(safe, updated)
     return safe
 
 

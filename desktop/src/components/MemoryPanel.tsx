@@ -9,11 +9,20 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { ScrollArea } from "./ui/scroll-area";
 
+const TYPE_LABELS: Record<string, string> = {
+  preference: "Preference",
+  user_info: "About You",
+  fact: "Fact",
+  goal: "Goal",
+  project: "Project",
+};
+
 const TYPE_COLORS: Record<string, string> = {
   preference: "bg-blue-500/20 text-blue-400",
   user_info: "bg-green-500/20 text-green-400",
   fact: "bg-amber-500/20 text-amber-400",
   goal: "bg-purple-500/20 text-purple-400",
+  project: "bg-cyan-500/20 text-cyan-400",
 };
 
 export function MemoryPanel() {
@@ -72,7 +81,7 @@ export function MemoryPanel() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+      <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
         Loading memories...
       </div>
     );
@@ -80,7 +89,7 @@ export function MemoryPanel() {
 
   if (memories.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="h-full flex items-center justify-center">
         <div className="text-center">
           <p className="text-muted-foreground text-sm mb-1">
             No memories yet.
@@ -94,7 +103,7 @@ export function MemoryPanel() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="h-full flex flex-col min-h-0">
       <div className="px-3 py-1.5 border-b border-border text-xs text-muted-foreground flex items-center justify-between">
         <span>What Brain knows about you</span>
         <span>{memories.length} memories</span>
@@ -112,7 +121,7 @@ export function MemoryPanel() {
                   <span
                     className={`text-xs px-1.5 py-0.5 rounded ${TYPE_COLORS[memory.type] || "bg-gray-500/20 text-gray-400"}`}
                   >
-                    {memory.type}
+                    {TYPE_LABELS[memory.type] || memory.type}
                   </span>
                   {memory.created_at && (
                     <span className="text-xs text-muted-foreground/60">

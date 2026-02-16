@@ -507,6 +507,41 @@ class TestSettings:
         assert resp.json()["embedding_model"] == "sentence-transformers/all-MiniLM-L6-v2"
         assert resp.json()["embedding_dimensions"] == 384
 
+    def test_update_theme_and_editor_settings(self, client):
+        """PUT /settings with theme and editor settings round-trips correctly."""
+        theme = {"name": "Dawn", "background": "#faf8f5", "foreground": "#1c1917"}
+        resp = client.put(
+            "/settings",
+            json={
+                "theme": theme,
+                "ui_font_family": "Inter",
+                "editor_font_family": "Fira Code",
+                "editor_font_size": 16,
+                "editor_keymap": "default",
+                "editor_line_numbers": True,
+                "editor_word_wrap": False,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["theme"]["name"] == "Dawn"
+        assert data["theme"]["background"] == "#faf8f5"
+        assert data["ui_font_family"] == "Inter"
+        assert data["editor_font_family"] == "Fira Code"
+        assert data["editor_font_size"] == 16
+        assert data["editor_keymap"] == "default"
+        assert data["editor_line_numbers"] is True
+        assert data["editor_word_wrap"] is False
+
+    def test_get_settings_includes_theme_defaults(self, client):
+        """GET /settings returns theme and editor defaults."""
+        resp = client.get("/settings")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "theme" in data
+        assert "editor_keymap" in data
+        assert "editor_font_size" in data
+
     def test_mcp_change_triggers_reload(self, client, monkeypatch):
         """PUT /settings with mcp_servers triggers agent reload."""
         mock_reload = AsyncMock(return_value=[])

@@ -194,7 +194,7 @@ export function Sidebar({ selectedPath, onSelectFile }: SidebarProps) {
   const tree = buildTree(files);
 
   return (
-    <div className="w-60 flex-shrink-0 border-r border-border flex flex-col">
+    <div className="h-full flex flex-col">
       <div className="px-3 py-2 border-b border-border flex items-center justify-between">
         <span className="text-sm font-medium">Files</span>
         <button

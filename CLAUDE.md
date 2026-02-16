@@ -22,8 +22,8 @@ brain/                    # Python backend
 └── cli.py                # Interactive CLI chat loop
 
 desktop/                  # Tauri 2 + React + TypeScript
-├── src/components/       # Editor (CodeMirror 6 + vim), Chat (SSE), Sidebar
-├── src/lib/              # API client, useAgentStream hook
+├── src/components/       # Editor (CodeMirror 6), Chat (SSE), Sidebar, Settings, MeetingRecorder
+├── src/lib/              # API client, useAgentStream hook, themes engine, editor theme
 └── src-tauri/            # Rust shell
 ```
 
