@@ -47,6 +47,11 @@ function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState("");
+  // Navigation history (browser-style back/forward)
+  const historyRef = useRef<string[]>([]);
+  const historyIndexRef = useRef(-1);
+  const isHistoryNavRef = useRef(false);
+  const [historyPos, setHistoryPos] = useState({ index: -1, length: 0 });
   const [chatOpen, setChatOpen] = useState(true);
   const [activeView, setActiveView] = useState<ActiveView>("editor");
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -112,6 +117,16 @@ function App() {
         setSelectedPath(path);
         setFileContent(note.content);
         if (activeView !== "editor") setActiveView("editor");
+        // Push to history unless we're navigating via back/forward
+        if (!isHistoryNavRef.current) {
+          const h = historyRef.current;
+          const idx = historyIndexRef.current;
+          // Trim forward history when navigating to a new note
+          historyRef.current = [...h.slice(0, idx + 1), path];
+          historyIndexRef.current = historyRef.current.length - 1;
+        }
+        isHistoryNavRef.current = false;
+        setHistoryPos({ index: historyIndexRef.current, length: historyRef.current.length });
         // Refresh sidebar so externally-created notes (e.g. from command palette) appear
         sidebarRef.current?.refresh();
       } catch (err) {
@@ -142,16 +157,41 @@ function App() {
     [handleSelectFile]
   );
 
+  const canGoBack = historyPos.index > 0;
+  const canGoForward = historyPos.index < historyPos.length - 1;
+
+  const goBack = useCallback(() => {
+    if (historyIndexRef.current <= 0) return;
+    historyIndexRef.current -= 1;
+    isHistoryNavRef.current = true;
+    handleSelectFile(historyRef.current[historyIndexRef.current]);
+  }, [handleSelectFile]);
+
+  const goForward = useCallback(() => {
+    if (historyIndexRef.current >= historyRef.current.length - 1) return;
+    historyIndexRef.current += 1;
+    isHistoryNavRef.current = true;
+    handleSelectFile(historyRef.current[historyIndexRef.current]);
+  }, [handleSelectFile]);
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setPaletteOpen((prev) => !prev);
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === "[") {
+        e.preventDefault();
+        goBack();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "]") {
+        e.preventDefault();
+        goForward();
+      }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [goBack, goForward]);
 
   const handleCreateNote = useCallback(() => {
     setActiveView("editor");
@@ -238,6 +278,10 @@ function App() {
                 keymap={settings?.editor_keymap || "vim"}
                 lineNumbers={settings?.editor_line_numbers ?? false}
                 wordWrap={settings?.editor_word_wrap ?? true}
+                canGoBack={canGoBack}
+                canGoForward={canGoForward}
+                onGoBack={goBack}
+                onGoForward={goForward}
               />
             )}
             {activeView === "graph" && <GraphPanel onNavigateToNote={handleNavigateToNote} />}

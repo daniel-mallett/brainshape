@@ -30,9 +30,13 @@ interface EditorProps {
   keymap?: string;
   lineNumbers?: boolean;
   wordWrap?: boolean;
+  canGoBack?: boolean;
+  canGoForward?: boolean;
+  onGoBack?: () => void;
+  onGoForward?: () => void;
 }
 
-export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode = "vim", lineNumbers = false, wordWrap = true }: EditorProps) {
+export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode = "vim", lineNumbers = false, wordWrap = true, canGoBack, canGoForward, onGoBack, onGoForward }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -140,7 +144,35 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
   return (
     <div ref={wikilinkRef} className="h-full flex flex-col min-w-0">
       <div className="px-4 py-1.5 border-b border-border text-sm text-muted-foreground flex items-center justify-between">
-        <span>{filePath}</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div className="flex gap-0.5 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 w-5 p-0"
+              disabled={!canGoBack}
+              onClick={onGoBack}
+              title="Go back (Cmd+[)"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                <path fillRule="evenodd" d="M9.78 4.22a.75.75 0 0 1 0 1.06L7.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L5.47 8.53a.75.75 0 0 1 0-1.06l3.25-3.25a.75.75 0 0 1 1.06 0Z" clipRule="evenodd" />
+              </svg>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 w-5 p-0"
+              disabled={!canGoForward}
+              onClick={onGoForward}
+              title="Go forward (Cmd+])"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                <path fillRule="evenodd" d="M6.22 4.22a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 0 1 0 1.06l-3.25 3.25a.75.75 0 0 1-1.06-1.06L8.94 8 6.22 5.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+              </svg>
+            </Button>
+          </div>
+          <span className="truncate">{filePath}</span>
+        </div>
         <div className="flex gap-0.5">
           {(["edit", "inline", "preview"] as const).map((mode) => (
             <Button
