@@ -146,11 +146,6 @@ def get_llm_kwargs(settings: dict[str, Any] | None = None) -> dict[str, Any]:
 
     if provider == "ollama":
         kwargs["base_url"] = settings.get("ollama_base_url", DEFAULTS["ollama_base_url"])
-        # Always use reasoning=True so Ollama separates thinking into its own
-        # field rather than leaking it into content (think:false is broken in
-        # Ollama streaming as of 0.16.1). The server only streams content, so
-        # thinking is automatically excluded from the chat response.
-        kwargs["reasoning"] = True
 
     return kwargs
 
