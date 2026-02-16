@@ -7,7 +7,8 @@ import { VoiceRecorder } from "./VoiceRecorder";
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
 import { remarkWikilinks } from "../lib/remarkWikilinks";
-import { createWikilinkComponents } from "../lib/WikilinkComponents";
+import { wikilinkComponents } from "../lib/WikilinkComponents";
+import { useWikilinkClick } from "../lib/useWikilinkClick";
 
 const streamdownPlugins = { code };
 const wikilinkRemarkPlugins = [remarkWikilinks];
@@ -15,11 +16,9 @@ const wikilinkRemarkPlugins = [remarkWikilinks];
 function MessageBubble({
   message,
   isAnimating,
-  onNavigateToNote,
 }: {
   message: Message;
   isAnimating: boolean;
-  onNavigateToNote?: (title: string) => void;
 }) {
   const isUser = message.role === "user";
 
@@ -52,7 +51,7 @@ function MessageBubble({
               animated
               plugins={streamdownPlugins}
               remarkPlugins={wikilinkRemarkPlugins}
-              components={createWikilinkComponents(onNavigateToNote)}
+              components={wikilinkComponents}
               isAnimating={isAnimating}
             >
               {message.content}
@@ -68,6 +67,7 @@ export function Chat({ onNavigateToNote }: { onNavigateToNote?: (title: string) 
     useAgentStream();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const wikilinkRef = useWikilinkClick(onNavigateToNote);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -84,7 +84,7 @@ export function Chat({ onNavigateToNote }: { onNavigateToNote?: (title: string) 
   };
 
   return (
-    <div className="h-full flex flex-col min-h-0 bg-card/30">
+    <div ref={wikilinkRef} className="h-full flex flex-col min-h-0 bg-card/30">
       <div className="px-3 py-2 border-b border-border">
         <span className="text-sm font-medium">Chat</span>
       </div>
@@ -101,7 +101,6 @@ export function Chat({ onNavigateToNote }: { onNavigateToNote?: (title: string) 
               key={i}
               message={msg}
               isAnimating={i === streamingMessageIndex}
-              onNavigateToNote={onNavigateToNote}
             />
           ))}
           {isStreaming && (

@@ -53,7 +53,12 @@ Always check for existing memories at the start of a conversation:
   MATCH (m:Memory) RETURN m.type, m.content
 Do not just say you'll remember something — actually persist it to the graph.
 
-Be concise but helpful. Use good markdown conventions (wikilinks, tags, clear headings).\
+Be concise but helpful. Use good markdown conventions (wikilinks, tags, clear headings).
+
+When referencing notes in your responses, ALWAYS use [[Note Title]] wikilink syntax.
+This makes them clickable links in the UI. For example: "I found relevant info in
+[[Meeting Notes]] and [[Project Plan]]." Never use plain text or markdown links for
+note references — always use [[double brackets]].\
 """
 
 

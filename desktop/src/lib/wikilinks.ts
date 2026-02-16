@@ -34,21 +34,24 @@ function buildDecorations(view: EditorView): DecorationSet {
   for (const { from, to } of view.visibleRanges) {
     const text = view.state.doc.sliceString(from, to);
 
-    // Wikilinks
+    // Collect all marks, then sort by position (RangeSetBuilder requires sorted order)
+    const marks: { start: number; end: number; mark: Decoration }[] = [];
+
     let match;
     WIKILINK_RE.lastIndex = 0;
     while ((match = WIKILINK_RE.exec(text)) !== null) {
-      const start = from + match.index;
-      const end = start + match[0].length;
-      builder.add(start, end, wikilinkMark);
+      marks.push({ start: from + match.index, end: from + match.index + match[0].length, mark: wikilinkMark });
     }
 
-    // Tags
     TAG_RE.lastIndex = 0;
     while ((match = TAG_RE.exec(text)) !== null) {
       const tagStart = from + match.index + match[0].indexOf("#");
-      const tagEnd = tagStart + match[1].length;
-      builder.add(tagStart, tagEnd, tagMark);
+      marks.push({ start: tagStart, end: tagStart + match[1].length, mark: tagMark });
+    }
+
+    marks.sort((a, b) => a.start - b.start || a.end - b.end);
+    for (const { start, end, mark } of marks) {
+      builder.add(start, end, mark);
     }
   }
 

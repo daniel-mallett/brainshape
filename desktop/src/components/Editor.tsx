@@ -13,7 +13,8 @@ import { brainThemeExtension } from "../lib/editorTheme";
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
 import { remarkWikilinks } from "../lib/remarkWikilinks";
-import { createWikilinkComponents } from "../lib/WikilinkComponents";
+import { wikilinkComponents } from "../lib/WikilinkComponents";
+import { useWikilinkClick } from "../lib/useWikilinkClick";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 
@@ -52,6 +53,8 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
       updateNoteFile(filePathRef.current!, text).catch(console.error);
     }, 1000);
   }
+
+  const wikilinkRef = useWikilinkClick(onNavigateToNote);
 
   useEffect(() => {
     prefetchCompletions();
@@ -135,7 +138,7 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
   }
 
   return (
-    <div className="h-full flex flex-col min-w-0">
+    <div ref={wikilinkRef} className="h-full flex flex-col min-w-0">
       <div className="px-4 py-1.5 border-b border-border text-sm text-muted-foreground flex items-center justify-between">
         <span>{filePath}</span>
         <div className="flex gap-0.5">
@@ -163,7 +166,7 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
             <Streamdown
               plugins={streamdownPlugins}
               remarkPlugins={wikilinkRemarkPlugins}
-              components={createWikilinkComponents(onNavigateToNote)}
+              components={wikilinkComponents}
             >
               {liveContent}
             </Streamdown>
