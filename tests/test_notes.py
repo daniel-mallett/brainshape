@@ -205,7 +205,9 @@ class TestDeleteNote:
         assert (tmp_path / "Doomed.md").exists()
         result = delete_note(tmp_path, "Doomed.md")
         assert not (tmp_path / "Doomed.md").exists()
-        assert result == (tmp_path / "Doomed.md").resolve()
+        # delete_note now moves to trash and returns the trash path
+        assert result.exists()
+        assert ".trash" in result.parts
 
     def test_file_not_found(self, tmp_path):
         with pytest.raises(FileNotFoundError):

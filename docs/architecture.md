@@ -15,7 +15,7 @@ scripts/dev.sh               # Start full dev environment (Neo4j + server + Taur
 brain/
 ├── config.py                # pydantic-settings, loads from .env
 ├── graph_db.py              # Neo4j driver wrapper, schema bootstrap, query() helper
-├── notes.py                 # Notes reader/writer/parser (wikilinks, tags, frontmatter)
+├── notes.py                 # Notes reader/writer/parser, trash system, rename + wikilink rewriting
 ├── kg_pipeline.py           # Embedding pipeline: load → split → embed → write (no LLM extraction)
 ├── sync.py                  # Orchestrates incremental semantic + structural sync
 ├── tools.py                 # 7 LangChain tools for the agent
@@ -73,7 +73,9 @@ tests/
 ├── test_mcp_client.py       # MCP config building, tool loading
 ├── test_mcp_server.py       # MCP server lifespan, tool registration
 ├── test_watcher.py          # File watcher event handling
-└── test_transcribe.py       # Transcription provider dispatch, all providers mocked
+├── test_transcribe.py       # Transcription provider dispatch, all providers mocked
+├── test_trash.py            # Trash system (move, list, restore, empty, list exclusion)
+└── test_rename.py           # Note rename, wikilink rewriting
 ```
 
 ## Data Flow
@@ -99,7 +101,7 @@ Future interfaces (Slack, Discord, voice) each import `create_brain_agent()` and
 
 `brain/server.py` is a FastAPI app on `localhost:8765` that exposes:
 
-- `GET /health` — health check
+- `GET /health` — health check (includes `neo4j_connected`, `agent_available` status)
 - `GET /config` — current configuration
 - `POST /agent/init` — create session, returns session_id
 - `POST /agent/message` — stream agent response via SSE
@@ -107,7 +109,11 @@ Future interfaces (Slack, Discord, voice) each import `create_brain_agent()` and
 - `GET /notes/file/{path}` — read a note
 - `POST /notes/file` — create a note
 - `PUT /notes/file/{path}` — update a note
-- `DELETE /notes/file/{path}` — delete a note
+- `DELETE /notes/file/{path}` — move a note to trash
+- `PUT /notes/file/{path}/rename` — rename a note and rewrite wikilinks
+- `GET /notes/trash` — list trashed notes
+- `POST /notes/trash/{path}/restore` — restore a note from trash
+- `DELETE /notes/trash` — permanently empty trash
 - `GET /notes/tags` — list all tags
 - `GET /graph/stats` — node/relationship counts
 - `GET /graph/overview` — all nodes and edges (optional label filter)

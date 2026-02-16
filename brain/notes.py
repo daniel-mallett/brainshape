@@ -114,9 +114,12 @@ def parse_note(file_path: Path, notes_path: Path) -> dict:
     }
 
 
+_TRASH_DIR = ".trash"
+
+
 def list_notes(notes_path: Path) -> list[Path]:
-    """List all markdown files in the notes directory."""
-    return sorted(notes_path.rglob("*.md"))
+    """List all markdown files in the notes directory, excluding .trash."""
+    return sorted(p for p in notes_path.rglob("*.md") if _TRASH_DIR not in p.parts)
 
 
 def read_all_notes(notes_path: Path) -> list[dict]:
@@ -182,16 +185,153 @@ def rewrite_note(notes_path: Path, title: str, new_content: str, relative_path: 
 
 
 def delete_note(notes_path: Path, relative_path: str) -> Path:
-    """Delete a note from the notes directory. Returns the resolved path.
+    """Move a note to .trash/ instead of deleting permanently.
 
-    Raises ``FileNotFoundError`` if the note doesn't exist.
-    Raises ``ValueError`` if the path escapes the notes directory.
+    Returns the trash path. Raises ``FileNotFoundError`` if the note
+    doesn't exist. Raises ``ValueError`` if the path escapes the notes
+    directory.
+    """
+    return move_to_trash(notes_path, relative_path)
+
+
+def move_to_trash(notes_path: Path, relative_path: str) -> Path:
+    """Move a note to the .trash/ directory, preserving folder structure.
+
+    Appends a timestamp suffix on name collision. Returns the new trash path.
     """
     file_path = _ensure_within_notes_dir(notes_path, notes_path / relative_path)
     if not file_path.exists():
         raise FileNotFoundError(f"Note not found at {relative_path}")
-    file_path.unlink()
-    return file_path
+
+    trash_dir = notes_path / _TRASH_DIR
+    trash_path = trash_dir / relative_path
+    trash_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Handle name collision by appending timestamp
+    if trash_path.exists():
+        from datetime import datetime
+
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        trash_path = trash_path.with_stem(f"{trash_path.stem}_{ts}")
+
+    shutil.move(str(file_path), str(trash_path))
+    return trash_path
+
+
+def list_trash(notes_path: Path) -> list[Path]:
+    """List all markdown files in the .trash directory."""
+    trash_dir = notes_path / _TRASH_DIR
+    if not trash_dir.exists():
+        return []
+    return sorted(trash_dir.rglob("*.md"))
+
+
+def restore_from_trash(notes_path: Path, trash_relative_path: str) -> Path:
+    """Restore a note from .trash/ back to its original location.
+
+    Returns the restored path. Raises ``FileNotFoundError`` if the trash
+    note doesn't exist, ``FileExistsError`` if the target location is
+    already occupied, ``ValueError`` if the path escapes the directory.
+    """
+    trash_dir = notes_path / _TRASH_DIR
+    trash_path = (trash_dir / trash_relative_path).resolve()
+    if not trash_path.is_relative_to(trash_dir.resolve()):
+        raise ValueError("Path escapes trash directory")
+    if not trash_path.exists():
+        raise FileNotFoundError(f"Trash note not found: {trash_relative_path}")
+
+    original_path = _ensure_within_notes_dir(notes_path, notes_path / trash_relative_path)
+    if original_path.exists():
+        raise FileExistsError(
+            f"Cannot restore: {trash_relative_path} already exists. "
+            "Delete or rename the existing note first."
+        )
+
+    original_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(trash_path), str(original_path))
+    return original_path
+
+
+def empty_trash(notes_path: Path) -> int:
+    """Permanently delete all files in .trash/. Returns count of files deleted."""
+    trash_dir = notes_path / _TRASH_DIR
+    if not trash_dir.exists():
+        return 0
+
+    count = 0
+    for f in trash_dir.rglob("*.md"):
+        f.unlink()
+        count += 1
+
+    # Remove empty directories
+    for d in sorted(trash_dir.rglob("*"), reverse=True):
+        if d.is_dir() and not any(d.iterdir()):
+            d.rmdir()
+
+    return count
+
+
+_INVALID_TITLE_CHARS = frozenset('/\\\0:*?"<>|')
+
+
+def rename_note(notes_path: Path, old_relative_path: str, new_title: str) -> tuple[str, Path]:
+    """Rename a note file, preserving its folder location.
+
+    Returns ``(old_title, new_path)``. Does NOT rewrite wikilinks in
+    other notes — the caller should call :func:`rewrite_wikilinks`
+    separately.
+    """
+    # Validate new_title: reject path separators, special chars, and edge cases
+    stripped = new_title.strip()
+    if not stripped or stripped in (".", ".."):
+        raise ValueError("Invalid note title")
+    if any(c in _INVALID_TITLE_CHARS for c in new_title):
+        raise ValueError("Title contains invalid characters")
+    if len(new_title.encode("utf-8")) > 255:
+        raise ValueError("Title is too long")
+
+    old_path = _ensure_within_notes_dir(notes_path, notes_path / old_relative_path)
+    if not old_path.exists():
+        raise FileNotFoundError(f"Note not found at {old_relative_path}")
+
+    old_title = old_path.stem
+    new_path = old_path.with_name(f"{new_title}.md")
+
+    # Verify new path stays within notes directory
+    _ensure_within_notes_dir(notes_path, new_path)
+
+    if new_path.exists():
+        raise FileExistsError(f"A note named '{new_title}' already exists")
+
+    old_path.rename(new_path)
+    return old_title, new_path
+
+
+def rewrite_wikilinks(notes_path: Path, old_title: str, new_title: str) -> int:
+    """Replace ``[[old_title]]`` with ``[[new_title]]`` in all notes.
+
+    Preserves display aliases: ``[[Old|alias]]`` → ``[[New|alias]]``.
+    Returns count of files modified.
+    """
+    pattern = re.compile(r"\[\[" + re.escape(old_title) + r"(\|[^\]]+)?\]\]")
+    count = 0
+    for note_path in list_notes(notes_path):
+        try:
+            content = note_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if not pattern.search(content):
+            continue
+
+        def _replacer(m: re.Match) -> str:
+            alias = m.group(1) or ""
+            return f"[[{new_title}{alias}]]"
+
+        new_content = pattern.sub(_replacer, content)
+        note_path.write_text(new_content, encoding="utf-8")
+        count += 1
+
+    return count
 
 
 def init_notes(notes_path: Path) -> int:

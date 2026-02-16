@@ -33,7 +33,7 @@ desktop/                  # Tauri 2 + React + TypeScript
 - `brain/agent.py` — agent factory (`create_brain_agent()`), interface-agnostic
 - `brain/tools.py` — 7 LangChain tools (search, semantic search, read, create, edit notes; query graph; find related)
 - `brain/graph_db.py` — Neo4j connection wrapper
-- `brain/notes.py` — notes reader/writer/parser (wikilinks, tags, frontmatter), vault import
+- `brain/notes.py` — notes reader/writer/parser (wikilinks, tags, frontmatter), vault import, trash system (move/list/restore/empty), rename with wikilink rewriting
 - `brain/server.py` — FastAPI server (HTTP + SSE) for desktop app
 - `brain/kg_pipeline.py` — embedding pipeline: load → split → embed → write (no LLM entity extraction)
 - `brain/sync.py` — orchestrates incremental structural + semantic sync from notes to graph
@@ -129,7 +129,7 @@ API keys are loaded from both `.env` (via pydantic-settings) and `~/.config/brai
 Unit tests live in `tests/`. All external dependencies (Neo4j, Anthropic, HuggingFace, cloud APIs) are mocked — no Docker or network access required to run tests.
 
 - `tests/conftest.py` — shared fixtures (`mock_db`, `mock_pipeline`, `tmp_notes`, `notes_settings`)
-- Tests cover: notes parsing/writing, config/env export, graph_db, all 7 tools, sync logic, kg_pipeline components, server endpoints (CRUD, transcription, meeting, settings, sync), transcription providers, settings migration, MCP client, watcher
+- Tests cover: notes parsing/writing, config/env export, graph_db, all 7 tools, sync logic, kg_pipeline components, server endpoints (CRUD, transcription, meeting, settings, sync, trash, rename), transcription providers, settings migration, MCP client, watcher, trash system, note rename with wikilink rewriting
 
 When adding new functionality, add corresponding tests. When fixing bugs, add a regression test.
 

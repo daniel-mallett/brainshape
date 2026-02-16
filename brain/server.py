@@ -1,6 +1,7 @@
 """FastAPI server exposing Brain agent, notes, and sync operations over HTTP + SSE."""
 
 import json
+import logging
 import os
 import tempfile
 import uuid
@@ -22,16 +23,23 @@ from brain.mcp_server import create_mcp_server
 from brain.notes import (
     _ensure_within_notes_dir,
     delete_note,
+    empty_trash,
     import_vault,
     init_notes,
     list_notes,
+    list_trash,
     parse_note,
+    rename_note,
+    restore_from_trash,
     rewrite_note,
+    rewrite_wikilinks,
     write_note,
 )
 from brain.settings import VALID_PROVIDERS, load_settings, update_settings
 from brain.sync import sync_semantic, sync_semantic_async, sync_structural
 from brain.watcher import start_watcher
+
+logger = logging.getLogger(__name__)
 
 # Module-level state set during lifespan
 _agent = None
@@ -52,10 +60,14 @@ async def lifespan(app: FastAPI):
 
     _agent, _db, _pipeline = create_brain_agent(mcp_tools=mcp_tools or None)
 
+    if _agent is None:
+        logger.warning("Server starting in degraded mode — no Neo4j connection")
+        logger.warning("Notes CRUD will work, but agent and graph features are unavailable")
+
     notes_path = Path(settings.notes_path).expanduser()
     init_notes(notes_path)
-    if notes_path.exists():
-        notes = list(notes_path.rglob("*.md"))
+    if notes_path.exists() and _db is not None:
+        notes = list_notes(notes_path)
         if notes:
             sync_structural(_db, notes_path)
             if _pipeline is not None:
@@ -128,6 +140,10 @@ class UpdateNoteRequest(BaseModel):
     content: str
 
 
+class RenameNoteRequest(BaseModel):
+    new_title: str
+
+
 class UpdateMemoryRequest(BaseModel):
     content: str
 
@@ -157,7 +173,11 @@ class UpdateSettingsRequest(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "neo4j_connected": _db is not None,
+        "agent_available": _agent is not None,
+    }
 
 
 # --- Config ---
@@ -278,8 +298,8 @@ def notes_create(req: CreateNoteRequest):
         )
         rel = str(file_path.relative_to(notes_path))
         return {"path": rel, "title": req.title}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path") from None
 
 
 @app.delete("/notes/file/{path:path}")
@@ -289,17 +309,54 @@ def notes_delete(path: str):
         delete_note(notes_path, path)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Note not found") from None
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path") from None
 
-    # Clean up graph: Note node + relationships, and Document/Chunk nodes from semantic sync
-    db = _require_db()
-    db.query("MATCH (n:Note {path: $path}) DETACH DELETE n", {"path": path})
-    db.query(
-        "MATCH (d:Document {path: $path})<-[:FROM_DOCUMENT]-(c:Chunk) DETACH DELETE c",
-        {"path": path},
-    )
+    # Clean up graph (skip if Neo4j unavailable — will be cleaned on next sync)
+    if _db is not None:
+        _db.query("MATCH (n:Note {path: $path}) DETACH DELETE n", {"path": path})
+        _db.query(
+            "MATCH (d:Document {path: $path})<-[:FROM_DOCUMENT]-(c:Chunk) DETACH DELETE c",
+            {"path": path},
+        )
     return {"status": "ok"}
+
+
+@app.put("/notes/file/{path:path}/rename")
+def notes_rename(path: str, req: RenameNoteRequest):
+    """Rename a note and update all wikilinks referencing it."""
+    notes_path = _notes_path()
+    try:
+        old_title, new_path = rename_note(notes_path, path, req.new_title)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Note not found") from None
+    except FileExistsError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path or title") from None
+
+    new_rel_path = str(new_path.relative_to(notes_path))
+
+    # Update graph node path/title
+    if _db is not None:
+        _db.query(
+            "MATCH (n:Note {path: $old_path}) SET n.path = $new_path, n.title = $new_title",
+            {"old_path": path, "new_path": new_rel_path, "new_title": req.new_title},
+        )
+
+    # Rewrite [[Old Title]] → [[New Title]] in all notes
+    links_updated = rewrite_wikilinks(notes_path, old_title, req.new_title)
+
+    # Re-sync structural relationships
+    if _db is not None:
+        sync_structural(_db, notes_path)
+
+    return {
+        "path": new_rel_path,
+        "title": req.new_title,
+        "old_title": old_title,
+        "links_updated": links_updated,
+    }
 
 
 @app.put("/notes/file/{path:path}")
@@ -316,8 +373,56 @@ def notes_update(path: str, req: UpdateNoteRequest):
     try:
         rewrite_note(notes_path, title, req.content, relative_path=path)
         return {"path": path, "title": title}
-    except (FileNotFoundError, ValueError) as e:
-        raise HTTPException(status_code=400, detail=str(e)) from None
+    except (FileNotFoundError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid path") from None
+
+
+# --- Trash ---
+
+
+@app.get("/notes/trash")
+def notes_trash():
+    """List all notes in the trash."""
+    notes_path = _notes_path()
+    trash_notes = list_trash(notes_path)
+    trash_dir = notes_path / ".trash"
+    files = []
+    for note in trash_notes:
+        rel = str(note.relative_to(trash_dir))
+        files.append({"path": rel, "title": note.stem})
+    return {"files": files}
+
+
+@app.post("/notes/trash/{path:path}/restore")
+def notes_restore(path: str):
+    """Restore a note from trash to its original location."""
+    notes_path = _notes_path()
+    try:
+        restored_path = restore_from_trash(notes_path, path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Trash note not found") from None
+    except FileExistsError:
+        raise HTTPException(
+            status_code=409, detail="A note with that name already exists"
+        ) from None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path") from None
+
+    rel = str(restored_path.relative_to(notes_path))
+
+    # Re-sync structural graph
+    if _db is not None:
+        sync_structural(_db, notes_path)
+
+    return {"path": rel, "title": restored_path.stem}
+
+
+@app.delete("/notes/trash")
+def notes_empty_trash():
+    """Permanently delete all notes in trash."""
+    notes_path = _notes_path()
+    count = empty_trash(notes_path)
+    return {"status": "ok", "deleted": count}
 
 
 # --- Graph ---

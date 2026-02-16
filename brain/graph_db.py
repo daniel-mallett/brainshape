@@ -1,16 +1,29 @@
+import logging
 from typing import Any
 
 from neo4j import GraphDatabase
 
 from brain.config import settings
 
+logger = logging.getLogger(__name__)
+
 
 class GraphDB:
     def __init__(self):
-        self._driver = GraphDatabase.driver(
-            settings.neo4j_uri,
-            auth=(settings.neo4j_user, settings.neo4j_password),
-        )
+        try:
+            self._driver = GraphDatabase.driver(
+                settings.neo4j_uri,
+                auth=(settings.neo4j_user, settings.neo4j_password),
+            )
+            # Verify connection is actually reachable
+            self._driver.verify_connectivity()
+        except Exception as e:
+            logger.error("Failed to connect to Neo4j at %s: %s", settings.neo4j_uri, e)
+            logger.error(
+                "Start Neo4j with: docker compose up -d\n"
+                "Or check NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD in .env"
+            )
+            raise ConnectionError(f"Cannot connect to Neo4j: {e}") from e
 
     def close(self):
         self._driver.close()

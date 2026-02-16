@@ -36,6 +36,9 @@
 - File watcher started at startup, stopped on shutdown
 - Seed notes initialized on first run (copies from seed_notes/ if notes directory is empty)
 - **Vault import**: `POST /import/vault` copies .md files from any source directory (e.g., Obsidian vault), preserving folder structure. Skips `.obsidian/`, `.git/`, `.trash/`, and other non-note dirs. Auto-triggers structural sync after import
+- **Trash system**: `delete_note()` moves to `.trash/` instead of permanent delete. Preserves folder structure, handles name collisions with timestamp suffix. Endpoints: `GET /notes/trash`, `POST /notes/trash/{path}/restore`, `DELETE /notes/trash` (empty trash). `list_notes()` excludes trash files from all downstream operations.
+- **Note rename with wikilink rewriting**: `PUT /notes/file/{path}/rename` renames a note on disk, updates the graph node, and rewrites all `[[Old Title]]` / `[[Old Title|alias]]` wikilinks across all notes. Preserves display aliases.
+- **Graceful Neo4j failure**: Server starts in degraded mode when Neo4j is unreachable. Notes CRUD works (filesystem-only), agent/graph endpoints return 503. Health endpoint reports `neo4j_connected` and `agent_available` status.
 
 ### Desktop App (Tauri 2 + React + TypeScript)
 - Scaffolded with official `create-tauri-app` (React+TS template)
@@ -59,11 +62,18 @@
 - **Command palette**: Cmd+K to search notes and run actions (switch views, create note, sync, etc.). Inline note creation from palette, mouse-hover gating to prevent accidental selection.
 - View switching: Editor / Graph / Memory views in header
 - **Sidebar**: forwardRef imperative handle for programmatic control (create note, refresh). Context menu clamped to viewport bounds.
+- **Error boundary**: Top-level React error boundary catches render crashes and offers reload instead of white-screening the app
+- **Neo4j warning bar**: Shows a subtle warning below the header when Neo4j is not connected (degraded mode)
+- **Sidebar search/filter**: Inline filter input for quick note search, case-insensitive title match, flat list when filtered
+- **Trash UI**: Trash icon in sidebar header opens modal listing trashed notes with per-item restore and "Empty Trash" action
+- **Inline rename**: Context menu "Rename" shows inline input in sidebar, submits on Enter/blur, escapes to cancel
+- **Editor save status**: Shows "Saving...", "Saved", or "Save failed" indicator in editor header
+- **Chat suggested prompts**: 4 clickable prompt pills in empty chat state for discoverability
 - ShadCN UI components (button, input, scroll-area) + Tailwind v4
 - Health check with auto-reconnect polling
 
 ### Testing & CI
-- 245 unit tests covering all modules including server, settings, transcription providers, watcher, MCP client, MCP server, vault import
+- 324 unit tests covering all modules including server, settings, transcription providers, watcher, MCP client, MCP server, vault import, trash system, note rename, error boundary
 - Server tests properly isolated (noop lifespan, no Neo4j connection required)
 - CI: GitHub Actions workflow runs ruff, ty, and pytest (with coverage) on push/PR to main
 - Pre-commit hooks: ruff lint, ruff format, gitleaks secret detection, pytest

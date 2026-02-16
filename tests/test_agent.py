@@ -77,6 +77,17 @@ class TestCreateBrainAgent:
         call_kwargs = mock_create.call_args[1]
         assert call_kwargs["system_prompt"] == SYSTEM_PROMPT
 
+    @patch("brain.agent.GraphDB")
+    def test_returns_none_on_connection_error(self, mock_db_cls):
+        """create_brain_agent returns (None, None, None) when Neo4j is unreachable."""
+        mock_db_cls.side_effect = ConnectionError("Cannot connect to Neo4j")
+
+        agent, db, pipeline = create_brain_agent()
+
+        assert agent is None
+        assert db is None
+        assert pipeline is None
+
 
 class TestRecreateAgent:
     @patch("brain.agent.create_agent")

@@ -92,9 +92,28 @@ export function Chat({ onNavigateToNote }: { onNavigateToNote?: (title: string) 
       <ScrollArea className="flex-1 overflow-hidden">
         <div ref={scrollRef} className="p-3 space-y-3">
           {messages.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center mt-8">
-              Ask Brain anything about your notes
-            </p>
+            <div className="text-center mt-8 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Ask Brain anything about your notes
+              </p>
+              <div className="flex flex-wrap gap-2 justify-center px-2">
+                {[
+                  "What are my most connected notes?",
+                  "Summarize my recent notes",
+                  "What topics do I write about most?",
+                  "What should I write about next?",
+                ].map((prompt) => (
+                  <button
+                    key={prompt}
+                    onClick={() => sendMessage(prompt)}
+                    disabled={isStreaming}
+                    className="px-3 py-1.5 text-xs rounded-md border border-border bg-card hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
           {messages.map((msg, i) => (
             <MessageBubble

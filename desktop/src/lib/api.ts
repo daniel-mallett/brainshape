@@ -1,5 +1,10 @@
 const BASE_URL = "http://127.0.0.1:8765";
 
+/** Encode each segment of a file path for safe use in URLs. */
+function encodePath(p: string): string {
+  return p.split("/").map(encodeURIComponent).join("/");
+}
+
 async function request<T>(
   path: string,
   options?: RequestInit
@@ -17,7 +22,13 @@ async function request<T>(
 
 // --- Health ---
 
-export function health(): Promise<{ status: string }> {
+export interface HealthStatus {
+  status: string;
+  neo4j_connected?: boolean;
+  agent_available?: boolean;
+}
+
+export function health(): Promise<HealthStatus> {
   return request("/health");
 }
 
@@ -54,21 +65,45 @@ export function getNoteFiles(): Promise<{ files: NoteFile[] }> {
 }
 
 export function getNoteFile(path: string): Promise<Note> {
-  return request(`/notes/file/${path}`);
+  return request(`/notes/file/${encodePath(path)}`);
 }
 
 export function updateNoteFile(
   path: string,
   content: string
 ): Promise<{ path: string; title: string }> {
-  return request(`/notes/file/${path}`, {
+  return request(`/notes/file/${encodePath(path)}`, {
     method: "PUT",
     body: JSON.stringify({ content }),
   });
 }
 
 export function deleteNoteFile(path: string): Promise<{ status: string }> {
-  return request(`/notes/file/${path}`, { method: "DELETE" });
+  return request(`/notes/file/${encodePath(path)}`, { method: "DELETE" });
+}
+
+export function renameNoteFile(
+  path: string,
+  newTitle: string
+): Promise<{ path: string; title: string; old_title: string; links_updated: number }> {
+  return request(`/notes/file/${encodePath(path)}/rename`, {
+    method: "PUT",
+    body: JSON.stringify({ new_title: newTitle }),
+  });
+}
+
+// --- Trash ---
+
+export function getTrashNotes(): Promise<{ files: NoteFile[] }> {
+  return request("/notes/trash");
+}
+
+export function restoreFromTrash(path: string): Promise<{ path: string; title: string }> {
+  return request(`/notes/trash/${encodePath(path)}/restore`, { method: "POST" });
+}
+
+export function emptyTrash(): Promise<{ status: string; deleted: number }> {
+  return request("/notes/trash", { method: "DELETE" });
 }
 
 export function createNoteFile(

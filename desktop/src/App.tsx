@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
-import { health, getConfig, getNoteFile, getNoteFiles, getSettings, syncStructural, type Config, type Settings } from "./lib/api";
+import { health, getConfig, getNoteFile, getNoteFiles, getSettings, syncStructural, type Config, type HealthStatus, type Settings } from "./lib/api";
 import { applyTheme, BUILTIN_THEMES, DEFAULT_THEME, type Theme } from "./lib/themes";
 import { Sidebar, type SidebarHandle } from "./components/Sidebar";
 import { Editor } from "./components/Editor";
@@ -43,6 +43,7 @@ function resolveTheme(settings: Settings | null): Theme {
 
 function App() {
   const [connected, setConnected] = useState(false);
+  const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -85,8 +86,9 @@ function App() {
     let settingsLoaded = false;
     async function checkConnection() {
       try {
-        await health();
+        const h = await health();
         setConnected(true);
+        setHealthStatus(h);
         const cfg = await getConfig();
         setConfig(cfg);
         // Only fetch settings once on initial connection — refreshed on save via handleCloseSettings
@@ -249,6 +251,12 @@ function App() {
           </Button>
         </div>
       </header>
+
+      {healthStatus && !healthStatus.neo4j_connected && (
+        <div className="px-4 py-1 bg-destructive/10 border-b border-destructive/20 text-xs text-destructive">
+          Neo4j not connected — agent and graph features unavailable. Run: <code className="bg-muted px-1 rounded">docker compose up -d</code>
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 relative">
         <Group

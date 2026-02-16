@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from langchain.agents import create_agent
@@ -8,6 +9,8 @@ from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline, create_kg_pipeline
 from brain.settings import get_llm_model_string
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """\
 You are Brain, a personal knowledge management assistant.
@@ -76,9 +79,13 @@ def create_brain_agent(
         pipeline: Optional pre-configured KGPipeline instance.
         mcp_tools: Optional list of MCP tools to include alongside built-in tools.
     """
-    if db is None:
-        db = GraphDB()
-        db.bootstrap_schema()
+    try:
+        if db is None:
+            db = GraphDB()
+            db.bootstrap_schema()
+    except ConnectionError:
+        logger.warning("Starting without Neo4j — agent and graph features unavailable")
+        return None, None, None
 
     if pipeline is None:
         notes_path = Path(settings.notes_path).expanduser()

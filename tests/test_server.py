@@ -56,7 +56,18 @@ class TestHealth:
     def test_health(self, client):
         resp = client.get("/health")
         assert resp.status_code == 200
-        assert resp.json() == {"status": "ok"}
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["neo4j_connected"] is True
+        assert data["agent_available"] is True
+
+    def test_health_degraded(self, bare_client):
+        resp = bare_client.get("/health")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["neo4j_connected"] is False
+        assert data["agent_available"] is False
 
 
 class TestConfig:
@@ -624,33 +635,34 @@ class TestTranscriptionErrors:
         assert "Transcription failed" in resp.json()["detail"]
 
 
+@pytest.fixture
+def bare_client(tmp_notes, tmp_path, monkeypatch):
+    """Client with _db and _pipeline set to None (degraded mode)."""
+    monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
+    monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
+
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def noop_lifespan(app):
+        yield
+
+    original = server.app.router.lifespan_context
+    server.app.router.lifespan_context = noop_lifespan
+
+    server._agent = None
+    server._db = None
+    server._pipeline = None
+    server._sessions = {}
+
+    with TestClient(app=server.app, raise_server_exceptions=False) as c:
+        yield c
+
+    server.app.router.lifespan_context = original
+
+
 class TestUninitializedServer:
     """Test endpoints return 503 when server state is not initialized."""
-
-    @pytest.fixture
-    def bare_client(self, tmp_notes, tmp_path, monkeypatch):
-        """Client with _db and _pipeline set to None."""
-        monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
-        monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
-
-        from contextlib import asynccontextmanager
-
-        @asynccontextmanager
-        async def noop_lifespan(app):
-            yield
-
-        original = server.app.router.lifespan_context
-        server.app.router.lifespan_context = noop_lifespan
-
-        server._agent = None
-        server._db = None
-        server._pipeline = None
-        server._sessions = {}
-
-        with TestClient(app=server.app, raise_server_exceptions=False) as c:
-            yield c
-
-        server.app.router.lifespan_context = original
 
     def test_graph_stats_503(self, bare_client):
         assert bare_client.get("/graph/stats").status_code == 503
@@ -743,6 +755,139 @@ class TestHelperFunctions:
 class TestDeleteFileTraversal:
     def test_delete_file_traversal_rejected(self, client):
         resp = client.delete("/notes/file/%2e%2e/%2e%2e/etc/passwd")
+        assert resp.status_code in (400, 404)
+
+
+class TestDeleteMovesToTrash:
+    def test_delete_moves_to_trash(self, client, tmp_notes, server_db):
+        """DELETE /notes/file moves to .trash instead of permanent delete."""
+        assert (tmp_notes / "Welcome.md").exists()
+        server_db.query.return_value = []
+        resp = client.delete("/notes/file/Welcome.md")
+        assert resp.status_code == 200
+        # File is gone from notes root
+        assert not (tmp_notes / "Welcome.md").exists()
+        # But exists in trash
+        trash_dir = tmp_notes / ".trash"
+        assert trash_dir.exists()
+        trash_files = list(trash_dir.rglob("*.md"))
+        assert any("Welcome" in f.stem for f in trash_files)
+
+
+class TestTrashEndpoints:
+    def test_list_trash_empty(self, client):
+        resp = client.get("/notes/trash")
+        assert resp.status_code == 200
+        assert resp.json()["files"] == []
+
+    def test_list_trash_after_delete(self, client, tmp_notes, server_db):
+        server_db.query.return_value = []
+        client.delete("/notes/file/Welcome.md")
+        resp = client.get("/notes/trash")
+        assert resp.status_code == 200
+        files = resp.json()["files"]
+        assert len(files) == 1
+        assert files[0]["title"] == "Welcome"
+
+    def test_restore_from_trash(self, client, tmp_notes, server_db):
+        server_db.query.return_value = []
+        client.delete("/notes/file/Welcome.md")
+        assert not (tmp_notes / "Welcome.md").exists()
+
+        resp = client.post("/notes/trash/Welcome.md/restore")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["title"] == "Welcome"
+        assert (tmp_notes / "Welcome.md").exists()
+
+    def test_restore_missing_raises_404(self, client):
+        resp = client.post("/notes/trash/nonexistent.md/restore")
+        assert resp.status_code == 404
+
+    def test_restore_conflict_raises_409(self, client, tmp_notes, server_db):
+        server_db.query.return_value = []
+        # Delete Welcome, then create a new Welcome, then try to restore
+        client.delete("/notes/file/Welcome.md")
+        client.post(
+            "/notes/file",
+            json={"title": "Welcome", "content": "new version"},
+        )
+        resp = client.post("/notes/trash/Welcome.md/restore")
+        assert resp.status_code == 409
+
+    def test_empty_trash(self, client, tmp_notes, server_db):
+        server_db.query.return_value = []
+        client.delete("/notes/file/Welcome.md")
+        client.delete("/notes/file/About%20Me.md")
+
+        resp = client.delete("/notes/trash")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["deleted"] == 2
+
+        # Trash is now empty
+        resp = client.get("/notes/trash")
+        assert resp.json()["files"] == []
+
+    def test_empty_trash_when_already_empty(self, client):
+        resp = client.delete("/notes/trash")
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] == 0
+
+
+class TestRenameEndpoint:
+    def test_rename_note(self, client, tmp_notes, server_db):
+        server_db.query.return_value = []
+        resp = client.put(
+            "/notes/file/Welcome.md/rename",
+            json={"new_title": "Hello World"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["title"] == "Hello World"
+        assert data["old_title"] == "Welcome"
+        assert data["path"] == "Hello World.md"
+        assert (tmp_notes / "Hello World.md").exists()
+        assert not (tmp_notes / "Welcome.md").exists()
+
+    def test_rename_missing_raises_404(self, client):
+        resp = client.put(
+            "/notes/file/nonexistent.md/rename",
+            json={"new_title": "New"},
+        )
+        assert resp.status_code == 404
+
+    def test_rename_collision_raises_409(self, client):
+        resp = client.put(
+            "/notes/file/Welcome.md/rename",
+            json={"new_title": "About Me"},
+        )
+        assert resp.status_code == 409
+
+    def test_rename_updates_wikilinks(self, client, tmp_notes, server_db):
+        """Renaming a note rewrites wikilinks in other notes."""
+        server_db.query.return_value = []
+        # Create a note that links to Welcome
+        client.post(
+            "/notes/file",
+            json={"title": "Linker", "content": "See [[Welcome]] for info"},
+        )
+        resp = client.put(
+            "/notes/file/Welcome.md/rename",
+            json={"new_title": "Home"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["links_updated"] >= 1
+        content = (tmp_notes / "Linker.md").read_text()
+        assert "[[Home]]" in content
+        assert "[[Welcome]]" not in content
+
+    def test_rename_traversal_raises_400(self, client):
+        resp = client.put(
+            "/notes/file/%2e%2e/%2e%2e/etc/passwd/rename",
+            json={"new_title": "New"},
+        )
         assert resp.status_code in (400, 404)
 
 

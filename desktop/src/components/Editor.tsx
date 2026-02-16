@@ -19,6 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 
 type EditorMode = "edit" | "inline" | "preview";
+type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 const streamdownPlugins = { code };
 const wikilinkRemarkPlugins = [remarkWikilinks];
@@ -43,6 +44,8 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
   const filePathRef = useRef(filePath);
   const [editorMode, setEditorMode] = useState<EditorMode>("edit");
   const [liveContent, setLiveContent] = useState(content);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const saveStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   filePathRef.current = filePath;
 
@@ -53,8 +56,17 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
   function saveToServer(text: string) {
     if (!filePathRef.current) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = setTimeout(() => {
-      updateNoteFile(filePathRef.current!, text).catch(console.error);
+    setSaveStatus("saving");
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await updateNoteFile(filePathRef.current!, text);
+        setSaveStatus("saved");
+        if (saveStatusTimeoutRef.current) clearTimeout(saveStatusTimeoutRef.current);
+        saveStatusTimeoutRef.current = setTimeout(() => setSaveStatus("idle"), 2000);
+      } catch (err) {
+        console.error("Save failed:", err);
+        setSaveStatus("error");
+      }
     }, 1000);
   }
 
@@ -122,6 +134,7 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
 
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      if (saveStatusTimeoutRef.current) clearTimeout(saveStatusTimeoutRef.current);
       view.destroy();
       viewRef.current = null;
     };
@@ -172,6 +185,13 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
             </Button>
           </div>
           <span className="truncate">{filePath}</span>
+          {saveStatus !== "idle" && (
+            <span className={`text-xs shrink-0 ${saveStatus === "error" ? "text-destructive" : "text-muted-foreground"}`}>
+              {saveStatus === "saving" && "Saving..."}
+              {saveStatus === "saved" && "Saved"}
+              {saveStatus === "error" && "Save failed"}
+            </span>
+          )}
         </div>
         <div className="flex gap-0.5">
           {(["edit", "inline", "preview"] as const).map((mode) => (
