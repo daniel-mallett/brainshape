@@ -5,8 +5,6 @@
 
 @source "../node_modules/streamdown/dist/*.js";
 
-@custom-variant dark (&:is(.dark *));
-
 :root {
   --font-sans: Inter, system-ui, -apple-system, sans-serif;
   font-family: var(--font-sans);

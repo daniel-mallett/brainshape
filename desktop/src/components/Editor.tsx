@@ -67,7 +67,7 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       markdown({ codeLanguages: languages }),
-      brainThemeExtension,
+      ...brainThemeExtension(),
       brainAutocompletion,
       wikilinkExtension,
       EditorView.updateListener.of((update) => {
