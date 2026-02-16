@@ -1,8 +1,8 @@
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from brain.kg_pipeline import KGPipeline, NotesLoader
+from brain.kg_pipeline import KGPipeline, NotesLoader, create_kg_pipeline
 
 
 class TestNotesLoader:
@@ -78,6 +78,21 @@ class TestKGPipelineWriteChunks:
         assert chunks_param[1]["text"] == "Second chunk"
         assert chunks_param[1]["index"] == 1
 
+    def test_write_chunks_empty_list(self):
+        """_write_chunks with no chunks only MERGEs the Document and DELETEs old chunks."""
+        mock_driver = MagicMock()
+        mock_session = MagicMock()
+        mock_driver.session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_driver.session.return_value.__exit__ = MagicMock(return_value=False)
+
+        pipeline = KGPipeline.__new__(KGPipeline)
+        pipeline.driver = mock_driver
+
+        pipeline._write_chunks("test.md", [])
+
+        # Only 2 calls: MERGE doc + DELETE old chunks (no CREATE since empty)
+        assert mock_session.run.call_count == 2
+
     def test_no_llm_dependencies(self):
         """Verify the pipeline doesn't use any LLM for extraction."""
         import inspect
@@ -86,3 +101,67 @@ class TestKGPipelineWriteChunks:
         assert "AnthropicLLM" not in source
         assert "EntityRelationExtractor" not in source
         assert "Resolver" not in source
+
+
+class TestKGPipelineRunAsync:
+    async def test_run_async_processes_file(self, tmp_path):
+        """run_async loads, splits, embeds, and writes chunks for a file."""
+        note = tmp_path / "test.md"
+        note.write_text("# Test\nSome content for embedding.")
+
+        pipeline = KGPipeline.__new__(KGPipeline)
+        pipeline.notes_path = tmp_path
+
+        mock_loader = AsyncMock()
+        mock_doc = MagicMock()
+        mock_doc.text = "# Test\nSome content for embedding."
+        mock_doc.document_info.path = "test.md"
+        mock_loader.run.return_value = mock_doc
+        pipeline.loader = mock_loader
+
+        mock_splitter = AsyncMock()
+        mock_splitter.run.return_value = MagicMock(text="chunk text")
+        pipeline.splitter = mock_splitter
+
+        mock_embedder = AsyncMock()
+        mock_embedded = MagicMock()
+        mock_embedded.chunks = []
+        mock_embedder.run.return_value = mock_embedded
+        pipeline.embedder = mock_embedder
+
+        pipeline._write_chunks = MagicMock()
+
+        await pipeline.run_async(str(note))
+
+        mock_loader.run.assert_awaited_once()
+        mock_splitter.run.assert_awaited_once()
+        mock_embedder.run.assert_awaited_once()
+        pipeline._write_chunks.assert_called_once()
+
+
+class TestKGPipelineEmbedQuery:
+    def test_embed_query_delegates(self):
+        """embed_query delegates to the underlying embedder."""
+        pipeline = KGPipeline.__new__(KGPipeline)
+        mock_embedder = MagicMock()
+        mock_embedder.embed_query.return_value = [0.1, 0.2, 0.3]
+        pipeline._embedder = mock_embedder
+
+        result = pipeline.embed_query("test query")
+
+        assert result == [0.1, 0.2, 0.3]
+        mock_embedder.embed_query.assert_called_once_with("test query")
+
+
+class TestCreateKgPipeline:
+    @patch("brain.kg_pipeline.KGPipeline")
+    def test_reads_settings(self, mock_cls, tmp_path, monkeypatch):
+        """create_kg_pipeline reads embedding config from settings."""
+        monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
+        mock_driver = MagicMock()
+
+        create_kg_pipeline(mock_driver, tmp_path)
+
+        mock_cls.assert_called_once()
+        # Should use default embedding model from settings
+        assert "all-mpnet-base-v2" in str(mock_cls.call_args)

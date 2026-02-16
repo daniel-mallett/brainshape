@@ -38,8 +38,8 @@ def tools_setup(mock_db, mock_pipeline):
     tools.db = mock_db
     tools.pipeline = mock_pipeline
     yield
-    tools.db = None  # type: ignore[assignment]
-    tools.pipeline = None  # type: ignore[assignment]
+    tools.db = None
+    tools.pipeline = None
 
 
 @pytest.fixture

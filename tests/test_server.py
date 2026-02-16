@@ -703,6 +703,49 @@ class TestSync:
         assert data["status"] == "ok"
 
 
+class TestHelperFunctions:
+    def test_primary_label_prefers_note(self):
+        from brain.server import _primary_label
+
+        assert _primary_label(["Document", "Note"]) == "Note"
+
+    def test_primary_label_tag(self):
+        from brain.server import _primary_label
+
+        assert _primary_label(["Tag"]) == "Tag"
+
+    def test_primary_label_fallback(self):
+        from brain.server import _primary_label
+
+        assert _primary_label(["CustomLabel"]) == "CustomLabel"
+
+    def test_primary_label_empty(self):
+        from brain.server import _primary_label
+
+        assert _primary_label([]) == "Unknown"
+
+    def test_truncate_long_text(self):
+        from brain.server import _truncate
+
+        assert _truncate("a" * 100, 50) == "a" * 50 + "..."
+
+    def test_truncate_short_text(self):
+        from brain.server import _truncate
+
+        assert _truncate("short", 50) == "short"
+
+    def test_truncate_none(self):
+        from brain.server import _truncate
+
+        assert _truncate(None, 50) is None
+
+
+class TestDeleteFileTraversal:
+    def test_delete_file_traversal_rejected(self, client):
+        resp = client.delete("/notes/file/%2e%2e/%2e%2e/etc/passwd")
+        assert resp.status_code in (400, 404)
+
+
 class TestImportVault:
     def test_import_vault(self, client, tmp_notes, tmp_path_factory):
         source = tmp_path_factory.mktemp("vault")

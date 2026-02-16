@@ -63,7 +63,7 @@ The FastAPI server binds to `127.0.0.1:8765` — localhost only, not exposed to 
 - **Session state** is in-memory (dict keyed by session_id). No persistence, no cross-session data leakage.
 - **Settings API** (`GET /settings`, `PUT /settings`) handles API keys safely: `GET` never returns raw keys, only boolean `_set` flags (e.g., `anthropic_api_key_set: true`, `mistral_api_key_set: true`). `PUT` accepts new key values but they are stored on disk only, never echoed back.
 - **API key export** — `config.py:export_api_keys()` pushes keys from both `.env` and runtime settings into `os.environ` using `setdefault` (shell exports take precedence). Cloud transcription providers read keys from `os.environ` at call time, not from settings directly.
-- **MCP command validation** — `PUT /settings` validates MCP server commands against an allowlist (`npx`, `node`, `python`, `python3`, `uvx`, `docker`) to prevent arbitrary command execution.
+- **MCP command validation** — `PUT /settings` validates MCP server commands against an allowlist (`npx`, `uvx`, `node`, `python`, `python3`, `deno`, `bun`) to prevent arbitrary command execution.
 
 ## Known Limitations
 

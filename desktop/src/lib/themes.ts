@@ -354,7 +354,3 @@ export function applyTheme(theme: Theme): void {
   }
 }
 
-/** Get the current value of a theme CSS variable. */
-export function getThemeValue(key: keyof Omit<Theme, "name">): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(`--${key}`).trim();
-}

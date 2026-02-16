@@ -8,8 +8,22 @@ from brain.kg_pipeline import KGPipeline
 from brain.notes import parse_note, rewrite_note, write_note
 
 # Set by create_brain_agent() before tools are used
-db: GraphDB = None  # type: ignore[assignment]
-pipeline: KGPipeline = None  # type: ignore[assignment]
+db: GraphDB | None = None
+pipeline: KGPipeline | None = None
+
+
+def _get_db() -> GraphDB:
+    """Return the db instance, raising if tools are used before agent init."""
+    if db is None:
+        raise RuntimeError("Tools used before create_brain_agent() — db is not set")
+    return db
+
+
+def _get_pipeline() -> KGPipeline:
+    """Return the pipeline instance, raising if tools are used before agent init."""
+    if pipeline is None:
+        raise RuntimeError("Tools used before create_brain_agent() — pipeline is not set")
+    return pipeline
 
 
 def _notes_path() -> Path:
@@ -18,7 +32,8 @@ def _notes_path() -> Path:
 
 def _sync_note_structural(note_data: dict) -> None:
     """Merge :Note label and structural relationships onto a Document node."""
-    db.query(
+    _db = _get_db()
+    _db.query(
         """
         MERGE (n {path: $path})
         ON CREATE SET n.created_at = timestamp()
@@ -34,7 +49,7 @@ def _sync_note_structural(note_data: dict) -> None:
         },
     )
     for tag in note_data["tags"]:
-        db.query(
+        _db.query(
             """
             MERGE (t:Tag {name: $tag})
             WITH t
@@ -44,7 +59,7 @@ def _sync_note_structural(note_data: dict) -> None:
             {"tag": tag, "path": note_data["path"]},
         )
     for link_title in note_data["links"]:
-        db.query(
+        _db.query(
             """
             MATCH (source:Note {path: $source_path})
             MATCH (target:Note {title: $target_title})
@@ -58,7 +73,7 @@ def _sync_note_structural(note_data: dict) -> None:
 def search_notes(query: str) -> str:
     """Search notes in the knowledge graph by keyword.
     Returns matching note titles and snippets."""
-    results = db.query(
+    results = _get_db().query(
         """
         CALL db.index.fulltext.queryNodes('note_content', $query)
         YIELD node, score
@@ -81,8 +96,8 @@ def semantic_search(query: str) -> str:
     Use this when keyword search misses relevant results, or when you need
     to find notes that are conceptually related to a topic even if they
     don't contain the exact words."""
-    embedding = pipeline.embed_query(query)
-    results = db.query(
+    embedding = _get_pipeline().embed_query(query)
+    results = _get_db().query(
         """
         CALL db.index.vector.queryNodes('chunk_embeddings', 10, $embedding)
         YIELD node, score
@@ -101,7 +116,7 @@ def semantic_search(query: str) -> str:
 @tool
 def read_note(title: str) -> str:
     """Read the full content of a specific note by its title."""
-    results = db.query(
+    results = _get_db().query(
         """
         MATCH (n:Note {title: $title})
         RETURN n.content AS content, n.path AS path, n.title AS title
@@ -140,9 +155,10 @@ def edit_note(title: str, new_content: str) -> str:
     formatting, add wikilinks, or expand content with context from the
     knowledge graph."""
     notes_path = _notes_path()
+    _db = _get_db()
 
     # Look up the note's actual path from the graph
-    results = db.query(
+    results = _db.query(
         "MATCH (n:Note {title: $title}) RETURN n.path AS path LIMIT 1",
         {"title": title},
     )
@@ -155,11 +171,11 @@ def edit_note(title: str, new_content: str) -> str:
 
     # Clear old structural relationships and re-sync
     note_data = parse_note(file_path, notes_path)
-    db.query(
+    _db.query(
         "MATCH (n:Note {path: $path})-[r:TAGGED_WITH]->() DELETE r",
         {"path": note_data["path"]},
     )
-    db.query(
+    _db.query(
         "MATCH (n:Note {path: $path})-[r:LINKS_TO]->() DELETE r",
         {"path": note_data["path"]},
     )
@@ -185,7 +201,7 @@ def query_graph(cypher: str) -> str:
     You can CREATE any custom node types and relationships to build
     the user's personal knowledge graph over time."""
     try:
-        results = db.query(cypher)
+        results = _get_db().query(cypher)
         if not results:
             return "Query returned no results."
         lines = [str(row) for row in results[:20]]
@@ -200,8 +216,9 @@ def query_graph(cypher: str) -> str:
 def find_related(title: str) -> str:
     """Find notes and knowledge related to a given note title.
     Shows wikilink connections, shared tags, and any agent-created relationships."""
+    _db = _get_db()
     # Direct relationships: wikilinks, tags, memories
-    results = db.query(
+    results = _db.query(
         """
         MATCH (n:Note {title: $title})-[r]-(related)
         WHERE NOT related:Chunk
@@ -215,7 +232,7 @@ def find_related(title: str) -> str:
     )
     if not results:
         # Try fuzzy match on title
-        results = db.query(
+        results = _db.query(
             """
             MATCH (n:Note)-[r]-(related)
             WHERE toLower(n.title) CONTAINS toLower($title) AND NOT related:Chunk
