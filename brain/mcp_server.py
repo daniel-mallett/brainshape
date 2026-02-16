@@ -41,7 +41,7 @@ def create_mcp_server(lifespan=None, *, streamable_http_path: str = "/mcp") -> F
         kwargs["lifespan"] = lifespan
     server = FastMCP("brain", **kwargs)
     for lc_tool in ALL_TOOLS:
-        server.add_tool(lc_tool.func, name=lc_tool.name, description=lc_tool.description)
+        server.add_tool(lc_tool.func, name=lc_tool.name, description=lc_tool.description)  # type: ignore[union-attr]  # all our tools are @tool-decorated with .func
     return server
 
 

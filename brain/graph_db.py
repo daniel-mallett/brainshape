@@ -32,7 +32,7 @@ class GraphDB:
         db_path.mkdir(parents=True, exist_ok=True)
         try:
             self._conn = Surreal(f"surrealkv://{db_path}")
-            self._conn.connect()
+            self._conn.connect()  # type: ignore[union-attr]  # surrealkv:// connections have connect()
             self._conn.use("brain", "main")
         except Exception as e:
             logger.error("Failed to open SurrealDB at %s: %s", db_path, e)

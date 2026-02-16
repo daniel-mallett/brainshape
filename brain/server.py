@@ -75,21 +75,22 @@ async def lifespan(app: FastAPI):
 
     # Start file watcher for auto-sync
     if notes_path.exists() and _db is not None:
+        db = _db  # local binding for closure type narrowing
 
         def on_notes_changed():
-            sync_structural(_db, notes_path)
+            sync_structural(db, notes_path)
             if _pipeline is not None:
                 import threading
 
                 threading.Thread(
                     target=sync_semantic,
-                    args=(_db, _pipeline, notes_path),
+                    args=(db, _pipeline, notes_path),
                     daemon=True,
                 ).start()
 
         _observer = start_watcher(notes_path, on_notes_changed)
 
-    async with _mcp_server._session_manager.run():
+    async with _mcp_server._session_manager.run():  # type: ignore[union-attr]  # session_manager is set after init
         yield
 
     if _observer is not None:
@@ -1042,16 +1043,17 @@ async def put_settings(req: UpdateSettingsRequest):
             _observer = None
 
         if _db is not None:
-            sync_structural(_db, new_path)
+            db = _db  # local binding for closure type narrowing
+            sync_structural(db, new_path)
 
             def on_notes_changed():
-                sync_structural(_db, new_path)
+                sync_structural(db, new_path)
                 if _pipeline is not None:
                     import threading
 
                     threading.Thread(
                         target=sync_semantic,
-                        args=(_db, _pipeline, new_path),
+                        args=(db, _pipeline, new_path),
                         daemon=True,
                     ).start()
 
