@@ -15,7 +15,7 @@ from sse_starlette.sse import EventSourceResponse
 from brain.agent import create_brain_agent
 from brain.config import settings
 from brain.graph_db import GraphDB
-from brain.kg_pipeline import KGPipeline
+from brain.kg_pipeline import KGPipeline, create_kg_pipeline
 from brain.mcp_client import close_mcp_client
 from brain.mcp_client import load_mcp_tools as load_mcp
 from brain.notes import (
@@ -584,8 +584,8 @@ async def transcribe_meeting(
     segments = result.get("segments", [])
     if segments:
         for seg in segments:
-            ts = _fmt_time(seg["start"])
-            lines.append(f"**[{ts}]** {seg['text']}")
+            ts = _fmt_time(seg.get("start", 0))
+            lines.append(f"**[{ts}]** {seg.get('text', '')}")
             lines.append("")
     else:
         lines.append(result.get("text", ""))
@@ -596,7 +596,15 @@ async def transcribe_meeting(
     )
 
     notes_path = Path(settings.notes_path).expanduser()
-    note_path = write_note(notes_path, title, content, folder=folder, tags=tag_list)
+    try:
+        note_path = write_note(notes_path, title, content, folder=folder, tags=tag_list)
+    except (ValueError, OSError) as e:
+        # Return transcription so the user doesn't lose it
+        raise HTTPException(
+            status_code=400,
+            detail=f"Transcription succeeded but note creation failed: {e}. "
+            f"Transcribed text: {result.get('text', '')}",
+        ) from None
     relative = str(note_path.relative_to(notes_path))
 
     return {
@@ -663,6 +671,7 @@ def get_settings():
 
 @app.put("/settings")
 async def put_settings(req: UpdateSettingsRequest):
+    global _agent, _pipeline
     updates = {}
     if req.llm_provider is not None:
         if req.llm_provider not in VALID_PROVIDERS:
@@ -738,17 +747,25 @@ async def put_settings(req: UpdateSettingsRequest):
         export_api_keys()
 
     # Hot-reload agent when MCP servers or LLM config changes
-    needs_reload = any(
+    needs_agent_reload = any(
         [
             req.mcp_servers is not None,
             req.llm_provider is not None,
             req.llm_model is not None,
         ]
     )
-    if needs_reload and _db is not None and _pipeline is not None:
-        global _agent
+    needs_pipeline_reload = any(
+        [
+            req.embedding_model is not None,
+            req.embedding_dimensions is not None,
+        ]
+    )
+    if (needs_agent_reload or needs_pipeline_reload) and _db is not None and _pipeline is not None:
         from brain.agent import recreate_agent
         from brain.mcp_client import reload_mcp_tools
+
+        if needs_pipeline_reload:
+            _pipeline = create_kg_pipeline(_db._driver, _notes_path())
 
         mcp_tools = await reload_mcp_tools()
         _agent = recreate_agent(_db, _pipeline, mcp_tools=mcp_tools or None)

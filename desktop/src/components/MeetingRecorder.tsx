@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useVoiceRecorder } from "../lib/useVoiceRecorder";
 import { transcribeMeeting } from "../lib/api";
 import { Button } from "./ui/button";
@@ -10,8 +10,11 @@ interface MeetingRecorderProps {
 }
 
 export function MeetingRecorder({ onClose, onComplete }: MeetingRecorderProps) {
-  const { duration, startRecording, stopRecording } =
+  const { duration, startRecording, stopRecording, cancelRecording } =
     useVoiceRecorder();
+
+  // Release microphone if component unmounts while recording
+  useEffect(() => cancelRecording, [cancelRecording]);
   const [phase, setPhase] = useState<"idle" | "recording" | "details" | "transcribing">("idle");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [title, setTitle] = useState("");

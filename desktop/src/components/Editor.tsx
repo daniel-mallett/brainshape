@@ -111,6 +111,7 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
     viewRef.current = view;
 
     return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       view.destroy();
       viewRef.current = null;
     };

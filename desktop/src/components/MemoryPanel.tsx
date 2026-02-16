@@ -75,6 +75,7 @@ export function MemoryPanel() {
   };
 
   const startEdit = (memory: Memory) => {
+    setDeletingId(null);
     setEditingId(memory.id);
     setEditContent(memory.content);
   };
@@ -162,7 +163,7 @@ export function MemoryPanel() {
                       variant="ghost"
                       size="sm"
                       className="h-5 text-xs px-1.5 text-destructive"
-                      onClick={() => setDeletingId(memory.id)}
+                      onClick={() => { setEditingId(null); setEditContent(""); setDeletingId(memory.id); }}
                     >
                       Delete
                     </Button>

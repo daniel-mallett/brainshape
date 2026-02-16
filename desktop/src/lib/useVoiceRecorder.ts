@@ -62,5 +62,22 @@ export function useVoiceRecorder() {
     });
   }, []);
 
-  return { isRecording, duration, startRecording, stopRecording };
+  /** Stop recording and release the microphone without producing a blob. */
+  const cancelRecording = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    const mediaRecorder = mediaRecorderRef.current;
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      mediaRecorder.stream.getTracks().forEach((t) => t.stop());
+      mediaRecorder.stop();
+    }
+    mediaRecorderRef.current = null;
+    chunksRef.current = [];
+    setIsRecording(false);
+    setDuration(0);
+  }, []);
+
+  return { isRecording, duration, startRecording, stopRecording, cancelRecording };
 }

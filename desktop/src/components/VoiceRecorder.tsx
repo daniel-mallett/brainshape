@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useVoiceRecorder } from "../lib/useVoiceRecorder";
 import { transcribeAudio } from "../lib/api";
 import { Button } from "./ui/button";
@@ -9,8 +9,11 @@ interface VoiceRecorderProps {
 }
 
 export function VoiceRecorder({ onTranscription, disabled }: VoiceRecorderProps) {
-  const { isRecording, duration, startRecording, stopRecording } =
+  const { isRecording, duration, startRecording, stopRecording, cancelRecording } =
     useVoiceRecorder();
+
+  // Release microphone if component unmounts while recording
+  useEffect(() => cancelRecording, [cancelRecording]);
   const [transcribing, setTranscribing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

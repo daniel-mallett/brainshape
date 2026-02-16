@@ -495,7 +495,16 @@ class TestSettings:
         assert resp.status_code == 200
         assert resp.json()["llm_model"] == "gpt-4o"
 
-    def test_update_embedding_model(self, client):
+    def test_update_embedding_model(self, client, monkeypatch):
+        mock_reload = AsyncMock(return_value=[])
+        mock_recreate = MagicMock(return_value=MagicMock())
+        mock_pipeline = MagicMock()
+        monkeypatch.setattr("brain.mcp_client.reload_mcp_tools", mock_reload)
+        monkeypatch.setattr("brain.agent.recreate_agent", mock_recreate)
+        monkeypatch.setattr(
+            "brain.server.create_kg_pipeline", MagicMock(return_value=mock_pipeline)
+        )
+
         resp = client.put(
             "/settings",
             json={
