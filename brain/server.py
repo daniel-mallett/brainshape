@@ -18,6 +18,7 @@ from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline, create_kg_pipeline
 from brain.mcp_client import close_mcp_client
 from brain.mcp_client import load_mcp_tools as load_mcp
+from brain.mcp_server import create_mcp_server
 from brain.notes import (
     _ensure_within_notes_dir,
     delete_note,
@@ -76,7 +77,8 @@ async def lifespan(app: FastAPI):
 
         _observer = start_watcher(notes_path, on_notes_changed)
 
-    yield
+    async with _mcp_server._session_manager.run():
+        yield
 
     if _observer is not None:
         _observer.stop()
@@ -99,6 +101,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# MCP server (HTTP transport) — tools reuse the same db/pipeline globals set in lifespan
+_mcp_server = create_mcp_server(streamable_http_path="/")
+_mcp_http_app = _mcp_server.streamable_http_app()
+app.mount("/mcp", _mcp_http_app)
 
 
 # --- Request/Response models ---

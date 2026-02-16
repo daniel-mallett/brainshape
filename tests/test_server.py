@@ -193,6 +193,28 @@ class TestMCPServerValidation:
         assert resp.status_code == 200
 
 
+class TestMCPHttpEndpoint:
+    def test_mcp_endpoint_mounted(self):
+        """The MCP server is mounted at /mcp on the FastAPI app."""
+        mount_paths = [r.path for r in server.app.routes if hasattr(r, "path")]
+        assert "/mcp" in mount_paths
+
+    def test_mcp_server_has_all_tools(self):
+        """The mounted MCP server has all 7 Brain tools registered."""
+        tools = server._mcp_server._tool_manager.list_tools()
+        tool_names = {t.name for t in tools}
+        expected = {
+            "search_notes",
+            "semantic_search",
+            "read_note",
+            "create_note",
+            "edit_note",
+            "query_graph",
+            "find_related",
+        }
+        assert tool_names == expected
+
+
 class TestAgentInit:
     def test_init_session(self, client):
         resp = client.post("/agent/init")

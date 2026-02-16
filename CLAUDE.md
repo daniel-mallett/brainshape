@@ -39,7 +39,7 @@ desktop/                  # Tauri 2 + React + TypeScript
 - `brain/sync.py` — orchestrates incremental structural + semantic sync from notes to graph
 - `brain/settings.py` — persistent user settings (JSON on disk), LLM provider config, transcription config, MCP servers, font/editor prefs, auto-migration of old keys
 - `brain/mcp_client.py` — MCP server client, loads external tools via `langchain-mcp-adapters`
-- `brain/mcp_server.py` — MCP server exposing all 7 tools via stdio, for external agents (Claude Code, etc.)
+- `brain/mcp_server.py` — MCP server exposing all 7 tools; HTTP transport mounted at `/mcp` on the FastAPI server, stdio transport for standalone use
 - `brain/watcher.py` — watchdog file watcher for auto-sync on notes changes
 - `brain/transcribe.py` — voice transcription with pluggable providers (local mlx-whisper, OpenAI, Mistral)
 - `brain/cli.py` — interactive CLI chat loop with `/sync` commands
