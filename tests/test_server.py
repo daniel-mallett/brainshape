@@ -514,8 +514,7 @@ class TestSettings:
             "/settings",
             json={
                 "theme": theme,
-                "ui_font_family": "Inter",
-                "editor_font_family": "Fira Code",
+                "font_family": "Inter",
                 "editor_font_size": 16,
                 "editor_keymap": "default",
                 "editor_line_numbers": True,
@@ -526,8 +525,7 @@ class TestSettings:
         data = resp.json()
         assert data["theme"]["name"] == "Dawn"
         assert data["theme"]["background"] == "#faf8f5"
-        assert data["ui_font_family"] == "Inter"
-        assert data["editor_font_family"] == "Fira Code"
+        assert data["font_family"] == "Inter"
         assert data["editor_font_size"] == 16
         assert data["editor_keymap"] == "default"
         assert data["editor_line_numbers"] is True

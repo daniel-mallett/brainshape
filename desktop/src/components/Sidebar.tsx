@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { createNoteFile, deleteNoteFile, getNoteFiles, syncStructural, type NoteFile } from "../lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
@@ -117,12 +117,17 @@ function TreeNode({ name, node, selectedPath, onSelect, onMenuOpen, depth }: Tre
   );
 }
 
+export interface SidebarHandle {
+  startCreating: () => void;
+  refresh: () => void;
+}
+
 interface SidebarProps {
   selectedPath: string | null;
   onSelectFile: (path: string) => void;
 }
 
-export function Sidebar({ selectedPath, onSelectFile }: SidebarProps) {
+export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar({ selectedPath, onSelectFile }, ref) {
   const [files, setFiles] = useState<NoteFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -141,6 +146,11 @@ export function Sidebar({ selectedPath, onSelectFile }: SidebarProps) {
       setLoading(false);
     }
   }, []);
+
+  useImperativeHandle(ref, () => ({
+    startCreating: () => setCreating(true),
+    refresh,
+  }), [refresh]);
 
   useEffect(() => {
     refresh();
@@ -260,7 +270,10 @@ export function Sidebar({ selectedPath, onSelectFile }: SidebarProps) {
           />
           <div
             className="fixed z-50 min-w-[120px] rounded-md border border-border bg-popover p-1 shadow-md"
-            style={{ left: menu.x, top: menu.y }}
+            style={{
+              left: Math.min(menu.x, window.innerWidth - 140),
+              top: Math.min(menu.y, window.innerHeight - 50),
+            }}
           >
             <button
               onClick={() => handleDeleteClick(menu.path)}
@@ -302,4 +315,4 @@ export function Sidebar({ selectedPath, onSelectFile }: SidebarProps) {
       )}
     </div>
   );
-}
+});

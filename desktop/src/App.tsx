@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
 import { health, getConfig, getNoteFile, getNoteFiles, getSettings, syncStructural, type Config, type Settings } from "./lib/api";
 import { applyTheme, BUILTIN_THEMES, DEFAULT_THEME, type Theme } from "./lib/themes";
-import { Sidebar } from "./components/Sidebar";
+import { Sidebar, type SidebarHandle } from "./components/Sidebar";
 import { Editor } from "./components/Editor";
 import { Chat } from "./components/Chat";
 import { GraphPanel } from "./components/GraphPanel";
@@ -53,6 +53,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [meetingOpen, setMeetingOpen] = useState(false);
+  const sidebarRef = useRef<SidebarHandle>(null);
   // Layout persistence
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: "brain-layout",
@@ -63,11 +64,12 @@ function App() {
   useEffect(() => {
     const theme = resolveTheme(settings);
     applyTheme(theme);
-    if (settings?.ui_font_family) {
-      document.documentElement.style.setProperty("--font-sans", settings.ui_font_family);
-    }
-    if (settings?.editor_font_family) {
-      document.documentElement.style.setProperty("--editor-font", `'${settings.editor_font_family}'`);
+    if (settings?.font_family) {
+      document.documentElement.style.setProperty("--font-sans", settings.font_family);
+      document.documentElement.style.setProperty("--editor-font", settings.font_family);
+    } else {
+      document.documentElement.style.removeProperty("--font-sans");
+      document.documentElement.style.removeProperty("--editor-font");
     }
     if (settings?.editor_font_size) {
       document.documentElement.style.setProperty("--editor-font-size", `${settings.editor_font_size}px`);
@@ -100,11 +102,18 @@ function App() {
 
   const handleSelectFile = useCallback(
     async (path: string) => {
+      if (!path) {
+        setSelectedPath(null);
+        setFileContent("");
+        return;
+      }
       try {
         const note = await getNoteFile(path);
         setSelectedPath(path);
         setFileContent(note.content);
         if (activeView !== "editor") setActiveView("editor");
+        // Refresh sidebar so externally-created notes (e.g. from command palette) appear
+        sidebarRef.current?.refresh();
       } catch (err) {
         console.error("Failed to load note:", err);
       }
@@ -144,7 +153,11 @@ function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const handleCreateNote = useCallback(() => { setActiveView("editor"); }, []);
+  const handleCreateNote = useCallback(() => {
+    setActiveView("editor");
+    // Use setTimeout to ensure sidebar is rendered (in case we switched views)
+    setTimeout(() => sidebarRef.current?.startCreating(), 0);
+  }, []);
   const handleSync = useCallback(() => { syncStructural().catch(console.error); }, []);
   const handleOpenSettings = useCallback(() => { setSettingsOpen(true); }, []);
 
@@ -209,7 +222,7 @@ function App() {
           {activeView === "editor" && (
             <>
               <Panel id="sidebar" defaultSize="15%" minSize="8%" maxSize="30%" collapsible>
-                <Sidebar selectedPath={selectedPath} onSelectFile={handleSelectFile} />
+                <Sidebar ref={sidebarRef} selectedPath={selectedPath} onSelectFile={handleSelectFile} />
               </Panel>
               <Separator />
             </>

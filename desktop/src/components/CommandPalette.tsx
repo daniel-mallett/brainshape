@@ -32,12 +32,14 @@ export function CommandPalette({
   const [notes, setNotes] = useState<NoteFile[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const mouseMovedRef = useRef(false);
 
   // Fetch notes when opening
   useEffect(() => {
     if (open) {
       setQuery("");
       setSelectedIndex(0);
+      mouseMovedRef.current = false;
       getNoteFiles()
         .then((res) => setNotes(res.files))
         .catch(console.error);
@@ -184,7 +186,7 @@ export function CommandPalette({
             className="h-9 text-sm border-0 shadow-none focus-visible:ring-0"
           />
         </div>
-        <div className="max-h-[300px] overflow-y-auto py-1">
+        <div className="max-h-[300px] overflow-y-auto py-1" onMouseMove={() => { mouseMovedRef.current = true; }}>
           {filtered.length === 0 ? (
             <div className="px-3 py-6 text-center text-sm text-muted-foreground">
               No results
@@ -194,7 +196,7 @@ export function CommandPalette({
               <button
                 key={cmd.id}
                 onClick={cmd.action}
-                onMouseEnter={() => setSelectedIndex(i)}
+                onMouseEnter={() => { if (mouseMovedRef.current) setSelectedIndex(i); }}
                 className={`w-full text-left px-3 py-1.5 text-sm flex items-center gap-2 transition-colors ${
                   i === selectedIndex
                     ? "bg-accent text-accent-foreground"

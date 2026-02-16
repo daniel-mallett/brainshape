@@ -40,8 +40,7 @@ DEFAULTS: dict[str, Any] = {
     # Theme: full theme object (JSON) — see desktop/src/lib/themes.ts
     "theme": {},
     # Font settings
-    "ui_font_family": "",
-    "editor_font_family": "",
+    "font_family": "",
     "editor_font_size": 14,
     # Editor settings
     "editor_keymap": "vim",
@@ -74,6 +73,14 @@ def _migrate_settings(settings: dict[str, Any]) -> dict[str, Any]:
         if not settings.get("transcription_model"):
             settings["transcription_model"] = settings["whisper_model"]
         del settings["whisper_model"]
+    # ui_font_family + editor_font_family → font_family
+    if "ui_font_family" in settings or "editor_font_family" in settings:
+        if not settings.get("font_family"):
+            settings["font_family"] = (
+                settings.get("ui_font_family") or settings.get("editor_font_family") or ""
+            )
+        settings.pop("ui_font_family", None)
+        settings.pop("editor_font_family", None)
     return settings
 
 

@@ -77,8 +77,7 @@ class TestThemeAndEditorDefaults:
         assert settings["editor_font_size"] == 14
         assert settings["editor_line_numbers"] is False
         assert settings["editor_word_wrap"] is True
-        assert settings["ui_font_family"] == ""
-        assert settings["editor_font_family"] == ""
+        assert settings["font_family"] == ""
 
     def test_theme_round_trip(self, tmp_settings_file):
         theme = {"name": "Nord", "background": "#2e3440"}
@@ -154,6 +153,19 @@ class TestMigrateSettings:
         result = _migrate_settings(old)
         assert result["transcription_model"] == "already-set"
         assert "whisper_model" not in result
+
+    def test_font_fields_migrated(self):
+        old = {"ui_font_family": "Inter", "editor_font_family": "Fira Code"}
+        result = _migrate_settings(old)
+        assert "ui_font_family" not in result
+        assert "editor_font_family" not in result
+        assert result["font_family"] == "Inter"
+
+    def test_font_fields_prefer_existing_font_family(self):
+        old = {"ui_font_family": "Inter", "font_family": "Monaco"}
+        result = _migrate_settings(old)
+        assert result["font_family"] == "Monaco"
+        assert "ui_font_family" not in result
 
     def test_no_migration_needed(self):
         settings = {"llm_provider": "anthropic"}

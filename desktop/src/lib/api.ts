@@ -107,8 +107,7 @@ export interface Settings {
   transcription_model: string;
   mcp_servers: MCPServer[];
   theme: Record<string, string>;
-  ui_font_family: string;
-  editor_font_family: string;
+  font_family: string;
   editor_font_size: number;
   editor_keymap: string;
   editor_line_numbers: boolean;
@@ -131,8 +130,7 @@ export function updateSettings(
     transcription_model: string;
     mcp_servers: MCPServer[];
     theme: Record<string, string>;
-    ui_font_family: string;
-    editor_font_family: string;
+    font_family: string;
     editor_font_size: number;
     editor_keymap: string;
     editor_line_numbers: boolean;

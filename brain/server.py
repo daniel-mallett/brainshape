@@ -137,8 +137,7 @@ class UpdateSettingsRequest(BaseModel):
     embedding_dimensions: int | None = None
     mcp_servers: list[dict] | None = None
     theme: dict | None = None
-    ui_font_family: str | None = None
-    editor_font_family: str | None = None
+    font_family: str | None = None
     editor_font_size: int | None = None
     editor_keymap: str | None = None
     editor_line_numbers: bool | None = None
@@ -705,10 +704,8 @@ async def put_settings(req: UpdateSettingsRequest):
         updates["mcp_servers"] = req.mcp_servers
     if req.theme is not None:
         updates["theme"] = req.theme
-    if req.ui_font_family is not None:
-        updates["ui_font_family"] = req.ui_font_family
-    if req.editor_font_family is not None:
-        updates["editor_font_family"] = req.editor_font_family
+    if req.font_family is not None:
+        updates["font_family"] = req.font_family
     if req.editor_font_size is not None:
         updates["editor_font_size"] = req.editor_font_size
     if req.editor_keymap is not None:

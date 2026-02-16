@@ -65,21 +65,16 @@ const SUGGESTED_TRANSCRIPTION_MODELS: Record<string, ModelOption[]> = {
   ],
 };
 
-const UI_FONTS = [
+const FONTS = [
   { value: "", label: "System Default" },
   { value: "Inter, system-ui, sans-serif", label: "Inter" },
   { value: "'SF Pro Display', system-ui, sans-serif", label: "SF Pro" },
   { value: "'JetBrains Mono', monospace", label: "JetBrains Mono" },
-];
-
-const EDITOR_FONTS = [
-  { value: "", label: "Default (JetBrains Mono)" },
-  { value: "JetBrains Mono", label: "JetBrains Mono" },
-  { value: "Fira Code", label: "Fira Code" },
-  { value: "Cascadia Code", label: "Cascadia Code" },
-  { value: "SF Mono", label: "SF Mono" },
-  { value: "Menlo", label: "Menlo" },
-  { value: "Monaco", label: "Monaco" },
+  { value: "'Fira Code', monospace", label: "Fira Code" },
+  { value: "'Cascadia Code', monospace", label: "Cascadia Code" },
+  { value: "'SF Mono', monospace", label: "SF Mono" },
+  { value: "Menlo, monospace", label: "Menlo" },
+  { value: "Monaco, monospace", label: "Monaco" },
 ];
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
@@ -236,8 +231,7 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
   const [themeName, setThemeName] = useState("Midnight");
   const [themeOverrides, setThemeOverrides] = useState<Record<string, string>>({});
   const [customizeOpen, setCustomizeOpen] = useState(false);
-  const [uiFont, setUiFont] = useState("");
-  const [editorFont, setEditorFont] = useState("");
+  const [fontFamily, setFontFamily] = useState("");
   const [editorFontSize, setEditorFontSize] = useState(14);
 
   // Editor
@@ -268,8 +262,7 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
       setThemeOverrides(overrides);
 
       // Fonts & editor
-      setUiFont(s.ui_font_family || "");
-      setEditorFont(s.editor_font_family || "");
+      setFontFamily(s.font_family || "");
       setEditorFontSize(s.editor_font_size || 14);
       setEditorKeymap(s.editor_keymap || "vim");
       setEditorLineNumbers(s.editor_line_numbers ?? false);
@@ -304,8 +297,7 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
         transcription_model: txModel,
         mcp_servers: mcpServers,
         theme: themeData,
-        ui_font_family: uiFont,
-        editor_font_family: editorFont,
+        font_family: fontFamily,
         editor_font_size: editorFontSize,
         editor_keymap: editorKeymap,
         editor_line_numbers: editorLineNumbers,
@@ -420,29 +412,17 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
             <SectionHeading>Fonts</SectionHeading>
 
             <section className="space-y-1.5">
-              <FieldLabel>UI Font</FieldLabel>
+              <FieldLabel>Font</FieldLabel>
               <select
-                value={uiFont}
-                onChange={(e) => { setUiFont(e.target.value); markDirty(); }}
+                value={fontFamily}
+                onChange={(e) => { setFontFamily(e.target.value); markDirty(); }}
                 className="w-full h-8 text-sm rounded-md border border-input bg-background px-3 text-foreground"
               >
-                {UI_FONTS.map((f) => (
+                {FONTS.map((f) => (
                   <option key={f.value} value={f.value}>{f.label}</option>
                 ))}
               </select>
-            </section>
-
-            <section className="space-y-1.5">
-              <FieldLabel>Editor Font</FieldLabel>
-              <select
-                value={editorFont}
-                onChange={(e) => { setEditorFont(e.target.value); markDirty(); }}
-                className="w-full h-8 text-sm rounded-md border border-input bg-background px-3 text-foreground"
-              >
-                {EDITOR_FONTS.map((f) => (
-                  <option key={f.value} value={f.value}>{f.label}</option>
-                ))}
-              </select>
+              <FieldHint>Applied to the entire app including the editor and preview.</FieldHint>
             </section>
 
             <section className="space-y-1.5">
