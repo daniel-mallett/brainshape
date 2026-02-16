@@ -3,22 +3,22 @@
 ## What's Working
 
 ### Core (Python Backend)
+- **SurrealDB embedded** (`surrealkv://`) — zero-config graph database, no Docker required. Data stored at `~/.config/brain/surrealdb`
 - Structural sync: two-pass (nodes first, then relationships), runs on every startup unconditionally
-- Embedding sync: incremental (SHA-256 hash-gated), single event loop for batch processing, direct Cypher writes
+- Embedding sync: incremental (SHA-256 hash-gated), single event loop for batch processing, direct SurrealQL writes
 - Simplified KG pipeline: load → split → embed → write (no LLM entity extraction)
-- Vector index on Chunk nodes for cosine similarity search
-- 7 agent tools: search, semantic_search, read, create, edit, query_graph, find_related
+- HNSW vector index on chunk table for cosine similarity search, BM25 fulltext index for keyword search
+- 9 agent tools: search, semantic_search, read, create, edit, query_graph, find_related, store_memory, create_connection
 - semantic_search tool: embeds query text locally, runs vector similarity against chunk index
-- Agent-driven knowledge graph: agent creates Memory nodes, custom entities, and relationships through conversation
+- Agent-driven knowledge graph: agent creates Memory records, custom entities, and relationships through structured tools (store_memory, create_connection) or raw SurrealQL (query_graph). Reserved table names are blocked to prevent schema corruption.
 - CLI with /sync commands, tool call visibility, batch entry point for cron
-- APOC plugin enabled in Docker
 - Folder-aware note creation and editing (edit_note looks up path from graph)
 - Tool responses use notes-relative paths only (no system path leakage)
 - Seed notes for first-run experience (Welcome, About Me, 3 Tutorials)
 - **Settings system**: persistent JSON config (~/.config/brain/settings.json), runtime-configurable LLM provider (Anthropic/OpenAI/Ollama), model selection, unified font family, auto-migration of old settings keys
 - **Configurable embedding model**: default `sentence-transformers/all-mpnet-base-v2` (ungated), switchable via settings, auto-migrates vector index on dimension change
 - **MCP client**: consume external MCP servers via `langchain-mcp-adapters`, stdio + HTTP transports, hot-reload on settings change (no restart required)
-- **MCP server**: exposes all 7 tools via MCP protocol for external agents. Two transports: HTTP (mounted at `/mcp` on the FastAPI server, available automatically when the app is running) and stdio (standalone via `uv run python -m brain.mcp_server`)
+- **MCP server**: exposes all 9 tools via MCP protocol for external agents. Two transports: HTTP (mounted at `/mcp` on the FastAPI server, available automatically when the app is running) and stdio (standalone via `uv run python -m brain.mcp_server`)
 - **File watching**: watchdog monitors notes directory, auto-triggers structural sync on .md changes (debounced 2s)
 - **Voice transcription**: pluggable provider system — local (mlx-whisper on Apple Silicon), OpenAI Whisper API, or Mistral Voxtral API. Provider + model configurable in settings. Auto-migrates old `whisper_model` setting.
 - **Meeting transcription**: `POST /transcribe/meeting` records audio and saves timestamped transcription as a new Note with configurable title, folder, and tags
@@ -26,7 +26,7 @@
 ### FastAPI Server
 - HTTP server on port 8765 exposing all Brain operations
 - Endpoints: health, config, notes CRUD, agent init/message (SSE streaming), sync (structural/semantic/full)
-- Graph endpoints: stats, overview, neighborhood, memories CRUD, notes tags
+- Graph endpoints: stats, overview, neighborhood (BFS), memories CRUD, notes tags
 - Settings endpoints: GET/PUT /settings for runtime configuration
 - Transcription endpoints: POST /transcribe (voice-to-text), POST /transcribe/meeting (audio-to-note with timestamps)
 - CORS configured for Vite dev and Tauri origins
@@ -38,7 +38,7 @@
 - **Vault import**: `POST /import/vault` copies .md files from any source directory (e.g., Obsidian vault), preserving folder structure. Skips `.obsidian/`, `.git/`, `.trash/`, and other non-note dirs. Auto-triggers structural sync after import
 - **Trash system**: `delete_note()` moves to `.trash/` instead of permanent delete. Preserves folder structure, handles name collisions with timestamp suffix. Endpoints: `GET /notes/trash`, `POST /notes/trash/{path}/restore`, `DELETE /notes/trash` (empty trash). `list_notes()` excludes trash files from all downstream operations.
 - **Note rename with wikilink rewriting**: `PUT /notes/file/{path}/rename` renames a note on disk, updates the graph node, and rewrites all `[[Old Title]]` / `[[Old Title|alias]]` wikilinks across all notes. Preserves display aliases.
-- **Graceful Neo4j failure**: Server starts in degraded mode when Neo4j is unreachable. Notes CRUD works (filesystem-only), agent/graph endpoints return 503. Health endpoint reports `neo4j_connected` and `agent_available` status.
+- **Graceful SurrealDB failure**: Server starts in degraded mode when SurrealDB is unreachable. Notes CRUD works (filesystem-only), agent/graph endpoints return 503. Health endpoint reports `surrealdb_connected` and `agent_available` status.
 
 ### Desktop App (Tauri 2 + React + TypeScript)
 - Scaffolded with official `create-tauri-app` (React+TS template)
@@ -63,7 +63,7 @@
 - View switching: Editor / Graph / Memory views in header
 - **Sidebar**: forwardRef imperative handle for programmatic control (create note, refresh). Context menu clamped to viewport bounds.
 - **Error boundary**: Top-level React error boundary catches render crashes and offers reload instead of white-screening the app
-- **Neo4j warning bar**: Shows a subtle warning below the header when Neo4j is not connected (degraded mode)
+- **SurrealDB warning bar**: Shows a subtle warning below the header when SurrealDB is not connected (degraded mode)
 - **Sidebar search/filter**: Inline filter input for quick note search, case-insensitive title match, flat list when filtered
 - **Trash UI**: Trash icon in sidebar header opens modal listing trashed notes with per-item restore and "Empty Trash" action
 - **Inline rename**: Context menu "Rename" shows inline input in sidebar, submits on Enter/blur, escapes to cancel
@@ -73,8 +73,8 @@
 - Health check with auto-reconnect polling
 
 ### Testing & CI
-- 324 unit tests covering all modules including server, settings, transcription providers, watcher, MCP client, MCP server, vault import, trash system, note rename, error boundary
-- Server tests properly isolated (noop lifespan, no Neo4j connection required)
+- 390 unit tests (89% coverage) covering all modules including tools (edge cleanup, entity-type matrix, reserved names, duplicate prevention), graph_db (table discovery), server (graph endpoints, memory connections), notes (wikilink dedup), settings, transcription providers, watcher, MCP client/server, vault import, trash system, note rename, error boundary
+- Server tests properly isolated (noop lifespan, no SurrealDB connection required)
 - CI: GitHub Actions workflow runs ruff, ty, and pytest (with coverage) on push/PR to main
 - Pre-commit hooks: ruff lint, ruff format, gitleaks secret detection, pytest
 - Dependabot: weekly PRs for Python deps and GitHub Actions versions
@@ -96,8 +96,6 @@
 5. Streaming transcription — real-time output as user speaks (progressive UI, leverage Mistral realtime API)
 
 ### Platform
-6. Plugin system — user-installable extensions beyond MCP servers
-7. Multi-device sync — notes sync via Git or cloud storage
-
-### Later (post-stabilization)
-8. **Single-binary install** — bundle Python server as Tauri sidecar, replace Neo4j with embedded DB, produce signed `.app`/`.dmg`/`.exe`. Deferred until the architecture stabilizes — packaging now would mean maintaining build infrastructure alongside active feature development, and every pipeline or DB change would break the bundling.
+6. **Single-binary install** — bundle Python server as Tauri sidecar, produce signed `.app`/`.dmg`/`.exe`. Now feasible with SurrealDB embedded (no Docker dependency). Next step: PyInstaller or Nuitka to package the Python server.
+7. Plugin system — user-installable extensions beyond MCP servers
+8. Multi-device sync — notes sync via Git or cloud storage

@@ -267,9 +267,9 @@ function App() {
         </div>
       </header>
 
-      {healthStatus && !healthStatus.neo4j_connected && (
+      {healthStatus && !healthStatus.surrealdb_connected && (
         <div className="px-4 py-1 bg-destructive/10 border-b border-destructive/20 text-xs text-destructive">
-          Neo4j not connected — agent and graph features unavailable. Run: <code className="bg-muted px-1 rounded">docker compose up -d</code>
+          Database not connected — agent and graph features unavailable.
         </div>
       )}
 

@@ -86,24 +86,22 @@ class TestMcpTools:
         mock_db.query.return_value = [{"n": "value"}]
         from brain.mcp_server import mcp
 
-        result = await mcp.call_tool("query_graph", {"cypher": "MATCH (n) RETURN n"})
+        result = await mcp.call_tool("query_graph", {"surql": "SELECT * FROM note"})
         assert any("value" in str(block) for block in result)
 
     @pytest.mark.asyncio
     async def test_find_related(self, mock_db):
         mock_db.query.return_value = [
             {
-                "source_labels": ["Note"],
-                "source": "X",
-                "relationship": "TAGGED_WITH",
-                "target_labels": ["Tag"],
-                "target": "python",
+                "tags": ["python"],
+                "outgoing_links": [{"title": "Other", "path": "Other.md"}],
+                "incoming_links": [],
             }
         ]
         from brain.mcp_server import mcp
 
         result = await mcp.call_tool("find_related", {"title": "X"})
-        assert any("TAGGED_WITH" in str(block) for block in result)
+        assert any("python" in str(block) for block in result)
 
 
 class TestMcpToolRegistration:
@@ -123,6 +121,8 @@ class TestMcpToolRegistration:
             "edit_note",
             "query_graph",
             "find_related",
+            "store_memory",
+            "create_connection",
         }
         assert tool_names == expected
 

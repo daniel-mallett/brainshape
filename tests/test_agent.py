@@ -79,8 +79,8 @@ class TestCreateBrainAgent:
 
     @patch("brain.agent.GraphDB")
     def test_returns_none_on_connection_error(self, mock_db_cls):
-        """create_brain_agent returns (None, None, None) when Neo4j is unreachable."""
-        mock_db_cls.side_effect = ConnectionError("Cannot connect to Neo4j")
+        """create_brain_agent returns (None, None, None) when DB is unreachable."""
+        mock_db_cls.side_effect = ConnectionError("Cannot open SurrealDB")
 
         agent, db, pipeline = create_brain_agent()
 
@@ -124,15 +124,15 @@ class TestRecreateAgent:
         recreate_agent(MagicMock(), MagicMock())
 
         call_kwargs = mock_create.call_args[1]
-        # Should only have the 7 built-in tools
-        assert len(call_kwargs["tools"]) == 7
+        # Should only have the 9 built-in tools
+        assert len(call_kwargs["tools"]) == 9
 
 
 class TestSystemPrompt:
     def test_prompt_mentions_memory(self):
         """System prompt instructs agent to use persistent memory."""
-        assert "Memory" in SYSTEM_PROMPT
-        assert "CREATE" in SYSTEM_PROMPT
+        assert "memory" in SYSTEM_PROMPT
+        assert "store_memory" in SYSTEM_PROMPT
 
     def test_prompt_mentions_wikilinks(self):
         """System prompt instructs agent to use wikilink syntax."""

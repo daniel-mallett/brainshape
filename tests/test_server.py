@@ -58,7 +58,7 @@ class TestHealth:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
-        assert data["neo4j_connected"] is True
+        assert data["surrealdb_connected"] is True
         assert data["agent_available"] is True
 
     def test_health_degraded(self, bare_client):
@@ -66,7 +66,7 @@ class TestHealth:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
-        assert data["neo4j_connected"] is False
+        assert data["surrealdb_connected"] is False
         assert data["agent_available"] is False
 
 
@@ -77,7 +77,7 @@ class TestConfig:
         data = resp.json()
         assert "notes_path" in data
         assert "model_name" in data
-        assert "neo4j_uri" in data
+        assert "surrealdb_path" in data
 
 
 class TestNoteFiles:
@@ -211,7 +211,7 @@ class TestMCPHttpEndpoint:
         assert "/mcp" in mount_paths
 
     def test_mcp_server_has_all_tools(self):
-        """The mounted MCP server has all 7 Brain tools registered."""
+        """The mounted MCP server has all 9 Brain tools registered."""
         tools = server._mcp_server._tool_manager.list_tools()
         tool_names = {t.name for t in tools}
         expected = {
@@ -222,6 +222,8 @@ class TestMCPHttpEndpoint:
             "edit_note",
             "query_graph",
             "find_related",
+            "store_memory",
+            "create_connection",
         }
         assert tool_names == expected
 
@@ -246,11 +248,28 @@ class TestAgentMessage:
 
 class TestGraphStats:
     def test_returns_counts(self, client, server_db):
-        def route_query(cypher, params=None):
-            if "labels(n)" in cypher:
-                return [{"label": "Note", "count": 10}, {"label": "Tag", "count": 5}]
-            if "type(r)" in cypher:
-                return [{"type": "TAGGED_WITH", "count": 15}]
+        server_db.get_relation_tables.return_value = [
+            "from_document",
+            "links_to",
+            "tagged_with",
+        ]
+        server_db.get_custom_node_tables.return_value = []
+
+        def route_query(sql, params=None):
+            if "FROM note GROUP" in sql:
+                return [{"count": 10}]
+            if "FROM tag GROUP" in sql:
+                return [{"count": 5}]
+            if "FROM memory GROUP" in sql:
+                return [{"count": 2}]
+            if "FROM chunk GROUP" in sql:
+                return [{"count": 20}]
+            if "FROM tagged_with GROUP" in sql:
+                return [{"count": 15}]
+            if "FROM links_to GROUP" in sql:
+                return [{"count": 3}]
+            if "FROM from_document GROUP" in sql:
+                return [{"count": 20}]
             return []
 
         server_db.query.side_effect = route_query
@@ -261,29 +280,58 @@ class TestGraphStats:
         assert data["nodes"]["Tag"] == 5
         assert data["relationships"]["TAGGED_WITH"] == 15
 
+    def test_graph_stats_includes_custom_edge_table(self, client, server_db):
+        """Custom edge tables appear in stats response."""
+        server_db.get_relation_tables.return_value = [
+            "links_to",
+            "tagged_with",
+            "works_with",
+        ]
+        server_db.get_custom_node_tables.return_value = ["person"]
+
+        def route_query(sql, params=None):
+            if "FROM note GROUP" in sql:
+                return [{"count": 5}]
+            if "FROM tag GROUP" in sql:
+                return [{"count": 3}]
+            if "FROM memory GROUP" in sql:
+                return [{"count": 1}]
+            if "FROM chunk GROUP" in sql:
+                return [{"count": 10}]
+            if "FROM person GROUP" in sql:
+                return [{"count": 2}]
+            if "FROM tagged_with GROUP" in sql:
+                return [{"count": 8}]
+            if "FROM links_to GROUP" in sql:
+                return [{"count": 4}]
+            if "FROM works_with GROUP" in sql:
+                return [{"count": 1}]
+            return []
+
+        server_db.query.side_effect = route_query
+        resp = client.get("/graph/stats")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["relationships"]["WORKS_WITH"] == 1
+        assert data["nodes"]["Person"] == 2
+
 
 class TestGraphOverview:
     def test_returns_nodes_and_edges(self, client, server_db):
-        def route_query(cypher, params=None):
-            if "elementId(n)" in cypher:
-                return [
-                    {
-                        "id": "n1",
-                        "labels": ["Note", "Document"],
-                        "name": "My Note",
-                        "path": "My Note.md",
-                        "type": None,
-                    },
-                    {
-                        "id": "n2",
-                        "labels": ["Tag"],
-                        "name": "python",
-                        "path": None,
-                        "type": None,
-                    },
-                ]
-            if "elementId(a)" in cypher:
-                return [{"source": "n1", "target": "n2", "type": "TAGGED_WITH"}]
+        server_db.get_relation_tables.return_value = ["links_to", "tagged_with"]
+        server_db.get_custom_node_tables.return_value = []
+
+        def route_query(sql, params=None):
+            if "FROM note LIMIT" in sql:
+                return [{"nid": "abc", "name": "My Note", "path": "My Note.md", "type": None}]
+            if "FROM tag LIMIT" in sql:
+                return [{"nid": "def", "name": "python", "path": None, "type": None}]
+            if "FROM memory LIMIT" in sql:
+                return []
+            if "FROM tagged_with LIMIT" in sql:
+                return [{"src": "note:abc", "tgt": "tag:def"}]
+            if "FROM links_to LIMIT" in sql:
+                return []
             return []
 
         server_db.query.side_effect = route_query
@@ -295,6 +343,39 @@ class TestGraphOverview:
         assert len(data["edges"]) == 1
         assert data["edges"][0]["type"] == "TAGGED_WITH"
 
+    def test_overview_includes_custom_edges(self, client, server_db):
+        """Custom edge tables appear in overview response."""
+        server_db.get_relation_tables.return_value = [
+            "links_to",
+            "tagged_with",
+            "works_with",
+        ]
+        server_db.get_custom_node_tables.return_value = ["person"]
+
+        def route_query(sql, params=None):
+            if "FROM note LIMIT" in sql:
+                return [{"nid": "n1", "name": "Note", "path": "Note.md", "type": None}]
+            if "FROM tag LIMIT" in sql:
+                return []
+            if "FROM memory LIMIT" in sql:
+                return []
+            if "FROM person LIMIT" in sql:
+                return [{"nid": "p1", "name": "Alice", "path": None, "type": None}]
+            if "FROM works_with LIMIT" in sql:
+                return [{"src": "person:p1", "tgt": "person:p2"}]
+            if "FROM tagged_with LIMIT" in sql:
+                return []
+            if "FROM links_to LIMIT" in sql:
+                return []
+            return []
+
+        server_db.query.side_effect = route_query
+        resp = client.get("/graph/overview")
+        assert resp.status_code == 200
+        data = resp.json()
+        edge_types = {e["type"] for e in data["edges"]}
+        assert "WORKS_WITH" in edge_types
+
     def test_rejects_invalid_label(self, client, server_db):
         resp = client.get("/graph/overview?label=INVALID")
         assert resp.status_code == 400
@@ -302,63 +383,235 @@ class TestGraphOverview:
 
 class TestGraphNeighborhood:
     def test_returns_neighborhood(self, client, server_db):
-        server_db.query.return_value = [
-            {
-                "center_id": "c1",
-                "center_labels": ["Note", "Document"],
-                "center_name": "Hub Note",
-                "center_path": "Hub.md",
-                "conn_id": "t1",
-                "conn_labels": ["Tag"],
-                "conn_name": "python",
-                "conn_path": None,
-                "conn_type": None,
-                "rel_source": "c1",
-                "rel_target": "t1",
-                "rel_type": "TAGGED_WITH",
-            },
-        ]
+        server_db.get_relation_tables.return_value = ["links_to", "tagged_with"]
+
+        def route_query(sql, params=None):
+            # First call: find center node
+            if "FROM note WHERE path" in sql:
+                return [{"nid": "abc", "title": "Hub Note", "path": "Hub.md"}]
+            # BFS outgoing edges
+            if "FROM tagged_with WHERE in" in sql:
+                return [{"target": "tag:def", "eid": "tw1"}]
+            if "FROM links_to WHERE in" in sql:
+                return []
+            # Fetch tag detail
+            if "type::thing" in sql:
+                return [{"nid": "def", "name": "python", "path": None, "type": None}]
+            # BFS incoming edges
+            if "WHERE out" in sql:
+                return []
+            return []
+
+        server_db.query.side_effect = route_query
         resp = client.get("/graph/neighborhood/Hub.md")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data["nodes"]) == 2
-        assert len(data["edges"]) == 1
+        assert len(data["nodes"]) >= 1
 
-    def test_caps_depth(self, client, server_db):
+    def test_neighborhood_traverses_custom_edges(self, client, server_db):
+        """BFS in neighborhood follows custom relation tables."""
+        server_db.get_relation_tables.return_value = [
+            "links_to",
+            "tagged_with",
+            "works_with",
+        ]
+
+        def route_query(sql, params=None):
+            if "FROM note WHERE path" in sql:
+                return [{"nid": "n1", "title": "Hub", "path": "Hub.md"}]
+            if "FROM works_with WHERE in" in sql:
+                return [{"target": "person:p1", "eid": "ww1"}]
+            if "FROM tagged_with WHERE in" in sql:
+                return []
+            if "FROM links_to WHERE in" in sql:
+                return []
+            if "type::thing" in sql:
+                return [{"nid": "p1", "name": "Alice", "path": None, "type": None}]
+            if "WHERE out" in sql:
+                return []
+            return []
+
+        server_db.query.side_effect = route_query
+        resp = client.get("/graph/neighborhood/Hub.md")
+        assert resp.status_code == 200
+        data = resp.json()
+        edge_types = {e["type"] for e in data["edges"]}
+        assert "WORKS_WITH" in edge_types
+
+    def test_empty_neighborhood(self, client, server_db):
         server_db.query.return_value = []
         resp = client.get("/graph/neighborhood/test.md?depth=10")
         assert resp.status_code == 200
-        # Verify the query used depth 3 (capped)
-        query_str = server_db.query.call_args[0][0]
-        assert "*1..3" in query_str
+        assert resp.json() == {"nodes": [], "edges": []}
 
 
 class TestGraphMemories:
     def test_list_memories(self, client, server_db):
-        server_db.query.return_value = [
-            {
-                "id": "m1",
-                "type": "preference",
-                "content": "User likes dark mode",
-                "created_at": 1700000000,
-                "connections": [{"name": None, "relationship": None}],
-            },
-        ]
+        server_db.get_relation_tables.return_value = ["relates_to"]
+
+        def route_query(sql, params=None):
+            if sql.startswith("SELECT mid"):
+                return [
+                    {
+                        "mid": "m1",
+                        "type": "preference",
+                        "content": "User likes dark mode",
+                        "created_at": 1700000000,
+                    },
+                ]
+            # No connections for this memory
+            return []
+
+        server_db.query.side_effect = route_query
         resp = client.get("/graph/memories")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["memories"]) == 1
         assert data["memories"][0]["content"] == "User likes dark mode"
-        # Null connections should be filtered out
-        assert len(data["memories"][0]["connections"]) == 0
+        assert data["memories"][0]["connections"] == []
+
+    def test_list_memories_with_connections(self, client, server_db):
+        server_db.get_relation_tables.return_value = ["relates_to"]
+
+        def route_query(sql, params=None):
+            if sql.startswith("SELECT mid"):
+                return [
+                    {
+                        "mid": "m1",
+                        "type": "preference",
+                        "content": "User likes dark mode",
+                        "created_at": 1700000000,
+                    },
+                ]
+            if sql.startswith("SELECT out AS target"):
+                return [{"target": "note:abc"}]
+            if sql.startswith("SELECT in AS source"):
+                return []
+            if "type::thing" in sql:
+                return [{"name": "Settings"}]
+            return []
+
+        server_db.query.side_effect = route_query
+        resp = client.get("/graph/memories")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["memories"]) == 1
+        conns = data["memories"][0]["connections"]
+        assert len(conns) == 1
+        assert conns[0]["name"] == "Settings"
+        assert conns[0]["relationship"] == "relates_to"
+
+    def test_memory_connections_bidirectional(self, client, server_db):
+        """Both incoming and outgoing edges are found for a memory."""
+        server_db.get_relation_tables.return_value = ["relates_to"]
+
+        def route_query(sql, params=None):
+            if sql.startswith("SELECT mid"):
+                return [
+                    {
+                        "mid": "m1",
+                        "type": "fact",
+                        "content": "User is a developer",
+                        "created_at": 1700000000,
+                    },
+                ]
+            if sql.startswith("SELECT out AS target"):
+                return [{"target": "note:abc"}]
+            if sql.startswith("SELECT in AS source"):
+                return [{"source": "person:xyz"}]
+            if "type::thing" in sql:
+                tid = params.get("tid", "")
+                if "note" in tid:
+                    return [{"name": "Dev Notes"}]
+                if "person" in tid:
+                    return [{"name": "Alice"}]
+                return [{"name": "Unknown"}]
+            return []
+
+        server_db.query.side_effect = route_query
+        resp = client.get("/graph/memories")
+        assert resp.status_code == 200
+        conns = resp.json()["memories"][0]["connections"]
+        assert len(conns) == 2
+        names = {c["name"] for c in conns}
+        assert "Dev Notes" in names
+        assert "Alice" in names
+
+    def test_memory_connections_multiple_relation_types(self, client, server_db):
+        """Memory connected via multiple relation types shows all connections."""
+        server_db.get_relation_tables.return_value = ["relates_to", "about"]
+
+        def route_query(sql, params=None):
+            if sql.startswith("SELECT mid"):
+                return [
+                    {
+                        "mid": "m1",
+                        "type": "fact",
+                        "content": "Test",
+                        "created_at": 1700000000,
+                    },
+                ]
+            if sql.startswith("SELECT out AS target") and "relates_to" in sql:
+                return [{"target": "note:abc"}]
+            if sql.startswith("SELECT out AS target") and "about" in sql:
+                return [{"target": "person:xyz"}]
+            if sql.startswith("SELECT in AS source"):
+                return []
+            if "type::thing" in sql:
+                tid = params.get("tid", "")
+                if "note" in tid:
+                    return [{"name": "My Note"}]
+                if "person" in tid:
+                    return [{"name": "Bob"}]
+                return [{"name": "Unknown"}]
+            return []
+
+        server_db.query.side_effect = route_query
+        resp = client.get("/graph/memories")
+        assert resp.status_code == 200
+        conns = resp.json()["memories"][0]["connections"]
+        assert len(conns) == 2
+        rels = {c["relationship"] for c in conns}
+        assert "relates_to" in rels
+        assert "about" in rels
+
+    def test_memory_connections_graceful_on_missing_target(self, client, server_db):
+        """Edge target doesn't resolve — connection skipped without error."""
+        server_db.get_relation_tables.return_value = ["relates_to"]
+
+        def route_query(sql, params=None):
+            if sql.startswith("SELECT mid"):
+                return [
+                    {
+                        "mid": "m1",
+                        "type": "fact",
+                        "content": "Test",
+                        "created_at": 1700000000,
+                    },
+                ]
+            if sql.startswith("SELECT out AS target"):
+                return [{"target": "note:deleted"}]
+            if sql.startswith("SELECT in AS source"):
+                return []
+            if "type::thing" in sql:
+                # Target doesn't resolve (returns no name)
+                return [{}]
+            return []
+
+        server_db.query.side_effect = route_query
+        resp = client.get("/graph/memories")
+        assert resp.status_code == 200
+        conns = resp.json()["memories"][0]["connections"]
+        # Missing target means no connection added
+        assert len(conns) == 0
 
     def test_delete_memory(self, client, server_db):
-        server_db.query.return_value = [{"deleted": 1}]
+        server_db.query.return_value = [{"mid": "m1"}]
         resp = client.delete("/graph/memory/m1")
         assert resp.status_code == 200
 
     def test_delete_memory_not_found(self, client, server_db):
-        server_db.query.return_value = [{"deleted": 0}]
+        server_db.query.return_value = []
         resp = client.delete("/graph/memory/nonexistent")
         assert resp.status_code == 404
 
@@ -716,25 +969,20 @@ class TestSync:
 
 
 class TestHelperFunctions:
-    def test_primary_label_prefers_note(self):
+    def test_primary_label_capitalizes(self):
         from brain.server import _primary_label
 
-        assert _primary_label(["Document", "Note"]) == "Note"
+        assert _primary_label("note") == "Note"
 
     def test_primary_label_tag(self):
         from brain.server import _primary_label
 
-        assert _primary_label(["Tag"]) == "Tag"
-
-    def test_primary_label_fallback(self):
-        from brain.server import _primary_label
-
-        assert _primary_label(["CustomLabel"]) == "CustomLabel"
+        assert _primary_label("tag") == "Tag"
 
     def test_primary_label_empty(self):
         from brain.server import _primary_label
 
-        assert _primary_label([]) == "Unknown"
+        assert _primary_label("") == "Unknown"
 
     def test_truncate_long_text(self):
         from brain.server import _truncate

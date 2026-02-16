@@ -57,7 +57,7 @@ def _extract_wikilinks(content: str) -> list[str]:
         if suffix in _EMBED_EXTENSIONS:
             continue
         links.append(cleaned)
-    return links
+    return list(dict.fromkeys(links))
 
 
 def _ensure_within_notes_dir(notes_path: Path, file_path: Path) -> Path:

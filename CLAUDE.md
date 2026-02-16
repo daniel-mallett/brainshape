@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-"Brain" is a personal second-brain agent with knowledge graph memory. It connects a markdown notes directory to a Neo4j knowledge graph, allowing an AI agent to read/search/create/edit notes and maintain its own long-term memory. It includes a standalone desktop app (Tauri 2 + React) and a FastAPI backend server.
+"Brain" is a personal second-brain agent with knowledge graph memory. It connects a markdown notes directory to a SurrealDB embedded knowledge graph, allowing an AI agent to read/search/create/edit notes and maintain its own long-term memory. It includes a standalone desktop app (Tauri 2 + React) and a FastAPI backend server.
 
 ## Architecture
 
@@ -31,42 +31,40 @@ desktop/                  # Tauri 2 + React + TypeScript
 ### Module Reference
 
 - `brain/agent.py` — agent factory (`create_brain_agent()`), interface-agnostic
-- `brain/tools.py` — 7 LangChain tools (search, semantic search, read, create, edit notes; query graph; find related)
-- `brain/graph_db.py` — Neo4j connection wrapper
+- `brain/tools.py` — 9 LangChain tools (search, semantic search, read, create, edit notes; query graph; find related; store memory; create connection)
+- `brain/graph_db.py` — SurrealDB embedded connection wrapper
 - `brain/notes.py` — notes reader/writer/parser (wikilinks, tags, frontmatter), vault import, trash system (move/list/restore/empty), rename with wikilink rewriting
 - `brain/server.py` — FastAPI server (HTTP + SSE) for desktop app
 - `brain/kg_pipeline.py` — embedding pipeline: load → split → embed → write (no LLM entity extraction)
 - `brain/sync.py` — orchestrates incremental structural + semantic sync from notes to graph
 - `brain/settings.py` — persistent user settings (JSON on disk), LLM provider config, transcription config, MCP servers, font/editor prefs, auto-migration of old keys
 - `brain/mcp_client.py` — MCP server client, loads external tools via `langchain-mcp-adapters`
-- `brain/mcp_server.py` — MCP server exposing all 7 tools; HTTP transport mounted at `/mcp` on the FastAPI server, stdio transport for standalone use
+- `brain/mcp_server.py` — MCP server exposing all 9 tools; HTTP transport mounted at `/mcp` on the FastAPI server, stdio transport for standalone use
 - `brain/watcher.py` — watchdog file watcher for auto-sync on notes changes
 - `brain/transcribe.py` — voice transcription with pluggable providers (local mlx-whisper, OpenAI, Mistral)
 - `brain/cli.py` — interactive CLI chat loop with `/sync` commands
 - `brain/batch.py` — standalone batch sync entry point for cron/launchd
 - `brain/config.py` — pydantic-settings from .env (secrets/infra), exports API keys to `os.environ`
-- `tests/` — unit tests (all external deps mocked, no Docker/Neo4j required)
+- `tests/` — unit tests (all external deps mocked, no Docker or network access required)
 
 ## Development Environment
 
 - Python 3.13 (managed via `.python-version`)
 - Package management: uv (uses `pyproject.toml`, no `requirements.txt`)
 - Virtual environment: `.venv/`
-- Neo4j 5 via Docker (with APOC plugin)
+- SurrealDB embedded (via `surrealdb` Python package, no separate server needed)
 - Node.js 22 / npm (for desktop frontend, see `.nvmrc`)
 - Rust / Cargo (for Tauri shell)
 
 ## Commands
 
 ### Full Dev Environment
-- **Start everything**: `./scripts/dev.sh` (starts Neo4j + Python server + Tauri app, Ctrl+C stops all)
+- **Start everything**: `./scripts/dev.sh` (starts Python server + Tauri app, Ctrl+C stops all)
 
 ### Python Backend
 - **Run CLI**: `uv run main.py`
 - **Run server**: `uv run python -m brain.server` (starts FastAPI on port 8765)
 - **Run MCP server**: `uv run python -m brain.mcp_server` (stdio transport for Claude Code)
-- **Start Neo4j**: `docker compose up -d`
-- **Neo4j browser**: http://localhost:7474
 - **Batch sync**: `uv run python -m brain.batch` (semantic), `--structural`, or `--full`
 - **Test**: `uv run pytest` (all tests), `uv run pytest -v` (verbose), `uv run pytest tests/test_notes.py` (single file)
 - **Lint**: `uv run ruff check`
@@ -114,7 +112,7 @@ There is no `[build-system]` table in `pyproject.toml` — the project is not an
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in `ANTHROPIC_API_KEY` and `NOTES_PATH`.
+Copy `.env.example` to `.env` and fill in `ANTHROPIC_API_KEY` and `NOTES_PATH`. SurrealDB data is stored at `~/.config/brain/surrealdb` by default (configurable via `SURREALDB_PATH`).
 
 API keys are loaded from both `.env` (via pydantic-settings) and `~/.config/brain/settings.json` (via the settings UI). `config.py` exports them to `os.environ` at startup so downstream libraries (LangChain, Anthropic SDK, etc.) find them automatically. Shell-exported keys take precedence.
 
@@ -126,10 +124,10 @@ API keys are loaded from both `.env` (via pydantic-settings) and `~/.config/brai
 
 ## Testing
 
-Unit tests live in `tests/`. All external dependencies (Neo4j, Anthropic, HuggingFace, cloud APIs) are mocked — no Docker or network access required to run tests.
+Unit tests live in `tests/`. All external dependencies (SurrealDB, Anthropic, HuggingFace, cloud APIs) are mocked — no network access required to run tests.
 
 - `tests/conftest.py` — shared fixtures (`mock_db`, `mock_pipeline`, `tmp_notes`, `notes_settings`)
-- Tests cover: notes parsing/writing, config/env export, graph_db, all 7 tools, sync logic, kg_pipeline components, server endpoints (CRUD, transcription, meeting, settings, sync, trash, rename), transcription providers, settings migration, MCP client, watcher, trash system, note rename with wikilink rewriting
+- Tests cover: notes parsing/writing, config/env export, graph_db, all 9 tools, sync logic, kg_pipeline components, server endpoints (CRUD, transcription, meeting, settings, sync, trash, rename), transcription providers, settings migration, MCP client/server, watcher, trash system, note rename with wikilink rewriting
 
 When adding new functionality, add corresponding tests. When fixing bugs, add a regression test.
 
@@ -139,7 +137,7 @@ Documentation lives in `docs/`, `CLAUDE.md`, and `PLAN.md`. When making changes 
 
 ## Security Principles
 
-- **The agent must never have access to raw credentials.** API keys and secrets live in `.env` and are loaded by `config.py` into pre-authenticated clients (Neo4j driver, Anthropic SDK). Agent tools use those clients — they never see the keys themselves.
+- **The agent must never have access to raw credentials.** API keys and secrets live in `.env` and are loaded by `config.py` into pre-authenticated clients (SurrealDB connection, Anthropic SDK). Agent tools use those clients — they never see the keys themselves.
 - **Any future tool that accesses the internet or file system must go through a service layer** that prevents the agent from exfiltrating secrets (e.g., no arbitrary HTTP requests, no reading outside the notes directory).
 - **The notes path must never overlap with the project directory** to prevent the agent from reading `.env` or source code through note-reading tools.
 - **API keys are never exposed via the settings API.** The `GET /settings` endpoint strips all `*_api_key` fields and returns `*_api_key_set` booleans instead.

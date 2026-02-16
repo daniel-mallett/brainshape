@@ -7,8 +7,8 @@ class TestGetStoredHashes:
     def test_returns_path_hash_dict(self):
         db = MagicMock()
         db.query.return_value = [
-            {"path": "a.md", "hash": "abc123"},
-            {"path": "b.md", "hash": "def456"},
+            {"path": "a.md", "content_hash": "abc123"},
+            {"path": "b.md", "content_hash": "def456"},
         ]
         result = _get_stored_hashes(db)
         assert result == {"a.md": "abc123", "b.md": "def456"}
@@ -16,8 +16,8 @@ class TestGetStoredHashes:
     def test_skips_null_hashes(self):
         db = MagicMock()
         db.query.return_value = [
-            {"path": "a.md", "hash": "abc123"},
-            {"path": "b.md", "hash": None},
+            {"path": "a.md", "content_hash": "abc123"},
+            {"path": "b.md", "content_hash": None},
         ]
         result = _get_stored_hashes(db)
         assert "b.md" not in result
@@ -65,7 +65,7 @@ class TestSyncSemantic:
         for f in list_notes(tmp_notes):
             rel = str(f.relative_to(tmp_notes))
             hashes[rel] = compute_file_hash(f)
-        db.query.return_value = [{"path": p, "hash": h} for p, h in hashes.items()]
+        db.query.return_value = [{"path": p, "content_hash": h} for p, h in hashes.items()]
         stats = sync_semantic(db, pipeline, tmp_notes)
         assert stats["processed"] == 0
         assert stats["skipped"] == 5

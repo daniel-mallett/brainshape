@@ -1,101 +1,108 @@
 # Knowledge Graph Design
 
-## Core Principle: Unified Nodes
+## Core Principle: Single-Table Nodes
 
-Each markdown file is represented as a **single node** with dual labels `:Document:Note`. This node is the hub connecting both the structural world (tags, wikilinks) and the semantic world (chunks, extracted entities).
+Each markdown file is represented as a single record in the `note` table. This record is the hub connecting both the structural world (tags, wikilinks) and the semantic world (chunks with embeddings).
 
 ```
-(:Tag) <-TAGGED_WITH- (:Document:Note) <-FROM_DOCUMENT- (:Chunk)  [embedding vector]
-                            |
-                        LINKS_TO                         (:Memory) -ABOUT-> (:Note)
-                            v
-                      (:Document:Note) ...               (:Person), (:Concept), ... [agent-created]
-```
-
-## Why Unified?
-
-We initially had two disconnected subgraphs — `Note` nodes from our parser, `Document`/`Chunk`/`Entity` nodes from the KG Builder, with no connection between them. This made cross-layer queries impossible.
-
-The unified design means a single Cypher query can traverse both layers. For example, "find all people mentioned in notes tagged #meeting":
-
-```cypher
-MATCH (t:Tag {name: "meeting"})<-[:TAGGED_WITH]-(n:Note)
-      <-[:FROM_DOCUMENT]-(c:Chunk)<-[:FROM_CHUNK]-(p:Person)
-RETURN n.title, p.name
+(tag) <-tagged_with- (note) <-from_document- (chunk)  [embedding vector]
+                       |
+                   links_to                    (memory) -relates_to-> (note)
+                       v
+                     (note) ...                (person), (concept), ... [agent-created]
 ```
 
 ## Two Layers, One Graph
 
-Everything lives in a single Neo4j graph database. "Layers" are a conceptual distinction, not physical separation.
+Everything lives in a single SurrealDB embedded database (`surrealkv://`). "Layers" are a conceptual distinction, not physical separation.
 
 ### Structural Layer (from our parser in `notes.py`)
 
 Created by `sync_structural()` in `sync.py`. Mirrors the notes directory's explicit connections.
 
-| Node | Properties | Unique Key |
-|------|-----------|------------|
-| `:Note` (also `:Document`) | `path`, `title`, `content`, `created_at`, `modified_at` | `path` (notes-relative) |
-| `:Tag` | `name` | `name` |
-| `:Memory` | `id` (uuid), `type`, `content`, `created_at` | `id` |
+| Table | Properties | Unique Key |
+|-------|-----------|------------|
+| `note` | `path`, `title`, `content`, `created_at`, `modified_at`, `content_hash` | `path` (notes-relative) |
+| `tag` | `name` | `name` |
+| `memory` | `mid` (uuid), `type`, `content`, `created_at` | `mid` |
 
 | Relationship | Pattern | Source |
 |-------------|---------|--------|
-| `LINKS_TO` | `(:Note)-[:LINKS_TO]->(:Note)` | Wikilinks `[[Other Note]]` |
-| `TAGGED_WITH` | `(:Note)-[:TAGGED_WITH]->(:Tag)` | Tags `#tag` or frontmatter |
-| `ABOUT` | `(:Memory)-[:ABOUT]->(:Note)` | Agent memory referencing a note |
-| `ABOUT_TAG` | `(:Memory)-[:ABOUT_TAG]->(:Tag)` | Agent memory referencing a topic |
+| `links_to` | `note -> note` | Wikilinks `[[Other Note]]` |
+| `tagged_with` | `note -> tag` | Tags `#tag` or frontmatter |
+| Custom edges | `memory -> note`, `person -> person`, etc. | Agent via `create_connection` tool |
 
 ### Semantic Layer (from embedding pipeline in `kg_pipeline.py`)
 
 Created by `sync_semantic()` in `sync.py` using the `KGPipeline` in `kg_pipeline.py`.
 
-| Node | Properties | Created By |
-|------|-----------|------------|
-| `:Document` (also `:Note`) | `path` (notes-relative) | Pipeline (via `NotesLoader`) |
-| `:Chunk` | `text`, `index`, embedding vector (768-dim) | Pipeline (text splitter + embedder) |
+| Table | Properties | Created By |
+|-------|-----------|------------|
+| `chunk` | `text`, `idx`, `embedding` (768-dim vector) | Pipeline (text splitter + embedder) |
 
 | Relationship | Pattern | Created By |
 |-------------|---------|------------|
-| `FROM_DOCUMENT` | `(:Chunk)-[:FROM_DOCUMENT]->(:Document)` | Pipeline |
+| `from_document` | `chunk -> note` | Pipeline |
 
-Entity nodes (`:Person`, `:Concept`, `:Project`, etc.) and their relationships are created by the agent during conversation via `query_graph`, not by automated extraction. This keeps indexing cheap (local embeddings only, no LLM calls) while producing higher-quality entities driven by user context.
+Entity tables (`person`, `concept`, `project`, etc.) and their relationships are created by the agent during conversation via `create_connection`, not by automated extraction. This keeps indexing cheap (local embeddings only, no LLM calls) while producing higher-quality entities driven by user context.
 
 ## Sync Order
 
-**Semantic runs first**, then structural:
+**Structural runs on every startup**, semantic is incremental and user-triggered:
 
-1. `sync_semantic()` — Pipeline processes each note file via `NotesLoader`, creates `:Document` nodes (keyed by notes-relative path) and Chunk nodes with embeddings
-2. `sync_structural()` — Finds existing Document nodes by `path`, adds `:Note` label, sets `title`/`content` properties, creates `Tag` nodes and `TAGGED_WITH`/`LINKS_TO` relationships
-
-This order ensures the structural sync can merge onto the Document nodes the KG Builder already created.
+1. `sync_structural()` — Two-pass: first UPSERT all note records (so every note exists before linking), then create tag and wikilink relationships. Runs unconditionally — it's cheap SurrealQL queries.
+2. `sync_semantic()` — Pipeline processes each note file, creates chunk records with embeddings. SHA-256 content hash gates processing — only changed files are re-embedded.
 
 ## Path as Unique Key
 
-Node paths are **notes-relative** (e.g., `notes/meeting.md`) not absolute (e.g., `/Users/dmallett/Brain/notes/meeting.md`). This ensures the same note doesn't create duplicate nodes when the notes directory is synced across devices with different mount points.
+Record paths are **notes-relative** (e.g., `meeting.md`) not absolute (e.g., `/Users/dmallett/Brain/meeting.md`). This ensures the same note doesn't create duplicate records when the notes directory is synced across devices with different mount points.
 
 Implemented in `notes.py:parse_note()` using `file_path.relative_to(notes_path)`.
 
-## Constraints and Indexes
+## Schema Bootstrap
 
 Created by `graph_db.py:bootstrap_schema()` on startup:
 
-```cypher
--- Uniqueness (prevents duplicates on re-sync via MERGE)
-CREATE CONSTRAINT note_path IF NOT EXISTS FOR (n:Note) REQUIRE n.path IS UNIQUE
-CREATE CONSTRAINT tag_name IF NOT EXISTS FOR (t:Tag) REQUIRE t.name IS UNIQUE
-CREATE CONSTRAINT memory_id IF NOT EXISTS FOR (m:Memory) REQUIRE m.id IS UNIQUE
+```surql
+-- Tables
+DEFINE TABLE IF NOT EXISTS note SCHEMALESS
+DEFINE TABLE IF NOT EXISTS tag SCHEMALESS
+DEFINE TABLE IF NOT EXISTS chunk SCHEMALESS
+DEFINE TABLE IF NOT EXISTS memory SCHEMALESS
+
+-- Edge tables (TYPE RELATION)
+DEFINE TABLE IF NOT EXISTS tagged_with TYPE RELATION IN note OUT tag
+DEFINE TABLE IF NOT EXISTS links_to TYPE RELATION IN note OUT note
+DEFINE TABLE IF NOT EXISTS from_document TYPE RELATION IN chunk OUT note
+
+-- Unique indexes (prevents duplicates on re-sync)
+DEFINE INDEX IF NOT EXISTS note_path ON TABLE note FIELDS path UNIQUE
+DEFINE INDEX IF NOT EXISTS tag_name ON TABLE tag FIELDS name UNIQUE
+DEFINE INDEX IF NOT EXISTS memory_mid ON TABLE memory FIELDS mid UNIQUE
 
 -- Fast lookups
-CREATE INDEX note_title IF NOT EXISTS FOR (n:Note) ON (n.title)
+DEFINE INDEX IF NOT EXISTS note_title ON TABLE note FIELDS title
+DEFINE INDEX IF NOT EXISTS note_hash ON TABLE note FIELDS content_hash
 
 -- Full-text search (powers search_notes tool)
-CREATE FULLTEXT INDEX note_content IF NOT EXISTS FOR (n:Note) ON EACH [n.content, n.title]
+DEFINE ANALYZER IF NOT EXISTS note_analyzer TOKENIZERS class FILTERS lowercase, ascii
+DEFINE INDEX IF NOT EXISTS note_content_ft ON TABLE note FIELDS content SEARCH ANALYZER note_analyzer BM25
+DEFINE INDEX IF NOT EXISTS note_title_ft ON TABLE note FIELDS title SEARCH ANALYZER note_analyzer BM25
 ```
+
+## Dynamic Table Discovery
+
+The graph visualization and stats endpoints discover edge and entity tables dynamically via `INFO FOR DB`:
+
+- `get_relation_tables()` — finds all tables defined as `TYPE RELATION`, excludes internal tables (`from_document`)
+- `get_custom_node_tables()` — finds non-core, non-relation tables (e.g., `person`, `project`)
+
+Custom edge tables created by `create_connection` are defined as `TYPE RELATION` via `DEFINE TABLE OVERWRITE` so they appear in discovery. Reserved table names are blocked to prevent schema corruption.
 
 ## Entity Schema
 
-No predefined entity schema. Entity nodes and relationships are created by the agent during conversation via `query_graph`. Common types include Person, Concept, Project, Location, Event, Tool, Organization, with relationships like RELATED_TO, WORKS_ON, USES, PART_OF, etc.
+No predefined entity schema. Entity tables and relationships are created by the agent during conversation via `create_connection`. Common types include person, concept, project, location, event, tool, organization, with relationships like relates_to, works_with, about, part_of, etc.
 
 ## Embeddings
 
-Default model: `sentence-transformers/all-mpnet-base-v2` (768 dimensions, ungated). Runs locally — no API cost. Configurable via the settings UI (`embedding_model` and `embedding_dimensions`). Changing the model triggers automatic vector index migration. A vector index (`chunk_embeddings`) on `Chunk.embedding` enables cosine similarity search via the `semantic_search` tool.
+Default model: `sentence-transformers/all-mpnet-base-v2` (768 dimensions, ungated). Runs locally — no API cost. Configurable via the settings UI (`embedding_model` and `embedding_dimensions`). Changing the model triggers automatic vector index migration. An HNSW vector index (`chunk_embeddings`) on `chunk.embedding` enables cosine similarity search via the `semantic_search` tool.

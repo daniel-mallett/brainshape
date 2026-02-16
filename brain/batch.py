@@ -44,14 +44,14 @@ def main():
                 f"{stats['tags']} tag links, {stats['links']} note links"
             )
         elif args.full:
-            pipeline = create_kg_pipeline(db._driver, notes_path)
+            pipeline = create_kg_pipeline(db, notes_path)
             stats = sync_all(db, pipeline, notes_path)
             s, sem = stats["structural"], stats["semantic"]
             print(f"Structural: {s['notes']} notes, {s['tags']} tag links, {s['links']} note links")
             print(f"Semantic: {sem['processed']} processed, {sem['skipped']} skipped")
         else:
             # Default: semantic only (the expensive/important one for overnight batch)
-            pipeline = create_kg_pipeline(db._driver, notes_path)
+            pipeline = create_kg_pipeline(db, notes_path)
             stats = sync_semantic(db, pipeline, notes_path)
             print(f"Semantic: {stats['processed']} processed, {stats['skipped']} skipped")
     finally:

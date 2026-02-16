@@ -30,7 +30,7 @@ def create_mcp_server(lifespan=None, *, streamable_http_path: str = "/mcp") -> F
 
     Args:
         lifespan: Optional async context manager for resource init/cleanup.
-                  Used by the stdio transport to manage its own Neo4j connection.
+                  Used by the stdio transport to manage its own database connection.
                   Omitted when mounted on the FastAPI server (which manages resources).
         streamable_http_path: HTTP path for the streamable endpoint. Set to ``"/"``
                               when mounting as a sub-app so the parent mount path
@@ -53,7 +53,7 @@ async def _lifespan(server: FastMCP) -> AsyncIterator[None]:
     from brain.settings import get_notes_path
 
     notes_path = Path(get_notes_path()).expanduser()
-    pipeline = create_kg_pipeline(db._driver, notes_path)
+    pipeline = create_kg_pipeline(db, notes_path)
 
     tools_mod.db = db
     tools_mod.pipeline = pipeline

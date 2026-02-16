@@ -24,7 +24,7 @@ async function request<T>(
 
 export interface HealthStatus {
   status: string;
-  neo4j_connected?: boolean;
+  surrealdb_connected?: boolean;
   agent_available?: boolean;
 }
 
@@ -37,7 +37,7 @@ export function health(): Promise<HealthStatus> {
 export interface Config {
   notes_path: string;
   model_name: string;
-  neo4j_uri: string;
+  surrealdb_path: string;
 }
 
 export function getConfig(): Promise<Config> {

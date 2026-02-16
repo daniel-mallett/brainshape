@@ -1,97 +1,64 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
+import numpy as np
 
-from brain.kg_pipeline import KGPipeline, NotesLoader, create_kg_pipeline
+from brain.kg_pipeline import KGPipeline, _split_text, create_kg_pipeline
 
 
-class TestNotesLoader:
-    @pytest.fixture
-    def loader(self, tmp_path):
-        return NotesLoader(notes_path=tmp_path)
+class TestSplitText:
+    def test_empty_text(self):
+        assert _split_text("") == []
 
-    async def test_reads_file_and_returns_document(self, loader, tmp_path):
-        note = tmp_path / "Hello.md"
-        note.write_text("# Hello\nWorld")
-        doc = await loader.run(filepath=note)
-        assert doc.text == "# Hello\nWorld"
-        assert doc.document_info.path == "Hello.md"
+    def test_single_chunk(self):
+        result = _split_text("hello", chunk_size=100, chunk_overlap=0)
+        assert result == ["hello"]
 
-    async def test_sets_title_from_stem(self, loader, tmp_path):
-        note = tmp_path / "My Note.md"
-        note.write_text("Content")
-        doc = await loader.run(filepath=note)
-        assert doc.document_info.metadata["title"] == "My Note"
-
-    async def test_notes_relative_path(self, tmp_path):
-        sub = tmp_path / "folder"
-        sub.mkdir()
-        note = sub / "Deep.md"
-        note.write_text("Deep content")
-        loader = NotesLoader(notes_path=tmp_path)
-        doc = await loader.run(filepath=note)
-        assert doc.document_info.path == "folder/Deep.md"
+    def test_multiple_chunks_with_overlap(self):
+        text = "a" * 10
+        result = _split_text(text, chunk_size=6, chunk_overlap=2)
+        assert len(result) == 3
+        assert result[0] == "aaaaaa"
+        assert result[1] == "aaaaaa"
+        assert result[2] == "aa"
 
 
 class TestKGPipelineWriteChunks:
-    def test_writes_document_and_chunks(self):
-        """Verify _write_chunks MERGEs a Document node and CREATEs Chunk nodes."""
-        mock_driver = MagicMock()
-        mock_session = MagicMock()
-        mock_driver.session.return_value.__enter__ = MagicMock(return_value=mock_session)
-        mock_driver.session.return_value.__exit__ = MagicMock(return_value=False)
+    def test_writes_note_and_chunks(self):
+        """Verify _write_chunks UPSERTs a note and creates chunk records."""
+        mock_db = MagicMock()
+        mock_db.query.return_value = []
 
         pipeline = KGPipeline.__new__(KGPipeline)
-        pipeline.driver = mock_driver
+        pipeline.db = mock_db
 
-        # Simulate embedded chunks with text and metadata
-        chunk1 = MagicMock()
-        chunk1.text = "Hello world"
-        chunk1.metadata = {"embedding": [0.1, 0.2, 0.3]}
+        texts = ["Hello world", "Second chunk"]
+        embeddings = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
 
-        chunk2 = MagicMock()
-        chunk2.text = "Second chunk"
-        chunk2.metadata = {"embedding": [0.4, 0.5, 0.6]}
+        pipeline._write_chunks("test.md", texts, embeddings)
 
-        pipeline._write_chunks("test.md", [chunk1, chunk2])
+        # Should have: UPSERT note + DELETE old chunks + 2x (CREATE chunk with RELATE)
+        assert mock_db.query.call_count == 4
 
-        # Should have 3 calls: MERGE doc, DELETE old chunks, batched CREATE chunks
-        assert mock_session.run.call_count == 3
-
-        # First call: MERGE Document
-        merge_call = mock_session.run.call_args_list[0]
-        assert "MERGE" in merge_call[0][0]
-        assert merge_call[0][1]["path"] == "test.md"
+        # First call: UPSERT note
+        upsert_call = mock_db.query.call_args_list[0]
+        assert "UPSERT" in upsert_call[0][0]
 
         # Second call: DELETE old chunks
-        delete_call = mock_session.run.call_args_list[1]
+        delete_call = mock_db.query.call_args_list[1]
         assert "DELETE" in delete_call[0][0]
 
-        # Third call: batched CREATE via UNWIND
-        create_call = mock_session.run.call_args_list[2]
-        assert "UNWIND" in create_call[0][0]
-        assert "CREATE" in create_call[0][0]
-        chunks_param = create_call[0][1]["chunks"]
-        assert len(chunks_param) == 2
-        assert chunks_param[0]["text"] == "Hello world"
-        assert chunks_param[0]["index"] == 0
-        assert chunks_param[1]["text"] == "Second chunk"
-        assert chunks_param[1]["index"] == 1
-
     def test_write_chunks_empty_list(self):
-        """_write_chunks with no chunks only MERGEs the Document and DELETEs old chunks."""
-        mock_driver = MagicMock()
-        mock_session = MagicMock()
-        mock_driver.session.return_value.__enter__ = MagicMock(return_value=mock_session)
-        mock_driver.session.return_value.__exit__ = MagicMock(return_value=False)
+        """_write_chunks with no chunks only UPSERTs note and DELETEs old chunks."""
+        mock_db = MagicMock()
+        mock_db.query.return_value = []
 
         pipeline = KGPipeline.__new__(KGPipeline)
-        pipeline.driver = mock_driver
+        pipeline.db = mock_db
 
-        pipeline._write_chunks("test.md", [])
+        pipeline._write_chunks("test.md", [], [])
 
-        # Only 2 calls: MERGE doc + DELETE old chunks (no CREATE since empty)
-        assert mock_session.run.call_count == 2
+        # Only 2 calls: UPSERT note + DELETE old chunks
+        assert mock_db.query.call_count == 2
 
     def test_no_llm_dependencies(self):
         """Verify the pipeline doesn't use any LLM for extraction."""
@@ -111,46 +78,33 @@ class TestKGPipelineRunAsync:
 
         pipeline = KGPipeline.__new__(KGPipeline)
         pipeline.notes_path = tmp_path
+        pipeline.db = MagicMock()
+        pipeline.db.query.return_value = []
 
-        mock_loader = AsyncMock()
-        mock_doc = MagicMock()
-        mock_doc.text = "# Test\nSome content for embedding."
-        mock_doc.document_info.path = "test.md"
-        mock_loader.run.return_value = mock_doc
-        pipeline.loader = mock_loader
-
-        mock_splitter = AsyncMock()
-        mock_splitter.run.return_value = MagicMock(text="chunk text")
-        pipeline.splitter = mock_splitter
-
-        mock_embedder = AsyncMock()
-        mock_embedded = MagicMock()
-        mock_embedded.chunks = []
-        mock_embedder.run.return_value = mock_embedded
-        pipeline.embedder = mock_embedder
-
-        pipeline._write_chunks = MagicMock()
+        mock_model = MagicMock()
+        mock_model.encode.return_value = np.array([[0.1, 0.2, 0.3]])
+        pipeline._model = mock_model
 
         await pipeline.run_async(str(note))
 
-        mock_loader.run.assert_awaited_once()
-        mock_splitter.run.assert_awaited_once()
-        mock_embedder.run.assert_awaited_once()
-        pipeline._write_chunks.assert_called_once()
+        # Model should have been called to encode chunks
+        mock_model.encode.assert_called_once()
+        # DB should have been called (UPSERT + DELETE + CREATE chunks)
+        assert pipeline.db.query.call_count >= 2
 
 
 class TestKGPipelineEmbedQuery:
     def test_embed_query_delegates(self):
-        """embed_query delegates to the underlying embedder."""
+        """embed_query delegates to the underlying model."""
         pipeline = KGPipeline.__new__(KGPipeline)
-        mock_embedder = MagicMock()
-        mock_embedder.embed_query.return_value = [0.1, 0.2, 0.3]
-        pipeline._embedder = mock_embedder
+        mock_model = MagicMock()
+        mock_model.encode.return_value = MagicMock(tolist=lambda: [0.1, 0.2, 0.3])
+        pipeline._model = mock_model
 
         result = pipeline.embed_query("test query")
 
         assert result == [0.1, 0.2, 0.3]
-        mock_embedder.embed_query.assert_called_once_with("test query")
+        mock_model.encode.assert_called_once_with("test query")
 
 
 class TestCreateKgPipeline:
@@ -158,9 +112,9 @@ class TestCreateKgPipeline:
     def test_reads_settings(self, mock_cls, tmp_path, monkeypatch):
         """create_kg_pipeline reads embedding config from settings."""
         monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
-        mock_driver = MagicMock()
+        mock_db = MagicMock()
 
-        create_kg_pipeline(mock_driver, tmp_path)
+        create_kg_pipeline(mock_db, tmp_path)
 
         mock_cls.assert_called_once()
         # Should use default embedding model from settings

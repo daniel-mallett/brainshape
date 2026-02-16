@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
     _agent, _db, _pipeline = create_brain_agent(mcp_tools=mcp_tools or None)
 
     if _agent is None:
-        logger.warning("Server starting in degraded mode — no Neo4j connection")
+        logger.warning("Server starting in degraded mode — no database connection")
         logger.warning("Notes CRUD will work, but agent and graph features are unavailable")
 
     notes_path = Path(get_notes_path()).expanduser()
@@ -176,7 +176,7 @@ class UpdateSettingsRequest(BaseModel):
 def health():
     return {
         "status": "ok",
-        "neo4j_connected": _db is not None,
+        "surrealdb_connected": _db is not None,
         "agent_available": _agent is not None,
     }
 
@@ -189,7 +189,7 @@ def get_config():
     return {
         "notes_path": get_notes_path(),
         "model_name": settings.model_name,
-        "neo4j_uri": settings.neo4j_uri,
+        "surrealdb_path": settings.surrealdb_path,
     }
 
 
@@ -303,6 +303,19 @@ def notes_create(req: CreateNoteRequest):
         raise HTTPException(status_code=400, detail="Invalid path") from None
 
 
+def _delete_note_from_graph(db: GraphDB, path: str) -> None:
+    """Remove a note and all its edges from the graph."""
+    db.query(
+        "DELETE chunk WHERE ->from_document->(note WHERE path = $path)",
+        {"path": path},
+    )
+    nid_q = "(SELECT VALUE id FROM note WHERE path = $path)[0]"
+    db.query(f"DELETE tagged_with WHERE in = {nid_q}", {"path": path})
+    db.query(f"DELETE links_to WHERE in = {nid_q}", {"path": path})
+    db.query(f"DELETE links_to WHERE out = {nid_q}", {"path": path})
+    db.query("DELETE note WHERE path = $path", {"path": path})
+
+
 @app.delete("/notes/file/{path:path}")
 def notes_delete(path: str):
     notes_path = _notes_path()
@@ -313,13 +326,9 @@ def notes_delete(path: str):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid path") from None
 
-    # Clean up graph (skip if Neo4j unavailable — will be cleaned on next sync)
+    # Clean up graph (skip if DB unavailable — will be cleaned on next sync)
     if _db is not None:
-        _db.query("MATCH (n:Note {path: $path}) DETACH DELETE n", {"path": path})
-        _db.query(
-            "MATCH (d:Document {path: $path})<-[:FROM_DOCUMENT]-(c:Chunk) DETACH DELETE c",
-            {"path": path},
-        )
+        _delete_note_from_graph(_db, path)
     return {"status": "ok"}
 
 
@@ -341,7 +350,7 @@ def notes_rename(path: str, req: RenameNoteRequest):
     # Update graph node path/title
     if _db is not None:
         _db.query(
-            "MATCH (n:Note {path: $old_path}) SET n.path = $new_path, n.title = $new_title",
+            "UPDATE note SET path = $new_path, title = $new_title WHERE path = $old_path",
             {"old_path": path, "new_path": new_rel_path, "new_title": req.new_title},
         )
 
@@ -423,6 +432,17 @@ def notes_empty_trash():
     """Permanently delete all notes in trash."""
     notes_path = _notes_path()
     count = empty_trash(notes_path)
+
+    # Clean orphan graph nodes: remove notes that no longer exist on disk
+    if _db is not None:
+        existing_paths = {str(f.relative_to(notes_path)) for f in list_notes(notes_path)}
+        stored = _db.query("SELECT path FROM note WHERE path != NONE")
+        for row in stored:
+            if row.get("path") and row["path"] not in existing_paths:
+                _delete_note_from_graph(_db, row["path"])
+        # Also clean orphan tags with no remaining edges
+        _db.query("DELETE tag WHERE (SELECT VALUE id FROM tagged_with WHERE out = tag.id) = []")
+
     return {"status": "ok", "deleted": count}
 
 
@@ -438,119 +458,205 @@ def _require_db() -> GraphDB:
 @app.get("/graph/stats")
 def graph_stats():
     db = _require_db()
-    node_rows = db.query(
-        "MATCH (n) WHERE n:Note OR n:Tag OR n:Memory OR n:Chunk "
-        "UNWIND labels(n) AS label "
-        "WITH label WHERE label IN ['Note', 'Tag', 'Memory', 'Chunk'] "
-        "RETURN label, count(*) AS count"
-    )
-    rel_rows = db.query("MATCH ()-[r]->() RETURN type(r) AS type, count(*) AS count")
-    return {
-        "nodes": {r["label"]: r["count"] for r in node_rows},
-        "relationships": {r["type"]: r["count"] for r in rel_rows},
-    }
+    # Count each core node table
+    node_counts = {}
+    for table in ("note", "tag", "memory", "chunk"):
+        rows = db.query(f"SELECT count() AS count FROM {table} GROUP ALL")
+        node_counts[table.capitalize()] = rows[0]["count"] if rows else 0
+
+    # Count custom node tables (person, project, etc.)
+    for table in db.get_custom_node_tables():
+        rows = db.query(f"SELECT count() AS count FROM {table} GROUP ALL")
+        count = rows[0]["count"] if rows else 0
+        if count > 0:
+            node_counts[table.capitalize()] = count
+
+    # Count all edge tables (dynamically discovered)
+    rel_counts = {}
+    for table in db.get_relation_tables(exclude_internal=False):
+        rows = db.query(f"SELECT count() AS count FROM {table} GROUP ALL")
+        rel_counts[table.upper()] = rows[0]["count"] if rows else 0
+
+    return {"nodes": node_counts, "relationships": rel_counts}
 
 
 _ALLOWED_GRAPH_LABELS = {"Note", "Tag", "Memory", "Chunk"}
+_LABEL_TO_TABLE = {"Note": "note", "Tag": "tag", "Memory": "memory", "Chunk": "chunk"}
 
 
 @app.get("/graph/overview")
 def graph_overview(limit: int = 200, label: str = ""):
     db = _require_db()
-    label_filter = ""
     params: dict = {"limit": limit}
-    if label:
-        if label not in _ALLOWED_GRAPH_LABELS:
-            raise HTTPException(status_code=400, detail="Invalid label filter")
-        label_filter = f" AND n:{label}"
 
-    nodes = db.query(
-        "MATCH (n) WHERE (n:Note OR n:Tag OR n:Memory)" + label_filter + " "
-        "RETURN elementId(n) AS id, labels(n) AS labels, "
-        "coalesce(n.title, n.name, n.content) AS name, "
-        "n.path AS path, n.type AS type "
-        "LIMIT $limit",
-        params,
-    )
-    edges = db.query(
-        "MATCH (a)-[r]->(b) "
-        "WHERE (a:Note OR a:Tag OR a:Memory) AND (b:Note OR b:Tag OR b:Memory) "
-        "RETURN elementId(a) AS source, elementId(b) AS target, type(r) AS type "
-        "LIMIT $limit",
-        params,
-    )
-    return {
-        "nodes": [
-            {
-                "id": n["id"],
-                "label": _primary_label(n["labels"]),
-                "name": _truncate(n["name"], 60),
-                "path": n.get("path"),
-                "type": n.get("type"),
-            }
-            for n in nodes
-        ],
-        "edges": [{"source": e["source"], "target": e["target"], "type": e["type"]} for e in edges],
-    }
+    # Fetch nodes from each table (exclude Chunk by default)
+    all_nodes = []
+    if label and label not in _LABEL_TO_TABLE:
+        raise HTTPException(status_code=400, detail=f"Invalid label: {label}")
+    tables = [_LABEL_TO_TABLE[label]] if label else ["note", "tag", "memory"]
+    for table in tables:
+        rows = db.query(
+            f"SELECT meta::id(id) AS nid, "
+            f"title ?? name ?? content AS name, "
+            f"path, type FROM {table} LIMIT $limit",
+            params,
+        )
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            all_nodes.append(
+                {
+                    "id": f"{table}:{r.get('nid', '')}",
+                    "label": table.capitalize(),
+                    "name": _truncate(r.get("name"), 60),
+                    "path": r.get("path"),
+                    "type": r.get("type"),
+                }
+            )
+
+    # Include custom entity nodes (person, project, etc.)
+    if not label:
+        for table in db.get_custom_node_tables():
+            rows = db.query(
+                f"SELECT meta::id(id) AS nid, name, path, type FROM {table} LIMIT $limit",
+                params,
+            )
+            for r in rows:
+                if not isinstance(r, dict):
+                    continue
+                all_nodes.append(
+                    {
+                        "id": f"{table}:{r.get('nid', '')}",
+                        "label": table.capitalize(),
+                        "name": _truncate(r.get("name"), 60),
+                        "path": r.get("path"),
+                        "type": r.get("type"),
+                    }
+                )
+
+    # Fetch edges (dynamically discovered, excludes from_document)
+    all_edges = []
+    for edge_table in db.get_relation_tables(exclude_internal=True):
+        rows = db.query(
+            f"SELECT in AS src, out AS tgt FROM {edge_table} LIMIT $limit",
+            params,
+        )
+        for r in rows:
+            all_edges.append(
+                {
+                    "source": str(r["src"]) if r.get("src") else "",
+                    "target": str(r["tgt"]) if r.get("tgt") else "",
+                    "type": edge_table.upper(),
+                }
+            )
+
+    return {"nodes": all_nodes, "edges": all_edges}
 
 
 @app.get("/graph/neighborhood/{path:path}")
 def graph_neighborhood(path: str, depth: int = 1):
     db = _require_db()
     depth = min(depth, 3)
-    rows = db.query(
-        "MATCH (center:Note {path: $path})-[r*1.." + str(depth) + "]-(connected) "
-        "WHERE NOT connected:Chunk "
-        "WITH center, connected, r "
-        "UNWIND r AS rel "
-        "RETURN DISTINCT "
-        "elementId(center) AS center_id, labels(center) AS center_labels, "
-        "center.title AS center_name, center.path AS center_path, "
-        "elementId(connected) AS conn_id, labels(connected) AS conn_labels, "
-        "coalesce(connected.title, connected.name, connected.content) AS conn_name, "
-        "connected.path AS conn_path, connected.type AS conn_type, "
-        "elementId(startNode(rel)) AS rel_source, "
-        "elementId(endNode(rel)) AS rel_target, "
-        "type(rel) AS rel_type "
-        "LIMIT 200",
+
+    # Find center node
+    center_rows = db.query(
+        "SELECT meta::id(id) AS nid, title, path FROM note WHERE path = $path",
         {"path": path},
     )
+    if not center_rows:
+        return {"nodes": [], "edges": []}
 
-    nodes_map: dict = {}
+    center = center_rows[0]
+    center_id = f"note:{center['nid']}"
+    nodes_map = {
+        center_id: {
+            "id": center_id,
+            "label": "Note",
+            "name": center["title"],
+            "path": center["path"],
+        }
+    }
     edges_set: set = set()
     edges: list = []
 
-    for row in rows:
-        # Add center node
-        cid = row["center_id"]
-        if cid not in nodes_map:
-            nodes_map[cid] = {
-                "id": cid,
-                "label": _primary_label(row["center_labels"]),
-                "name": row["center_name"],
-                "path": row["center_path"],
-            }
-        # Add connected node
-        nid = row["conn_id"]
-        if nid not in nodes_map:
-            nodes_map[nid] = {
-                "id": nid,
-                "label": _primary_label(row["conn_labels"]),
-                "name": _truncate(row["conn_name"], 60),
-                "path": row.get("conn_path"),
-                "type": row.get("conn_type"),
-            }
-        # Add edge (deduplicated)
-        edge_key = (row["rel_source"], row["rel_target"], row["rel_type"])
-        if edge_key not in edges_set:
-            edges_set.add(edge_key)
-            edges.append(
-                {
-                    "source": row["rel_source"],
-                    "target": row["rel_target"],
-                    "type": row["rel_type"],
-                }
-            )
+    # BFS through all visible relation tables
+    edge_tables = db.get_relation_tables(exclude_internal=True)
+    frontier = [center_id]
+    for _ in range(depth):
+        if not frontier:
+            break
+        next_frontier = []
+        for node_id in frontier:
+            # Outgoing edges
+            for edge_table in edge_tables:
+                out_rows = db.query(
+                    f"SELECT out AS target, meta::id(id) AS eid "
+                    f"FROM {edge_table} WHERE in = type::thing($nid)",
+                    {"nid": node_id},
+                )
+                for row in out_rows:
+                    tgt_id = str(row["target"]) if row.get("target") else ""
+                    if not tgt_id:
+                        continue
+                    etype = edge_table.upper()
+                    edge_key = (node_id, tgt_id, etype)
+                    if edge_key not in edges_set:
+                        edges_set.add(edge_key)
+                        edges.append({"source": node_id, "target": tgt_id, "type": etype})
+                    if tgt_id not in nodes_map:
+                        # Fetch node details
+                        table = tgt_id.split(":")[0] if ":" in tgt_id else "note"
+                        detail = db.query(
+                            "SELECT meta::id(id) AS nid, title ?? name ?? content AS name, "
+                            "path, type FROM type::thing($tid)",
+                            {"tid": tgt_id},
+                        )
+                        if detail:
+                            d = detail[0]
+                            nodes_map[tgt_id] = {
+                                "id": tgt_id,
+                                "label": table.capitalize(),
+                                "name": _truncate(d.get("name"), 60),
+                                "path": d.get("path"),
+                                "type": d.get("type"),
+                            }
+                            next_frontier.append(tgt_id)
+
+            # Incoming edges
+            for edge_table in edge_tables:
+                in_rows = db.query(
+                    f"SELECT in AS source, meta::id(id) AS eid "
+                    f"FROM {edge_table} WHERE out = type::thing($nid)",
+                    {"nid": node_id},
+                )
+                for row in in_rows:
+                    src_id = str(row["source"]) if row.get("source") else ""
+                    if not src_id:
+                        continue
+                    etype = edge_table.upper()
+                    edge_key = (src_id, node_id, etype)
+                    if edge_key not in edges_set:
+                        edges_set.add(edge_key)
+                        edges.append({"source": src_id, "target": node_id, "type": etype})
+                    if src_id not in nodes_map:
+                        table = src_id.split(":")[0] if ":" in src_id else "note"
+                        detail = db.query(
+                            "SELECT meta::id(id) AS nid, title ?? name ?? content AS name, "
+                            "path, type FROM type::thing($tid)",
+                            {"tid": src_id},
+                        )
+                        if detail:
+                            d = detail[0]
+                            nodes_map[src_id] = {
+                                "id": src_id,
+                                "label": table.capitalize(),
+                                "name": _truncate(d.get("name"), 60),
+                                "path": d.get("path"),
+                                "type": d.get("type"),
+                            }
+                            next_frontier.append(src_id)
+
+        frontier = next_frontier
 
     return {"nodes": list(nodes_map.values()), "edges": edges}
 
@@ -558,37 +664,65 @@ def graph_neighborhood(path: str, depth: int = 1):
 @app.get("/graph/memories")
 def graph_memories():
     db = _require_db()
-    rows = db.query(
-        "MATCH (m:Memory) "
-        "OPTIONAL MATCH (m)-[r]-(related) "
-        "RETURN m.id AS id, m.type AS type, m.content AS content, "
-        "m.created_at AS created_at, "
-        "collect(DISTINCT {name: coalesce(related.title, related.name), "
-        "relationship: type(r)}) AS connections"
-    )
-    return {
-        "memories": [
+    rows = db.query("SELECT mid, type, content, created_at FROM memory")
+    edge_tables = db.get_relation_tables(exclude_internal=True)
+
+    memories = []
+    for r in rows:
+        # Find connections through any edge table (outgoing and incoming)
+        connections = []
+        mid = r.get("mid")
+        for et in edge_tables:
+            out_rows = db.query(
+                f"SELECT out AS target FROM {et} "
+                f"WHERE in = (SELECT VALUE id FROM memory WHERE mid = $mid)[0]",
+                {"mid": mid},
+            )
+            for o in out_rows:
+                tgt = str(o["target"]) if o.get("target") else ""
+                if tgt:
+                    detail = db.query(
+                        "SELECT title ?? name ?? content AS name FROM type::thing($tid)",
+                        {"tid": tgt},
+                    )
+                    name = detail[0].get("name") if detail else None
+                    if name:
+                        connections.append({"name": name, "relationship": et})
+            in_rows = db.query(
+                f"SELECT in AS source FROM {et} "
+                f"WHERE out = (SELECT VALUE id FROM memory WHERE mid = $mid)[0]",
+                {"mid": mid},
+            )
+            for i in in_rows:
+                src = str(i["source"]) if i.get("source") else ""
+                if src:
+                    detail = db.query(
+                        "SELECT title ?? name ?? content AS name FROM type::thing($tid)",
+                        {"tid": src},
+                    )
+                    name = detail[0].get("name") if detail else None
+                    if name:
+                        connections.append({"name": name, "relationship": et})
+
+        memories.append(
             {
-                "id": r["id"],
-                "type": r["type"],
-                "content": r["content"],
-                "created_at": r["created_at"],
-                "connections": [c for c in r["connections"] if c.get("name")],
+                "id": mid,
+                "type": r.get("type"),
+                "content": r.get("content"),
+                "created_at": r.get("created_at"),
+                "connections": connections,
             }
-            for r in rows
-        ]
-    }
+        )
+    return {"memories": memories}
 
 
 @app.delete("/graph/memory/{memory_id}")
 def delete_memory(memory_id: str):
     db = _require_db()
-    result = db.query(
-        "MATCH (m:Memory {id: $id}) DETACH DELETE m RETURN count(*) AS deleted",
-        {"id": memory_id},
-    )
-    if not result or result[0].get("deleted", 0) == 0:
+    existing = db.query("SELECT mid FROM memory WHERE mid = $id", {"id": memory_id})
+    if not existing:
         raise HTTPException(status_code=404, detail="Memory not found")
+    db.query("DELETE memory WHERE mid = $id", {"id": memory_id})
     return {"status": "ok"}
 
 
@@ -596,7 +730,7 @@ def delete_memory(memory_id: str):
 def update_memory(memory_id: str, req: UpdateMemoryRequest):
     db = _require_db()
     result = db.query(
-        "MATCH (m:Memory {id: $id}) SET m.content = $content RETURN m.id AS id",
+        "UPDATE memory SET content = $content WHERE mid = $id RETURN mid AS id",
         {"id": memory_id, "content": req.content},
     )
     if not result:
@@ -607,16 +741,13 @@ def update_memory(memory_id: str, req: UpdateMemoryRequest):
 @app.get("/notes/tags")
 def notes_tags():
     db = _require_db()
-    results = db.query("MATCH (t:Tag) RETURN t.name AS name ORDER BY name")
+    results = db.query("SELECT name FROM tag ORDER BY name")
     return {"tags": [r["name"] for r in results]}
 
 
-def _primary_label(labels: list[str]) -> str:
-    """Pick the most meaningful label from a node's label list."""
-    for preferred in ("Note", "Tag", "Memory", "Chunk", "Document"):
-        if preferred in labels:
-            return preferred
-    return labels[0] if labels else "Unknown"
+def _primary_label(table: str) -> str:
+    """Capitalize a SurrealDB table name for display."""
+    return table.capitalize() if table else "Unknown"
 
 
 def _truncate(text: str | None, max_len: int) -> str | None:
@@ -893,7 +1024,7 @@ async def put_settings(req: UpdateSettingsRequest):
         from brain.mcp_client import reload_mcp_tools
 
         if needs_pipeline_reload:
-            _pipeline = create_kg_pipeline(_db._driver, _notes_path())
+            _pipeline = create_kg_pipeline(_db, _notes_path())
 
         mcp_tools = await reload_mcp_tools()
         _agent = recreate_agent(_db, _pipeline, mcp_tools=mcp_tools or None)

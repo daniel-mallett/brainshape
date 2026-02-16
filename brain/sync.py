@@ -10,13 +10,13 @@ logger = logging.getLogger(__name__)
 
 
 def _get_stored_hashes(db: GraphDB) -> dict[str, str]:
-    """Batch-fetch all stored content hashes from Neo4j."""
-    results = db.query("MATCH (n:Note) RETURN n.path AS path, n.content_hash AS hash")
-    return {r["path"]: r["hash"] for r in results if r["hash"]}
+    """Batch-fetch all stored content hashes."""
+    results = db.query("SELECT path, content_hash FROM note")
+    return {r["path"]: r["content_hash"] for r in results if r.get("content_hash")}
 
 
 def sync_semantic(db: GraphDB, pipeline: KGPipeline, notes_path: Path) -> dict:
-    """Run KG pipeline to extract entities and relationships from note content.
+    """Run KG pipeline to embed note content into chunks.
 
     Delegates to sync_semantic_async() inside a single event loop,
     avoiding the overhead of creating a new event loop per file.
@@ -25,11 +25,7 @@ def sync_semantic(db: GraphDB, pipeline: KGPipeline, notes_path: Path) -> dict:
 
 
 async def sync_semantic_async(db: GraphDB, pipeline: KGPipeline, notes_path: Path) -> dict:
-    """Async version of sync_semantic for use inside a running event loop.
-
-    Uses pipeline.run_async() directly instead of the sync wrapper which
-    calls asyncio.run() (which fails inside an already-running loop).
-    """
+    """Async version of sync_semantic for use inside a running event loop."""
     note_files = list_notes(notes_path)
     hash_map = _get_stored_hashes(db)
     stats = {"processed": 0, "skipped": 0}
@@ -49,17 +45,14 @@ async def sync_semantic_async(db: GraphDB, pipeline: KGPipeline, notes_path: Pat
 
         # Clear old chunks for this note before re-processing
         db.query(
-            """
-            MATCH (d:Document {path: $path})<-[:FROM_DOCUMENT]-(c:Chunk)
-            DETACH DELETE c
-            """,
+            "DELETE chunk WHERE ->from_document->(note WHERE path = $path)",
             {"path": relative_path},
         )
 
         try:
             await pipeline.run_async(str(file_path))
             db.query(
-                "MATCH (n:Document {path: $path}) SET n.content_hash = $hash",
+                "UPDATE note SET content_hash = $hash WHERE path = $path",
                 {"path": relative_path, "hash": file_hash},
             )
             stats["processed"] += 1
@@ -71,36 +64,33 @@ async def sync_semantic_async(db: GraphDB, pipeline: KGPipeline, notes_path: Pat
 
 
 def sync_structural(db: GraphDB, notes_path: Path) -> dict:
-    """Add :Note label, properties, and structural relationships to Document nodes.
+    """UPSERT note nodes and structural relationships (tags, wikilinks).
 
     Uses a two-pass approach:
-      Pass 1 — MERGE all note nodes (so every note exists before linking).
+      Pass 1 — UPSERT all note nodes (so every note exists before linking).
       Pass 2 — Create tag and wikilink relationships.
-               Wikilinks use MATCH (not MERGE) to avoid creating placeholder
-               nodes with fabricated paths.
 
-    Runs on every note unconditionally — structural sync is cheap Cypher
+    Runs on every note unconditionally — structural sync is cheap
     queries, so hash-gating isn't worth the complexity.
     """
     notes = read_all_notes(notes_path)
     stats = {"notes": 0, "tags": 0, "links": 0}
 
-    # Pass 1: MERGE all note nodes
+    # Pass 1: UPSERT all note nodes
     for note in notes:
         db.query(
-            """
-            MERGE (n {path: $path})
-            ON CREATE SET n.created_at = timestamp()
-            SET n:Note, n:Document,
-                n.title = $title,
-                n.content = $content,
-                n.modified_at = timestamp()
-            """,
+            "UPSERT note SET path = $path, title = $title, content = $content, "
+            "modified_at = time::now() WHERE path = $path",
             {
                 "path": note["path"],
                 "title": note["title"],
                 "content": note["content"],
             },
+        )
+        # Set created_at only on first insert
+        db.query(
+            "UPDATE note SET created_at = time::now() WHERE path = $path AND created_at = NONE",
+            {"path": note["path"]},
         )
         stats["notes"] += 1
 
@@ -108,42 +98,41 @@ def sync_structural(db: GraphDB, notes_path: Path) -> dict:
     for note in notes:
         # Clear old structural relationships before re-creating
         db.query(
-            "MATCH (n:Note {path: $path})-[r:TAGGED_WITH]->() DELETE r",
+            "DELETE tagged_with WHERE in = (SELECT VALUE id FROM note WHERE path = $path)[0]",
             {"path": note["path"]},
         )
         db.query(
-            "MATCH (n:Note {path: $path})-[r:LINKS_TO]->() DELETE r",
+            "DELETE links_to WHERE in = (SELECT VALUE id FROM note WHERE path = $path)[0]",
             {"path": note["path"]},
         )
 
         # Create tag relationships
         for tag in note["tags"]:
             db.query(
-                """
-                MERGE (t:Tag {name: $tag})
-                WITH t
-                MATCH (n:Note {path: $path})
-                MERGE (n)-[:TAGGED_WITH]->(t)
-                """,
-                {"tag": tag, "path": note["path"]},
+                "UPSERT tag SET name = $tag WHERE name = $tag",
+                {"tag": tag},
+            )
+            db.query(
+                "RELATE (SELECT VALUE id FROM note WHERE path = $path)"
+                "->tagged_with->"
+                "(SELECT VALUE id FROM tag WHERE name = $tag)",
+                {"path": note["path"], "tag": tag},
             )
             stats["tags"] += 1
 
-        # Create wikilink relationships (MATCH only — no placeholder nodes)
+        # Create wikilink relationships (only if target note exists)
         for link_title in note["links"]:
-            result = db.query(
-                """
-                MATCH (source:Note {path: $source_path})
-                MATCH (target:Note {title: $target_title})
-                MERGE (source)-[:LINKS_TO]->(target)
-                RETURN target.path AS path
-                """,
-                {
-                    "source_path": note["path"],
-                    "target_title": link_title,
-                },
+            target = db.query(
+                "SELECT VALUE id FROM note WHERE title = $title",
+                {"title": link_title},
             )
-            if result:
+            if target:
+                db.query(
+                    "RELATE (SELECT VALUE id FROM note WHERE path = $source_path)"
+                    "->links_to->"
+                    "(SELECT VALUE id FROM note WHERE title = $target_title)",
+                    {"source_path": note["path"], "target_title": link_title},
+                )
                 stats["links"] += 1
 
     return stats
@@ -154,8 +143,8 @@ def sync_all(
     pipeline: KGPipeline,
     notes_path: Path,
 ) -> dict:
-    """Full sync: semantic first (creates Document nodes), then structural
-    (adds :Note label, tags, wikilinks onto those same nodes).
+    """Full sync: semantic first (creates note nodes), then structural
+    (adds tags, wikilinks onto those same nodes).
     Both steps are incremental — only dirty files are processed."""
     semantic = sync_semantic(db, pipeline, notes_path)
     structural = sync_structural(db, notes_path)

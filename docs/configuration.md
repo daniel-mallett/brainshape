@@ -11,17 +11,15 @@ NOTES_PATH=~/Brain              # Your notes directory (created on first run)
 ANTHROPIC_API_KEY=sk-ant-...    # Required if using Anthropic (default provider)
 ```
 
-### Neo4j (Docker)
+### SurrealDB
 
-Default values work with `docker compose up -d`:
+SurrealDB is embedded — no separate server or Docker needed. Data is stored locally:
 
 ```bash
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=brain-dev-password
+SURREALDB_PATH=~/.config/brain/surrealdb   # Default path, configurable
 ```
 
-If Neo4j is not running, the server starts in degraded mode: notes CRUD works, but agent and graph features are unavailable. The desktop app shows a warning bar.
+If SurrealDB fails to initialize, the server starts in degraded mode: notes CRUD works (filesystem-only), but agent and graph features are unavailable. The desktop app shows a warning bar.
 
 ### Model Override
 
@@ -115,6 +113,10 @@ Settings:
 
 The Settings UI writes to `~/.config/brain/settings.json`. Changes apply immediately (hot-reload, no restart needed).
 
+### Notes Path
+
+Configurable via the Settings UI with a native file picker. The path is validated to ensure it doesn't overlap with the project directory (security constraint). On first run, seed notes are copied to the configured path.
+
 ### Editor
 
 | Setting | Values | Default |
@@ -159,18 +161,17 @@ The desktop app can't reach the backend.
 1. Check server is running: `uv run python -m brain.server`
 2. Check port 8765 is not blocked by another process
 
-### "Neo4j not connected" warning
+### "SurrealDB not connected" warning
 
-The server started in degraded mode because Neo4j is unreachable.
+The server started in degraded mode because SurrealDB failed to initialize.
 
-1. Check Docker is running: `docker ps`
-2. Start Neo4j: `docker compose up -d`
-3. Check logs: `docker compose logs neo4j`
-4. Restart the server after Neo4j is up
+1. Check the SurrealDB path is writable: `ls -la ~/.config/brain/surrealdb`
+2. Check disk space
+3. Restart the server
 
 ### "Agent not initialized" (503 error)
 
-Same as above — Neo4j connection failed. Fix Neo4j, restart the server.
+SurrealDB initialization failed. Check the server logs for the specific error, fix the issue, and restart the server.
 
 ### Transcription fails
 
@@ -180,9 +181,3 @@ Same as above — Neo4j connection failed. Fix Neo4j, restart the server.
 ### Embedding model download hangs
 
 The first sync downloads the model from HuggingFace. Check your internet connection. If behind a proxy, set `HF_ENDPOINT` or `TRANSFORMERS_CACHE` environment variables.
-
-### Neo4j Browser
-
-Access the graph directly at [http://localhost:7474](http://localhost:7474).
-
-Credentials: `neo4j` / `brain-dev-password` (or whatever you set in `.env`).

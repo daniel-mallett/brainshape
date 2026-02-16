@@ -10,10 +10,8 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     model_name: str = "claude-haiku-4-5-20251001"
 
-    # Neo4j
-    neo4j_uri: str = "bolt://localhost:7687"
-    neo4j_user: str = "neo4j"
-    neo4j_password: str = "brain-dev-password"  # noqa: S105
+    # SurrealDB
+    surrealdb_path: str = "~/.config/brain/surrealdb"
 
     # Notes
     notes_path: str = "~/brain"

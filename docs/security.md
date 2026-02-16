@@ -10,7 +10,7 @@ Brain is a local-first, single-user application. The trust boundary sits between
 
 | Client | Authenticated in | Used by agent via |
 |--------|-----------------|-------------------|
-| Neo4j driver | `graph_db.py` constructor | `db.query()` |
+| SurrealDB connection | `graph_db.py` constructor | `db.query()` |
 | Anthropic SDK | LangChain model string | Agent framework (implicit) |
 | OpenAI Whisper API | `transcribe.py` | `httpx.post()` with Bearer token |
 | Mistral Voxtral API | `transcribe.py` | `httpx.post()` with Bearer token |
@@ -23,34 +23,43 @@ The `.env` file is listed in `.gitignore` and is not readable through any agent 
 All file operations are restricted to the configured notes directory:
 
 - `write_note()` and `rewrite_note()` in `notes.py` validate that the resolved file path stays within the notes directory using `_ensure_within_notes_dir()`. Paths containing `../` traversal sequences that would escape the notes directory raise `ValueError`.
-- `read_note` reads content from Neo4j, not the filesystem directly.
-- `list_notes` and `read_all_notes` use `notes_path.rglob()`, which stays within the notes directory.
+- `read_note` reads content from SurrealDB, not the filesystem directly.
+- `list_notes` uses `notes_path.rglob()`, which stays within the notes directory.
 
-**Important:** The notes path (configured via `NOTES_PATH` in `.env`) must never overlap with the project directory. This prevents the agent from accessing `.env`, source code, or other sensitive files through note-reading tools. This constraint is documented but not enforced at startup.
+**Important:** The notes path (configured via `NOTES_PATH` in `.env` or the settings UI) must never overlap with the project directory. This prevents the agent from accessing `.env`, source code, or other sensitive files through note-reading tools. The `PUT /settings` endpoint enforces this by rejecting notes paths that overlap with the project directory.
 
 ## Tool Risk Assessment
 
 | Tool | Access | Notes |
 |------|--------|-------|
-| `search_notes` | Read (graph) | Parameterized full-text query |
+| `search_notes` | Read (graph) | Parameterized BM25 fulltext query |
 | `semantic_search` | Read (graph) | Parameterized vector query |
 | `read_note` | Read (graph) | Parameterized by title |
 | `create_note` | Write (notes + graph) | Path-traversal protected |
 | `edit_note` | Write (notes + graph) | Path-traversal protected |
-| `query_graph` | Read/write (graph) | Accepts arbitrary Cypher — see below |
-| `find_related` | Read (graph) | Parameterized by entity name |
+| `query_graph` | Read/write (graph) | Accepts arbitrary SurrealQL — see below |
+| `find_related` | Read (graph) | Parameterized by title |
+| `store_memory` | Write (graph) | Creates memory records with parameterized values |
+| `create_connection` | Write (graph) | Creates entities + edges — see below |
 
-### `query_graph` — arbitrary Cypher
+### `query_graph` — arbitrary SurrealQL
 
-The `query_graph` tool executes raw Cypher strings against Neo4j using a read-write session. This is intentional: the agent uses `CREATE` statements to persist memories (`:Memory` nodes).
+The `query_graph` tool executes raw SurrealQL strings against SurrealDB. This is intentional: the agent uses it for complex graph traversals and ad-hoc queries.
 
 The practical risk is limited because:
 
-- Neo4j contains only note content and extracted entities — no credentials or secrets.
-- The database runs locally and is not exposed to the network (default `bolt://localhost:7687`).
-- The worst-case outcome of a destructive query (e.g., `MATCH (n) DETACH DELETE n`) is data loss in the graph, which can be rebuilt from the notes directory via `/sync`.
+- SurrealDB contains only note content and extracted entities — no credentials or secrets.
+- The database is embedded (no network exposure) — data is stored locally at `~/.config/brain/surrealdb`.
+- The worst-case outcome of a destructive query (e.g., `DELETE note`) is data loss in the graph, which can be rebuilt from the notes directory via `/sync`.
 
-If the project grows to support untrusted input sources (shared vaults, web clipping, plugins), this tool should be revisited — either by restricting it to read-only and using a dedicated `store_memory` tool for writes, or by adding a Cypher keyword allowlist.
+### `create_connection` — schema protection
+
+The `create_connection` tool creates entities and relationships in the graph. It includes several safety measures:
+
+- **Identifier sanitization**: All table/relationship names are sanitized to `[a-zA-Z0-9_]` lowercase via `_sanitize_identifier()`.
+- **Reserved table blocklist**: Core tables (`tag`, `chunk`, `tagged_with`, `links_to`, `from_document`) are blocked as entity types. All core tables plus `note` and `memory` are blocked as relationship names. This prevents `DEFINE TABLE OVERWRITE` from corrupting the schema.
+- **Entity-type-aware lookups**: `note` and `memory` entities are looked up by their natural key (title/content) and never created — only existing records can be referenced.
+- **Duplicate edge prevention**: Before creating an edge, the tool checks if the exact (source, target, relationship) triple already exists.
 
 ## HTTP Server (`server.py`)
 
@@ -64,11 +73,11 @@ The FastAPI server binds to `127.0.0.1:8765` — localhost only, not exposed to 
 - **Settings API** (`GET /settings`, `PUT /settings`) handles API keys safely: `GET` never returns raw keys, only boolean `_set` flags (e.g., `anthropic_api_key_set: true`, `mistral_api_key_set: true`). `PUT` accepts new key values but they are stored on disk only, never echoed back.
 - **API key export** — `config.py:export_api_keys()` pushes keys from both `.env` and runtime settings into `os.environ` using `setdefault` (shell exports take precedence). Cloud transcription providers read keys from `os.environ` at call time, not from settings directly.
 - **MCP command validation** — `PUT /settings` validates MCP server commands against an allowlist (`npx`, `uvx`, `node`, `python`, `python3`, `deno`, `bun`) to prevent arbitrary command execution.
+- **Notes path validation** — `PUT /settings` rejects notes paths that overlap with the project directory to prevent the agent from reading source code or `.env` files.
 
 ## Known Limitations
 
-- **No notes path overlap enforcement.** The separation between notes and project directories is a documented convention, not a runtime check. A misconfigured `NOTES_PATH` could expose project files.
-- **Error messages may leak schema details.** Neo4j exceptions from `query_graph` are returned to the agent as-is, which could reveal index names or internal structure. This is acceptable for a local tool but would need sanitization in a multi-user context.
+- **Error messages may leak schema details.** SurrealQL exceptions from `query_graph` are returned to the agent as-is, which could reveal index names or internal structure. This is acceptable for a local tool but would need sanitization in a multi-user context.
 
 ## Design Principles
 
@@ -76,6 +85,7 @@ The FastAPI server binds to `127.0.0.1:8765` — localhost only, not exposed to 
 2. **Notes-scoped filesystem access** — all file writes are validated against the notes directory boundary.
 3. **Parameterized queries by default** — all built-in graph queries use `$parameters`, not string interpolation.
 4. **Allowlist, not blocklist** — the agent has a fixed set of tools. New capabilities require explicit tool definitions.
+5. **Reserved name protection** — core schema tables are protected from overwrite by the agent's `create_connection` tool.
 
 ## Future Considerations
 

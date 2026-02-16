@@ -2,23 +2,22 @@
 
 ## Overview
 
-Brain is a personal second-brain agent with knowledge graph memory. It connects a markdown notes directory to a Neo4j knowledge graph, allowing an AI agent to read/search/create/edit notes and maintain its own long-term memory. It includes a standalone desktop app (Tauri 2 + React) backed by a FastAPI server.
+Brain is a personal second-brain agent with knowledge graph memory. It connects a markdown notes directory to a SurrealDB embedded knowledge graph, allowing an AI agent to read/search/create/edit notes and maintain its own long-term memory. It includes a standalone desktop app (Tauri 2 + React) backed by a FastAPI server.
 
 ## Module Map
 
 ```
 main.py                      # Thin entry point → brain.cli.run_cli()
-docker-compose.yml           # Neo4j 5 community (ports 7474, 7687)
 .env / .env.example          # Configuration (gitignored / template)
-scripts/dev.sh               # Start full dev environment (Neo4j + server + Tauri)
+scripts/dev.sh               # Start full dev environment (server + Tauri)
 
 brain/
 ├── config.py                # pydantic-settings, loads from .env
-├── graph_db.py              # Neo4j driver wrapper, schema bootstrap, query() helper
+├── graph_db.py              # SurrealDB embedded wrapper, schema bootstrap, query() helper
 ├── notes.py                 # Notes reader/writer/parser, trash system, rename + wikilink rewriting
 ├── kg_pipeline.py           # Embedding pipeline: load → split → embed → write (no LLM extraction)
 ├── sync.py                  # Orchestrates incremental semantic + structural sync
-├── tools.py                 # 7 LangChain tools for the agent
+├── tools.py                 # 9 LangChain tools for the agent
 ├── agent.py                 # create_brain_agent() — model + tools + system prompt
 ├── server.py                # FastAPI server (HTTP + SSE) for desktop app
 ├── settings.py              # Persistent user settings (JSON on disk), LLM provider config
@@ -62,13 +61,13 @@ desktop/                     # Tauri 2 desktop app (React + TypeScript + Vite)
 
 tests/
 ├── conftest.py              # Shared fixtures (mock db, mock pipeline, tmp notes)
-├── test_notes.py            # Parsing, writing, hashing
+├── test_notes.py            # Parsing, writing, hashing, wikilink dedup
 ├── test_config.py           # Settings defaults and env loading
-├── test_graph_db.py         # GraphDB with mocked driver
-├── test_tools.py            # Tool functions with mocked db/pipeline
+├── test_graph_db.py         # GraphDB with mocked driver, table discovery
+├── test_tools.py            # Tool functions with mocked db/pipeline, edge cleanup, reserved names
 ├── test_sync.py             # Sync logic with mocked deps
-├── test_server.py           # FastAPI endpoint tests
-├── test_kg_pipeline.py      # NotesLoader, chunk writing (mocked driver)
+├── test_server.py           # FastAPI endpoint tests, graph endpoints, memory connections
+├── test_kg_pipeline.py      # Chunk writing (mocked driver)
 ├── test_settings.py         # Settings load/save, defaults, migration
 ├── test_mcp_client.py       # MCP config building, tool loading
 ├── test_mcp_server.py       # MCP server lifespan, tool registration
@@ -101,7 +100,7 @@ Future interfaces (Slack, Discord, voice) each import `create_brain_agent()` and
 
 `brain/server.py` is a FastAPI app on `localhost:8765` that exposes:
 
-- `GET /health` — health check (includes `neo4j_connected`, `agent_available` status)
+- `GET /health` — health check (includes `surrealdb_connected`, `agent_available` status)
 - `GET /config` — current configuration
 - `POST /agent/init` — create session, returns session_id
 - `POST /agent/message` — stream agent response via SSE
@@ -115,10 +114,10 @@ Future interfaces (Slack, Discord, voice) each import `create_brain_agent()` and
 - `POST /notes/trash/{path}/restore` — restore a note from trash
 - `DELETE /notes/trash` — permanently empty trash
 - `GET /notes/tags` — list all tags
-- `GET /graph/stats` — node/relationship counts
-- `GET /graph/overview` — all nodes and edges (optional label filter)
-- `GET /graph/neighborhood/{path}` — local subgraph around a note
-- `GET /graph/memories` — list agent memories
+- `GET /graph/stats` — node/relationship counts (dynamic table discovery)
+- `GET /graph/overview` — all nodes and edges (optional label filter, includes custom relations)
+- `GET /graph/neighborhood/{path}` — local subgraph around a note (BFS over all edge tables)
+- `GET /graph/memories` — list agent memories with bidirectional connection discovery
 - `DELETE /graph/memory/{id}` — delete a memory
 - `PUT /graph/memory/{id}` — update a memory
 - `POST /transcribe` — upload audio, returns transcription (uses configured provider)
@@ -134,7 +133,7 @@ In dev mode, the server is started separately. In production, it will be bundled
 
 Two independent sync layers with different cost profiles:
 
-- **Structural sync** (cheap, always current): runs on every startup (CLI and server) and via `/sync` or `POST /sync/structural`. Processes every note unconditionally — parses tags, wikilinks, frontmatter from markdown files. No hash-gating because it's just Cypher queries.
+- **Structural sync** (cheap, always current): runs on every startup (CLI and server) and via `/sync` or `POST /sync/structural`. Two-pass approach: first UPSERT all note records (so every note exists before linking), then create tag and wikilink relationships. No hash-gating because it's just SurrealQL queries.
 - **Semantic sync** (expensive, incremental): runs via `/sync --full`, `/sync --semantic`, or `POST /sync/semantic`. Uses local embedding model to chunk and embed notes. Tracked by SHA-256 content hash — only dirty (changed) files are processed.
 - **Batch processing**: `uv run python -m brain.batch` for cron/launchd jobs.
 
@@ -143,14 +142,12 @@ Two independent sync layers with different cost profiles:
 | Package | Purpose |
 |---------|---------|
 | `langchain` | Agent framework (`create_agent`, `langchain_core.tools`) |
-| `langchain-anthropic` | Claude model provider for LangChain (may be transitive — not directly imported) |
+| `langchain-anthropic` | Claude model provider for LangChain |
 | `langgraph` | `MemorySaver` for in-session conversation history |
-| `neo4j` | Python driver for Bolt protocol |
-| `neo4j-graphrag` | KG pipeline components (text splitting, chunk embedding, vector index management) |
+| `surrealdb` | Embedded graph database (surrealkv:// protocol) |
 | `sentence-transformers` | Local embedding model (`all-mpnet-base-v2`, 768-dim), configurable via settings |
 | `python-frontmatter` | Parse YAML frontmatter from markdown notes |
 | `pydantic-settings` | Type-safe .env config (handles `.env` loading natively) |
-| `python-dotenv` | Transitive dep (not directly imported — pydantic-settings handles `.env`) |
 | `fastapi` | HTTP server framework for desktop app backend |
 | `uvicorn` | ASGI server for FastAPI |
 | `sse-starlette` | Server-Sent Events for agent response streaming |
@@ -185,4 +182,4 @@ All config flows through `brain/config.py` using `pydantic-settings.BaseSettings
 - Validates types at startup
 - Singleton `settings` object imported by all other modules
 
-Key settings: `ANTHROPIC_API_KEY`, `MODEL_NAME`, `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, `NOTES_PATH`
+Key settings: `ANTHROPIC_API_KEY`, `MODEL_NAME`, `SURREALDB_PATH`, `NOTES_PATH`

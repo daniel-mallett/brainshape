@@ -303,6 +303,35 @@ class TestParseNoteRegexFixes:
         result = parse_note(f, tmp_path)
         assert "MyProject" in result["links"]
 
+    def test_wikilink_deduplication(self, tmp_path):
+        f = tmp_path / "test.md"
+        f.write_text("See [[About Me]] and also [[About Me]] again")
+        result = parse_note(f, tmp_path)
+        assert result["links"].count("About Me") == 1
+
+    def test_wikilinks_dedup_preserves_order(self, tmp_path):
+        """Dedup preserves first-seen order: [[A]] [[B]] [[A]] → ["A", "B"]."""
+        f = tmp_path / "test.md"
+        f.write_text("Link [[A]] then [[B]] then [[A]] again")
+        result = parse_note(f, tmp_path)
+        assert result["links"] == ["A", "B"]
+
+    def test_wikilinks_dedup_case_preserving(self, tmp_path):
+        """Exact-match dedup means [[About Me]] and [[about me]] are both kept."""
+        f = tmp_path / "test.md"
+        f.write_text("See [[About Me]] and [[about me]]")
+        result = parse_note(f, tmp_path)
+        assert "About Me" in result["links"]
+        assert "about me" in result["links"]
+        assert len(result["links"]) == 2
+
+    def test_wikilinks_dedup_with_aliases(self, tmp_path):
+        """[[Note|alias]] and [[Note]] resolve to same target, deduped."""
+        f = tmp_path / "test.md"
+        f.write_text("See [[Note|alias]] and [[Note]]")
+        result = parse_note(f, tmp_path)
+        assert result["links"].count("Note") == 1
+
 
 class TestRewriteNoteRegexFixes:
     def test_rewrite_strips_code_block_tags(self, tmp_path):
