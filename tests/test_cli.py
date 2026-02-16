@@ -8,7 +8,7 @@ from brain.cli import _handle_command, _run_sync
 class TestRunSync:
     def test_structural_sync_default(self, mock_db, mock_pipeline, tmp_notes, monkeypatch):
         """Default /sync runs structural sync."""
-        monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
+        monkeypatch.setattr("brain.settings.get_notes_path", lambda: str(tmp_notes))
         mock_db.query.return_value = []
 
         with patch("brain.cli.sync_structural") as mock_sync:
@@ -18,7 +18,7 @@ class TestRunSync:
 
     def test_semantic_sync(self, mock_db, mock_pipeline, tmp_notes, monkeypatch):
         """--semantic flag runs semantic sync."""
-        monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
+        monkeypatch.setattr("brain.settings.get_notes_path", lambda: str(tmp_notes))
 
         with patch("brain.cli.sync_semantic") as mock_sync:
             mock_sync.return_value = {"processed": 3, "skipped": 1}
@@ -27,7 +27,7 @@ class TestRunSync:
 
     def test_full_sync(self, mock_db, mock_pipeline, tmp_notes, monkeypatch):
         """--full flag runs full sync."""
-        monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
+        monkeypatch.setattr("brain.settings.get_notes_path", lambda: str(tmp_notes))
 
         with patch("brain.cli.sync_all") as mock_sync:
             mock_sync.return_value = {
@@ -39,7 +39,7 @@ class TestRunSync:
 
     def test_missing_notes_path(self, mock_db, mock_pipeline, monkeypatch, capsys):
         """Prints message if notes path doesn't exist."""
-        monkeypatch.setattr("brain.config.settings.notes_path", "/nonexistent/path")
+        monkeypatch.setattr("brain.settings.get_notes_path", lambda: "/nonexistent/path")
         _run_sync(mock_db, mock_pipeline, [])
         output = capsys.readouterr().out
         assert "not found" in output
@@ -47,7 +47,7 @@ class TestRunSync:
 
 class TestHandleCommand:
     def test_sync_command(self, mock_db, mock_pipeline, tmp_notes, monkeypatch):
-        monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
+        monkeypatch.setattr("brain.settings.get_notes_path", lambda: str(tmp_notes))
         with patch("brain.cli.sync_structural") as mock_sync:
             mock_sync.return_value = {"notes": 0, "tags": 0, "links": 0}
             _handle_command("/sync", mock_db, mock_pipeline)
@@ -74,7 +74,7 @@ class TestRunCli:
         mock_db = MagicMock()
         mock_agent.return_value = (MagicMock(), mock_db, MagicMock())
         mock_sync.return_value = {"notes": 0, "tags": 0, "links": 0}
-        monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
+        monkeypatch.setattr("brain.settings.get_notes_path", lambda: str(tmp_notes))
 
         # Simulate user typing "quit"
         monkeypatch.setattr("builtins.input", lambda prompt: "quit")
@@ -92,7 +92,7 @@ class TestRunCli:
         mock_db = MagicMock()
         mock_agent.return_value = (MagicMock(), mock_db, MagicMock())
         mock_sync.return_value = {"notes": 0, "tags": 0, "links": 0}
-        monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
+        monkeypatch.setattr("brain.settings.get_notes_path", lambda: str(tmp_notes))
         monkeypatch.setattr("builtins.input", lambda prompt: "exit")
 
         from brain.cli import run_cli
@@ -107,7 +107,7 @@ class TestRunCli:
         mock_db = MagicMock()
         mock_agent.return_value = (MagicMock(), mock_db, MagicMock())
         mock_sync.return_value = {"notes": 0, "tags": 0, "links": 0}
-        monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
+        monkeypatch.setattr("brain.settings.get_notes_path", lambda: str(tmp_notes))
 
         def raise_eof(prompt):
             raise EOFError
@@ -124,7 +124,7 @@ class TestRunCli:
         """Prints message if notes directory doesn't exist."""
         mock_db = MagicMock()
         mock_agent.return_value = (MagicMock(), mock_db, MagicMock())
-        monkeypatch.setattr("brain.config.settings.notes_path", "/nonexistent/path")
+        monkeypatch.setattr("brain.settings.get_notes_path", lambda: "/nonexistent/path")
         monkeypatch.setattr("builtins.input", lambda prompt: "quit")
 
         from brain.cli import run_cli
@@ -142,7 +142,7 @@ class TestRunCli:
         mock_agent_instance = MagicMock()
         mock_agent.return_value = (mock_agent_instance, mock_db, MagicMock())
         mock_sync.return_value = {"notes": 0, "tags": 0, "links": 0}
-        monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
+        monkeypatch.setattr("brain.settings.get_notes_path", lambda: str(tmp_notes))
 
         inputs = iter(["", "   ", "quit"])
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
@@ -162,7 +162,7 @@ class TestRunCli:
         mock_agent_instance = MagicMock()
         mock_agent.return_value = (mock_agent_instance, mock_db, MagicMock())
         mock_sync.return_value = {"notes": 0, "tags": 0, "links": 0}
-        monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
+        monkeypatch.setattr("brain.settings.get_notes_path", lambda: str(tmp_notes))
 
         inputs = iter(["/help", "quit"])
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))

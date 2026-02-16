@@ -44,6 +44,6 @@ def tools_setup(mock_db, mock_pipeline):
 
 @pytest.fixture
 def notes_settings(tmp_notes, monkeypatch):
-    """Point settings.notes_path at the tmp notes directory."""
-    monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
+    """Point get_notes_path() at the tmp notes directory."""
+    monkeypatch.setattr("brain.settings.get_notes_path", lambda: str(tmp_notes))
     return tmp_notes
