@@ -298,7 +298,7 @@ async def _agent_message_claude_code(req: MessageRequest):
                 model=model,
             ):
                 yield event
-        except FileNotFoundError as e:
+        except Exception as e:
             yield {"event": "error", "data": str(e)}
             yield {"event": "done", "data": ""}
 
@@ -1136,10 +1136,10 @@ async def put_settings(req: UpdateSettingsRequest):
             req.embedding_dimensions is not None,
         ]
     )
-    if (needs_agent_reload or needs_pipeline_reload) and _db is not None and _pipeline is not None:
+    if (needs_agent_reload or needs_pipeline_reload) and _db is not None:
         new_provider = updated.get("llm_provider", "anthropic")
 
-        if needs_pipeline_reload:
+        if needs_pipeline_reload or _pipeline is None:
             _pipeline = create_kg_pipeline(_db, _notes_path())
 
         if new_provider == "claude-code":

@@ -17,6 +17,7 @@ export function useAgentStream() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const sessionIdRef = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const ensureSession = useCallback(async () => {
     if (!sessionIdRef.current) {
@@ -36,11 +37,15 @@ export function useAgentStream() {
       const assistantMsg: Message = { role: "assistant", content: "", parts: [] };
       setMessages((prev) => [...prev, assistantMsg]);
 
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       try {
         const res = await fetch(`${BASE_URL}/agent/message`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ session_id: sessionId, message: text }),
+          signal: controller.signal,
         });
 
         if (!res.ok) {
@@ -113,6 +118,7 @@ export function useAgentStream() {
           }
         }
       } catch (err) {
+        if (controller.signal.aborted) return;
         setMessages((prev) => {
           const updated = [...prev];
           const last = { ...updated[updated.length - 1] };
@@ -124,6 +130,7 @@ export function useAgentStream() {
           return updated;
         });
       } finally {
+        abortRef.current = null;
         setIsStreaming(false);
       }
     },
@@ -131,8 +138,11 @@ export function useAgentStream() {
   );
 
   const resetSession = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
     sessionIdRef.current = null;
     setMessages([]);
+    setIsStreaming(false);
   }, []);
 
   // Index of the message currently being streamed (last assistant message during streaming)

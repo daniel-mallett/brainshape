@@ -53,6 +53,10 @@ def run_cli():
     print("Starting Brain...")
     agent, db, pipeline = create_brain_agent()
 
+    if agent is None or db is None or pipeline is None:
+        print("Failed to initialize — check DB connection and API keys.", file=sys.stderr)
+        sys.exit(1)
+
     # Structural sync on startup
     from brain.settings import get_notes_path
 
@@ -105,7 +109,7 @@ def run_cli():
                         # Show tool calls
                         if hasattr(msg, "tool_calls") and msg.tool_calls:
                             for tc in msg.tool_calls:
-                                args = ", ".join(tc["args"])
+                                args = ", ".join(f"{k}={v!r}" for k, v in tc["args"].items())
                                 print(f"\n  → {tc['name']}({args})", flush=True)
                             continue
                         if hasattr(msg, "content") and msg.content:

@@ -22,6 +22,7 @@ class NoteChangeHandler(FileSystemEventHandler):
         self._on_change = on_change
         self._timer = None
         self._debounce_seconds = 2.0
+        self._lock = __import__("threading").Lock()
 
     def _is_markdown(self, path: str | bytes) -> bool:
         if isinstance(path, bytes):
@@ -32,11 +33,12 @@ class NoteChangeHandler(FileSystemEventHandler):
         """Debounce: reset timer on each event, fire after quiet period."""
         import threading
 
-        if self._timer is not None:
-            self._timer.cancel()
-        self._timer = threading.Timer(self._debounce_seconds, self._fire)
-        self._timer.daemon = True
-        self._timer.start()
+        with self._lock:
+            if self._timer is not None:
+                self._timer.cancel()
+            self._timer = threading.Timer(self._debounce_seconds, self._fire)
+            self._timer.daemon = True
+            self._timer.start()
 
     def _fire(self) -> None:
         self._timer = None

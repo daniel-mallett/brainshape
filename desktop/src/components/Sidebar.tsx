@@ -174,6 +174,7 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
   const [confirmPath, setConfirmPath] = useState<string | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const renameInFlightRef = useRef(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [trashFiles, setTrashFiles] = useState<NoteFile[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -233,7 +234,7 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
   };
 
   const handleRenameSubmit = async () => {
-    if (!renamingPath) return;
+    if (!renamingPath || renameInFlightRef.current) return;
     const newTitle = renameValue.trim();
     if (!newTitle) {
       setRenamingPath(null);
@@ -245,6 +246,7 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
       setRenamingPath(null);
       return;
     }
+    renameInFlightRef.current = true;
     try {
       const { path: newPath } = await renameNoteFile(oldPath, newTitle);
       setRenamingPath(null);
@@ -256,6 +258,8 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
     } catch (err) {
       console.error("Failed to rename note:", err);
       setRenamingPath(null);
+    } finally {
+      renameInFlightRef.current = false;
     }
   };
 

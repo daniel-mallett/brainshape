@@ -73,8 +73,14 @@ export function GraphView({ nodes, edges, onNodeClick }: GraphViewProps) {
 
   const graphData = useMemo(() => {
     const nodeIds = new Set(nodes.map((n) => n.id));
+    // force-graph mutates link objects in-place, replacing source/target strings
+    // with node object references. Extract the id regardless of current shape.
+    const getId = (val: unknown): string =>
+      typeof val === "object" && val !== null && "id" in val
+        ? (val as { id: string }).id
+        : (val as string);
     const validLinks = (edges as ForceLink[]).filter(
-      (e) => nodeIds.has(e.source) && nodeIds.has(e.target)
+      (e) => nodeIds.has(getId(e.source)) && nodeIds.has(getId(e.target))
     );
     return {
       nodes: nodes as ForceNode[],

@@ -84,7 +84,7 @@ export function Chat({ onNavigateToNote, shikiTheme }: {
   const { messages, isStreaming, streamingMessageIndex, sendMessage, resetSession } =
     useAgentStream();
   const [input, setInput] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollEndRef = useRef<HTMLDivElement>(null);
   const wikilinkRef = useWikilinkClick(onNavigateToNote);
 
   const streamdownPlugins = useMemo(() => {
@@ -93,9 +93,7 @@ export function Chat({ onNavigateToNote, shikiTheme }: {
   }, [shikiTheme]);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    scrollEndRef.current?.scrollIntoView({ behavior: "instant" });
   }, [messages]);
 
   const handleSubmit = (e: FormEvent) => {
@@ -126,7 +124,7 @@ export function Chat({ onNavigateToNote, shikiTheme }: {
       </div>
 
       <ScrollArea className="flex-1 overflow-hidden">
-        <div ref={scrollRef} className="p-3 space-y-3">
+        <div className="p-3 space-y-3">
           {messages.length === 0 && (
             <div className="text-center mt-8 space-y-4">
               <p className="text-sm text-muted-foreground">
@@ -171,6 +169,7 @@ export function Chat({ onNavigateToNote, shikiTheme }: {
               </div>
             ) : null;
           })()}
+          <div ref={scrollEndRef} />
         </div>
       </ScrollArea>
 

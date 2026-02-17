@@ -123,7 +123,10 @@ def semantic_search(query: str) -> str:
     )
     if not results:
         return "No semantically similar content found."
-    return "\n\n".join(f"**{r['title']}** (score: {r['score']:.2f})\n{r['chunk']}" for r in results)
+    return "\n\n".join(
+        f"**{r.get('title', 'untitled')}** (score: {r.get('score', 0):.2f})\n{r.get('chunk', '')}"
+        for r in results
+    )
 
 
 @tool
