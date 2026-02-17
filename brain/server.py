@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import tempfile
+import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -49,8 +50,10 @@ _db: GraphDB | None = None
 _pipeline: KGPipeline | None = None
 _observer = None  # watchdog observer
 
-# In-memory session store: session_id → LangGraph config
+# In-memory session store: session_id → {"config": LangGraph config, "last_used": timestamp}
 _sessions: dict[str, dict] = {}
+_SESSION_TTL = 3600  # 1 hour
+_SESSION_MAX = 100
 
 
 @asynccontextmanager
@@ -220,18 +223,37 @@ def get_config():
 # --- Agent ---
 
 
+def _evict_stale_sessions() -> None:
+    """Remove sessions older than TTL and enforce max count."""
+    now = time.monotonic()
+    expired = [sid for sid, s in _sessions.items() if now - s["last_used"] > _SESSION_TTL]
+    for sid in expired:
+        del _sessions[sid]
+    # If still over limit, remove oldest
+    if len(_sessions) > _SESSION_MAX:
+        by_age = sorted(_sessions, key=lambda k: _sessions[k]["last_used"])
+        for sid in by_age[: len(_sessions) - _SESSION_MAX]:
+            del _sessions[sid]
+
+
 @app.post("/agent/init")
 def agent_init():
+    _evict_stale_sessions()
     session_id = str(uuid.uuid4())
-    _sessions[session_id] = {"configurable": {"thread_id": session_id}}
+    _sessions[session_id] = {
+        "config": {"configurable": {"thread_id": session_id}},
+        "last_used": time.monotonic(),
+    }
     return {"session_id": session_id}
 
 
 @app.post("/agent/message")
 async def agent_message(req: MessageRequest):
-    config = _sessions.get(req.session_id)
-    if config is None:
+    session = _sessions.get(req.session_id)
+    if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    session["last_used"] = time.monotonic()
+    config = session["config"]
 
     # Branch based on LLM provider
     current_settings = load_settings()
@@ -1191,10 +1213,22 @@ async def put_settings(req: UpdateSettingsRequest):
 # --- Ollama ---
 
 
+def _is_localhost_url(url: str) -> bool:
+    """Check that a URL points to a localhost address."""
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or "").lower()
+    return hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1")  # noqa: S104
+
+
 @app.get("/ollama/models")
 def ollama_models(base_url: str = "http://localhost:11434"):
     """Fetch installed models from an Ollama instance."""
     import httpx
+
+    if not _is_localhost_url(base_url):
+        raise HTTPException(status_code=400, detail="Ollama base_url must be a localhost address")
 
     try:
         resp = httpx.get(f"{base_url.rstrip('/')}/api/tags", timeout=5)

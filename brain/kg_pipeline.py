@@ -88,8 +88,8 @@ class KGPipeline:
                 {"path": relative_path, "text": text, "embedding": embedding, "index": i},
             )
 
-    async def run_async(self, file_path: str) -> None:
-        """Process a single note: load, split, embed, write chunks."""
+    def _run_sync(self, file_path: str) -> None:
+        """Process a single note synchronously: load, split, embed, write chunks."""
         path = Path(file_path)
         content = path.read_text(encoding="utf-8")
         relative_path = str(path.relative_to(self.notes_path))
@@ -104,6 +104,12 @@ class KGPipeline:
 
         # Write to database
         self._write_chunks(relative_path, chunks, embeddings)
+
+    async def run_async(self, file_path: str) -> None:
+        """Process a single note without blocking the event loop."""
+        import asyncio
+
+        await asyncio.to_thread(self._run_sync, file_path)
 
 
 def create_kg_pipeline(db: GraphDB, notes_path: Path) -> KGPipeline:

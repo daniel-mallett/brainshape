@@ -1343,3 +1343,76 @@ class TestClaudeCodeProvider:
             json={"session_id": session_id, "message": "hi"},
         )
         assert resp.status_code == 200
+
+
+class TestOllamaModels:
+    def test_success(self, client, monkeypatch):
+        import httpx
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "models": [
+                {"name": "llama3:latest", "size": 4_000_000_000},
+                {"name": "mistral:latest"},
+            ]
+        }
+        mock_response.raise_for_status = MagicMock()
+        monkeypatch.setattr(httpx, "get", MagicMock(return_value=mock_response))
+
+        resp = client.get("/ollama/models?base_url=http://localhost:11434")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["models"]) == 2
+        assert data["models"][0]["name"] == "llama3:latest"
+        assert data["models"][1]["size"] == 0  # missing size defaults to 0
+
+    def test_connect_error(self, client, monkeypatch):
+        import httpx
+
+        monkeypatch.setattr(
+            httpx,
+            "get",
+            MagicMock(side_effect=httpx.ConnectError("Connection refused")),
+        )
+
+        resp = client.get("/ollama/models?base_url=http://localhost:11434")
+        assert resp.status_code == 502
+        assert "Cannot connect" in resp.json()["detail"]
+
+    def test_generic_error(self, client, monkeypatch):
+        import httpx
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+        mock_req = MagicMock()
+        monkeypatch.setattr(
+            httpx,
+            "get",
+            MagicMock(
+                side_effect=httpx.HTTPStatusError("500", request=mock_req, response=mock_resp)
+            ),
+        )
+
+        resp = client.get("/ollama/models?base_url=http://localhost:11434")
+        assert resp.status_code == 502
+        assert "Ollama error" in resp.json()["detail"]
+
+    def test_rejects_non_localhost(self, client):
+        resp = client.get("/ollama/models?base_url=http://169.254.169.254")
+        assert resp.status_code == 400
+        assert "localhost" in resp.json()["detail"]
+
+    def test_rejects_external_host(self, client):
+        resp = client.get("/ollama/models?base_url=http://evil.com:11434")
+        assert resp.status_code == 400
+
+    def test_allows_127_0_0_1(self, client, monkeypatch):
+        import httpx
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"models": []}
+        mock_response.raise_for_status = MagicMock()
+        monkeypatch.setattr(httpx, "get", MagicMock(return_value=mock_response))
+
+        resp = client.get("/ollama/models?base_url=http://127.0.0.1:11434")
+        assert resp.status_code == 200

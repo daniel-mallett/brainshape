@@ -30,7 +30,7 @@ def _transcribe_local(audio_path: str | Path, settings: dict) -> dict:
     global _local_model_path
 
     try:
-        import mlx_whisper
+        import mlx_whisper  # type: ignore[unresolved-import]
     except ImportError:
         raise RuntimeError(
             "Local transcription requires mlx-whisper, which only works on "

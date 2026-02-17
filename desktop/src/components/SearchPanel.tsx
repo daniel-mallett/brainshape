@@ -92,12 +92,9 @@ export function SearchPanel({ onNavigateToNote }: SearchPanelProps) {
   };
 
   return (
-    <div className="flex flex-col h-full" style={{ backgroundColor: "var(--bg-primary)" }}>
+    <div className="flex flex-col h-full bg-background">
       {/* Header */}
-      <div
-        className="flex flex-col gap-3 p-4 border-b"
-        style={{ borderColor: "var(--border-primary)" }}
-      >
+      <div className="flex flex-col gap-3 p-4 border-b border-border">
         <div className="flex items-center gap-2">
           <Input
             ref={inputRef}
@@ -109,40 +106,28 @@ export function SearchPanel({ onNavigateToNote }: SearchPanelProps) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="flex-1"
-            style={{
-              backgroundColor: "var(--bg-secondary)",
-              borderColor: "var(--border-primary)",
-              color: "var(--text-primary)",
-            }}
           />
         </div>
         <div className="flex items-center gap-2">
           {/* Mode toggle */}
-          <div
-            className="flex rounded-md overflow-hidden border"
-            style={{ borderColor: "var(--border-primary)" }}
-          >
+          <div className="flex rounded-md overflow-hidden border border-border">
             <button
               onClick={() => setMode("keyword")}
-              className="px-3 py-1 text-xs font-medium transition-colors"
-              style={{
-                backgroundColor:
-                  mode === "keyword" ? "var(--accent-primary)" : "var(--bg-secondary)",
-                color:
-                  mode === "keyword" ? "var(--bg-primary)" : "var(--text-secondary)",
-              }}
+              className={`px-3 py-1 text-xs font-medium transition-colors ${
+                mode === "keyword"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground"
+              }`}
             >
               Keyword
             </button>
             <button
               onClick={() => setMode("semantic")}
-              className="px-3 py-1 text-xs font-medium transition-colors"
-              style={{
-                backgroundColor:
-                  mode === "semantic" ? "var(--accent-primary)" : "var(--bg-secondary)",
-                color:
-                  mode === "semantic" ? "var(--bg-primary)" : "var(--text-secondary)",
-              }}
+              className={`px-3 py-1 text-xs font-medium transition-colors ${
+                mode === "semantic"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground"
+              }`}
             >
               Smart
             </button>
@@ -152,12 +137,7 @@ export function SearchPanel({ onNavigateToNote }: SearchPanelProps) {
             <select
               value={tag}
               onChange={(e) => setTag(e.target.value)}
-              className="text-xs px-2 py-1 rounded border"
-              style={{
-                backgroundColor: "var(--bg-secondary)",
-                borderColor: "var(--border-primary)",
-                color: "var(--text-secondary)",
-              }}
+              className="text-xs px-2 py-1 rounded border border-border bg-muted text-muted-foreground"
             >
               <option value="">All tags</option>
               {tags.map((t) => (
@@ -169,7 +149,7 @@ export function SearchPanel({ onNavigateToNote }: SearchPanelProps) {
           )}
           {/* Result count */}
           {hasSearched && (
-            <span className="text-xs ml-auto" style={{ color: "var(--text-muted)" }}>
+            <span className="text-xs ml-auto text-muted-foreground">
               {results.length} result{results.length !== 1 ? "s" : ""}
             </span>
           )}
@@ -180,23 +160,21 @@ export function SearchPanel({ onNavigateToNote }: SearchPanelProps) {
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-2">
           {loading && (
-            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-              Searching...
-            </p>
+            <p className="text-sm text-muted-foreground">Searching...</p>
           )}
           {!loading && !hasSearched && !query.trim() && (
             <div className="text-center py-12">
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+              <p className="text-sm text-muted-foreground">
                 Type to search your notes
               </p>
-              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+              <p className="text-xs mt-1 text-muted-foreground">
                 Use <strong>Keyword</strong> for exact matches or{" "}
                 <strong>Smart</strong> for meaning-based search
               </p>
             </div>
           )}
           {!loading && hasSearched && results.length === 0 && (
-            <p className="text-sm text-center py-8" style={{ color: "var(--text-muted)" }}>
+            <p className="text-sm text-center py-8 text-muted-foreground">
               No results found
             </p>
           )}
@@ -204,40 +182,20 @@ export function SearchPanel({ onNavigateToNote }: SearchPanelProps) {
             <button
               key={`${r.path}-${i}`}
               onClick={() => onNavigateToNote(r.path)}
-              className="w-full text-left p-3 rounded-lg border transition-colors hover:border-[var(--accent-primary)]"
-              style={{
-                backgroundColor: "var(--bg-secondary)",
-                borderColor: "var(--border-primary)",
-              }}
+              className="w-full text-left p-3 rounded-lg border border-border bg-card text-card-foreground transition-colors hover:bg-accent"
             >
               <div className="flex items-center justify-between mb-1">
-                <span
-                  className="font-medium text-sm"
-                  style={{ color: "var(--text-primary)" }}
-                >
+                <span className="font-medium text-sm">
                   {r.title}
                 </span>
-                <span
-                  className="text-xs px-1.5 py-0.5 rounded"
-                  style={{
-                    backgroundColor: "var(--accent-primary)",
-                    color: "var(--bg-primary)",
-                    opacity: 0.8,
-                  }}
-                >
+                <span className="text-xs px-1.5 py-0.5 rounded bg-primary text-primary-foreground opacity-80">
                   {formatScore(r.score)}
                 </span>
               </div>
-              <p
-                className="text-xs leading-relaxed line-clamp-2"
-                style={{ color: "var(--text-secondary)" }}
-              >
+              <p className="text-xs leading-relaxed line-clamp-2 text-muted-foreground">
                 {highlightSnippet(r.snippet || "", query)}
               </p>
-              <span
-                className="text-xs mt-1 block"
-                style={{ color: "var(--text-muted)" }}
-              >
+              <span className="text-xs mt-1 block text-muted-foreground/70">
                 {r.path}
               </span>
             </button>

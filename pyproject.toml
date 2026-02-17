@@ -12,7 +12,6 @@ dependencies = [
     "langchain-ollama>=1.0.1",
     "langgraph>=1.0.8",
     "mcp>=1.26.0",
-    "mlx-whisper>=0.4.3",
     "pydantic-settings>=2.12.0",
     "python-frontmatter>=1.1.0",
     "python-multipart>=0.0.22",
@@ -22,6 +21,9 @@ dependencies = [
     "uvicorn>=0.40.0",
     "watchdog>=6.0.0",
 ]
+
+[project.optional-dependencies]
+apple = ["mlx-whisper>=0.4.3"]
 
 [dependency-groups]
 dev = [
