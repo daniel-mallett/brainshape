@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from brain.graph_db import GraphDB
+
+logger = logging.getLogger(__name__)
 
 
 def _split_text(text: str, chunk_size: int = 4000, chunk_overlap: int = 200) -> list[str]:
@@ -47,6 +50,10 @@ class KGPipeline:
                 f"FIELDS embedding HNSW DIMENSION {embedding_dimensions} TYPE F32 DIST COSINE"
             )
         except Exception:
+            logger.warning(
+                "Vector index incompatible (dimensions changed?) "
+                "— rebuilding index and clearing chunks"
+            )
             db.query("REMOVE INDEX IF EXISTS chunk_embeddings ON TABLE chunk")
             db.query("DELETE chunk")
             db.query("UPDATE note SET content_hash = NONE")

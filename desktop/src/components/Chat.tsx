@@ -85,6 +85,8 @@ export function Chat({ onNavigateToNote, shikiTheme }: {
     useAgentStream();
   const [input, setInput] = useState("");
   const scrollEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
   const wikilinkRef = useWikilinkClick(onNavigateToNote);
 
   const streamdownPlugins = useMemo(() => {
@@ -92,8 +94,27 @@ export function Chat({ onNavigateToNote, shikiTheme }: {
     return { code: createCodePlugin({ themes }) };
   }, [shikiTheme]);
 
+  // Track whether user has scrolled up from the bottom
   useEffect(() => {
-    scrollEndRef.current?.scrollIntoView({ behavior: "instant" });
+    const el = scrollAreaRef.current?.querySelector("[data-radix-scroll-area-viewport]");
+    if (!el) return;
+    const handleScroll = () => {
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      userScrolledUpRef.current = distanceFromBottom > 80;
+    };
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Reset scroll lock when streaming ends or new messages start
+  useEffect(() => {
+    if (!isStreaming) userScrolledUpRef.current = false;
+  }, [isStreaming]);
+
+  useEffect(() => {
+    if (!userScrolledUpRef.current) {
+      scrollEndRef.current?.scrollIntoView({ behavior: "instant" });
+    }
   }, [messages]);
 
   const handleSubmit = (e: FormEvent) => {
@@ -113,6 +134,7 @@ export function Chat({ onNavigateToNote, shikiTheme }: {
             onClick={resetSession}
             disabled={isStreaming}
             title="New chat"
+            aria-label="New chat"
             className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-accent-foreground transition-colors disabled:opacity-50"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -123,7 +145,7 @@ export function Chat({ onNavigateToNote, shikiTheme }: {
         )}
       </div>
 
-      <ScrollArea className="flex-1 overflow-hidden">
+      <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-hidden">
         <div className="p-3 space-y-3">
           {messages.length === 0 && (
             <div className="text-center mt-8 space-y-4">

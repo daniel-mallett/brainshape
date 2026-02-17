@@ -109,16 +109,16 @@ const clickHandler = EditorView.domEventHandlers({
   },
 });
 
-// Theme for wikilinks and tags
+// Theme for wikilinks and tags — uses CSS variables so colors follow the active theme
 const wikilinkTheme = EditorView.baseTheme({
   ".cm-wikilink": {
-    color: "#3b82f6",
+    color: "var(--editor-link, #3b82f6)",
     textDecoration: "underline",
     textDecorationStyle: "dotted",
     cursor: "pointer",
   },
   ".cm-tag-highlight": {
-    color: "#a855f7",
+    color: "var(--editor-tag, #a855f7)",
   },
 });
 

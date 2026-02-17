@@ -107,6 +107,30 @@ class TestKGPipelineEmbedQuery:
         mock_model.encode.assert_called_once_with("test query")
 
 
+class TestKGPipelineIndexMigration:
+    def test_index_recreation_logs_warning(self, caplog):
+        """Regression: index dimension mismatch should log a warning during rebuild."""
+        import logging
+
+        mock_db = MagicMock()
+        # First DEFINE fails (dimension mismatch), second succeeds
+        mock_db.query.side_effect = [
+            Exception("dimension mismatch"),  # First DEFINE
+            None,  # REMOVE INDEX
+            None,  # DELETE chunk
+            None,  # UPDATE note
+            None,  # Second DEFINE
+        ]
+
+        with (
+            patch("sentence_transformers.SentenceTransformer"),
+            caplog.at_level(logging.WARNING, logger="brain.kg_pipeline"),
+        ):
+            KGPipeline(mock_db, MagicMock(), embedding_dimensions=384)
+
+        assert any("Vector index incompatible" in r.message for r in caplog.records)
+
+
 class TestCreateKgPipeline:
     @patch("brain.kg_pipeline.KGPipeline")
     def test_reads_settings(self, mock_cls, tmp_path, monkeypatch):

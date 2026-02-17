@@ -124,49 +124,26 @@ async def stream_claude_code_response(
 
         _active_sessions.add(session_id)
 
-        if process.stdout is None:  # pragma: no cover — guaranteed by PIPE
-            yield {"event": "error", "data": "Failed to open subprocess stdout"}
-            return
+        try:
+            if process.stdout is None:  # pragma: no cover — guaranteed by PIPE
+                yield {"event": "error", "data": "Failed to open subprocess stdout"}
+                return
 
-        async for raw_line in process.stdout:
-            line = raw_line.decode("utf-8").strip()
-            if not line:
-                continue
-            try:
-                data = json.loads(line)
-            except json.JSONDecodeError:
-                continue
+            async for raw_line in process.stdout:
+                line = raw_line.decode("utf-8").strip()
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
 
-            etype = data.get("type")
+                etype = data.get("type")
 
-            # ── Streaming content deltas (Anthropic API format) ──
-            if etype == "content_block_start":
-                block = data.get("content_block", {})
-                if block.get("type") == "tool_use":
-                    name = block.get("name", "")
-                    if name:
-                        yield {
-                            "event": "tool_call",
-                            "data": json.dumps({"name": name, "args": {}}),
-                        }
-
-            elif etype == "content_block_delta":
-                delta = data.get("delta", {})
-                if delta.get("type") == "text_delta":
-                    text = delta.get("text", "")
-                    if text:
-                        yield {"event": "text", "data": json.dumps(text)}
-
-            # ── Complete assistant messages (Claude Code wrapper format) ──
-            elif etype == "assistant":
-                msg = data.get("message", {})
-                for block in msg.get("content", []):
-                    btype = block.get("type")
-                    if btype == "text":
-                        text = block.get("text", "")
-                        if text:
-                            yield {"event": "text", "data": json.dumps(text)}
-                    elif btype == "tool_use":
+                # ── Streaming content deltas (Anthropic API format) ──
+                if etype == "content_block_start":
+                    block = data.get("content_block", {})
+                    if block.get("type") == "tool_use":
                         name = block.get("name", "")
                         if name:
                             yield {
@@ -174,20 +151,52 @@ async def stream_claude_code_response(
                                 "data": json.dumps({"name": name, "args": {}}),
                             }
 
-            elif etype == "result":
-                if data.get("is_error"):
-                    yield {
-                        "event": "error",
-                        "data": data.get("error", "Unknown error from claude"),
-                    }
+                elif etype == "content_block_delta":
+                    delta = data.get("delta", {})
+                    if delta.get("type") == "text_delta":
+                        text = delta.get("text", "")
+                        if text:
+                            yield {"event": "text", "data": json.dumps(text)}
 
-        await process.wait()
+                # ── Complete assistant messages (Claude Code wrapper format) ──
+                elif etype == "assistant":
+                    msg = data.get("message", {})
+                    for block in msg.get("content", []):
+                        btype = block.get("type")
+                        if btype == "text":
+                            text = block.get("text", "")
+                            if text:
+                                yield {"event": "text", "data": json.dumps(text)}
+                        elif btype == "tool_use":
+                            name = block.get("name", "")
+                            if name:
+                                yield {
+                                    "event": "tool_call",
+                                    "data": json.dumps({"name": name, "args": {}}),
+                                }
 
-        if process.returncode != 0 and process.stderr:
-            stderr_data = await process.stderr.read()
-            error_msg = stderr_data.decode("utf-8").strip()
-            if error_msg:
-                yield {"event": "error", "data": error_msg}
+                elif etype == "result":
+                    if data.get("is_error"):
+                        yield {
+                            "event": "error",
+                            "data": data.get("error", "Unknown error from claude"),
+                        }
+
+            await process.wait()
+
+            if process.returncode != 0 and process.stderr:
+                stderr_data = await process.stderr.read()
+                error_msg = stderr_data.decode("utf-8").strip()
+                if error_msg:
+                    yield {"event": "error", "data": error_msg}
+        finally:
+            # Kill the subprocess if still running (e.g. client disconnected)
+            if process.returncode is None:
+                try:
+                    process.terminate()
+                    await asyncio.wait_for(process.wait(), timeout=5)
+                except (ProcessLookupError, TimeoutError):
+                    process.kill()
 
     finally:
         Path(config_path).unlink(missing_ok=True)

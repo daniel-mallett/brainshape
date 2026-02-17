@@ -41,6 +41,16 @@ class TestLoadSettings:
         settings = load_settings()
         assert settings == DEFAULTS
 
+    def test_corrupt_file_logs_warning(self, tmp_settings_file, caplog):
+        """Regression: corrupt settings file should log a warning, not silently use defaults."""
+        tmp_settings_file.write_text("not json{{{")
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="brain.settings"):
+            settings = load_settings()
+        assert settings == DEFAULTS
+        assert any("Failed to read settings file" in r.message for r in caplog.records)
+
 
 class TestSaveSettings:
     def test_saves_known_keys(self, tmp_settings_file):

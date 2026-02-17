@@ -47,6 +47,7 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
   const filePathRef = useRef(filePath);
   const liveContentRef = useRef(content);
   const inlineCompartmentRef = useRef(new Compartment());
+  const themeCompartmentRef = useRef(new Compartment());
   const [showPreview, setShowPreview] = useState(false);
   const [liveContent, setLiveContent] = useState(content);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
@@ -62,20 +63,34 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
   useEffect(() => {
     setLiveContent(content);
     liveContentRef.current = content;
+
+    // If editor exists and content changed externally (not from typing),
+    // update the editor document to reflect the new content.
+    const view = viewRef.current;
+    if (view) {
+      const currentDoc = view.state.doc.toString();
+      if (content !== currentDoc) {
+        view.dispatch({
+          changes: { from: 0, to: currentDoc.length, insert: content },
+        });
+      }
+    }
   }, [content]);
 
   function saveToServer(text: string) {
-    if (!filePathRef.current) return;
+    const currentPath = filePathRef.current;
+    if (!currentPath) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     setSaveStatus("saving");
     saveTimeoutRef.current = setTimeout(async () => {
       try {
-        await updateNoteFile(filePathRef.current!, text);
+        await updateNoteFile(currentPath, text);
         setSaveStatus("saved");
         if (saveStatusTimeoutRef.current) clearTimeout(saveStatusTimeoutRef.current);
         saveStatusTimeoutRef.current = setTimeout(() => setSaveStatus("idle"), 2000);
       } catch (err) {
         console.error("Save failed:", err);
+        if (saveStatusTimeoutRef.current) clearTimeout(saveStatusTimeoutRef.current);
         setSaveStatus("error");
       }
     }, 1000);
@@ -102,7 +117,7 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       markdown({ codeLanguages: languages, extensions: GFM }),
-      ...brainThemeExtension(),
+      themeCompartmentRef.current.of(brainThemeExtension()),
       brainAutocompletion,
       wikilinkExtension,
       EditorView.updateListener.of((update) => {
@@ -162,6 +177,22 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
       ),
     });
   }, [inlineFormatting]);
+
+  // Observe dark/light mode changes and reconfigure the theme compartment
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      viewRef.current?.dispatch({
+        effects: themeCompartmentRef.current.reconfigure(
+          brainThemeExtension()
+        ),
+      });
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   if (!filePath) {
     return (

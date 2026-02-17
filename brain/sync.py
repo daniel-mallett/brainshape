@@ -43,12 +43,6 @@ async def sync_semantic_async(db: GraphDB, pipeline: KGPipeline, notes_path: Pat
             stats["skipped"] += 1
             continue
 
-        # Clear old chunks for this note before re-processing
-        db.query(
-            "DELETE chunk WHERE ->from_document->(note WHERE path = $path)",
-            {"path": relative_path},
-        )
-
         try:
             await pipeline.run_async(str(file_path))
             db.query(

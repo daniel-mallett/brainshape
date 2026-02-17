@@ -108,6 +108,58 @@ class TestNoteChangeHandler:
         callback.assert_called_once()
         assert handler._timer is None
 
+    def test_fire_clears_timer_under_lock(self):
+        """Regression: _fire must clear _timer inside the lock to prevent races."""
+        callback = MagicMock()
+        handler = NoteChangeHandler(callback)
+        handler._debounce_seconds = 0.05
+
+        event = MagicMock()
+        event.is_directory = False
+        event.src_path = "/notes/test.md"
+
+        handler.on_modified(event)
+        time.sleep(0.15)  # Wait for fire
+
+        # Verify _timer is None (cleared inside lock)
+        with handler._lock:
+            assert handler._timer is None
+
+        # Now trigger another event — should work correctly
+        handler.on_modified(event)
+        time.sleep(0.15)
+        assert callback.call_count == 2
+
+    def test_concurrent_fire_and_schedule(self):
+        """Regression: _fire and _schedule_sync should not race on _timer."""
+        import threading
+
+        call_count = 0
+        call_lock = threading.Lock()
+
+        def slow_callback():
+            nonlocal call_count
+            time.sleep(0.05)
+            with call_lock:
+                call_count += 1
+
+        handler = NoteChangeHandler(slow_callback)
+        handler._debounce_seconds = 0.05
+
+        event = MagicMock()
+        event.is_directory = False
+        event.src_path = "/notes/test.md"
+
+        # Trigger an event, let it fire, then immediately trigger another
+        handler.on_modified(event)
+        time.sleep(0.08)  # Timer fires, callback starts
+        handler.on_modified(event)  # Schedule new while old callback runs
+        time.sleep(0.2)
+
+        # Both callbacks should have completed without errors
+        with call_lock:
+            assert call_count == 2
+
 
 class TestStartWatcher:
     def test_starts_and_stops(self, tmp_path):

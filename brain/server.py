@@ -386,9 +386,10 @@ def _delete_note_from_graph(db: GraphDB, path: str) -> None:
         {"path": path},
     )
     nid_q = "(SELECT VALUE id FROM note WHERE path = $path)[0]"
-    db.query(f"DELETE tagged_with WHERE in = {nid_q}", {"path": path})
-    db.query(f"DELETE links_to WHERE in = {nid_q}", {"path": path})
-    db.query(f"DELETE links_to WHERE out = {nid_q}", {"path": path})
+    # Clean edges from all relation tables (structural + custom agent-created)
+    for edge_table in db.get_relation_tables(exclude_internal=False):
+        db.query(f"DELETE {edge_table} WHERE in = {nid_q}", {"path": path})
+        db.query(f"DELETE {edge_table} WHERE out = {nid_q}", {"path": path})
     db.query("DELETE note WHERE path = $path", {"path": path})
 
 
@@ -563,6 +564,7 @@ _LABEL_TO_TABLE = {"Note": "note", "Tag": "tag", "Memory": "memory", "Chunk": "c
 @app.get("/graph/overview")
 def graph_overview(limit: int = 200, label: str = ""):
     db = _require_db()
+    limit = min(limit, 500)
     params: dict = {"limit": limit}
 
     # Fetch nodes from each table (exclude Chunk by default)
@@ -798,12 +800,19 @@ def delete_memory(memory_id: str):
     existing = db.query("SELECT mid FROM memory WHERE mid = $id", {"id": memory_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Memory not found")
+    # Clean edges from all relation tables before deleting the memory
+    mid_q = "(SELECT VALUE id FROM memory WHERE mid = $id)[0]"
+    for edge_table in db.get_relation_tables(exclude_internal=False):
+        db.query(f"DELETE {edge_table} WHERE in = {mid_q}", {"id": memory_id})
+        db.query(f"DELETE {edge_table} WHERE out = {mid_q}", {"id": memory_id})
     db.query("DELETE memory WHERE mid = $id", {"id": memory_id})
     return {"status": "ok"}
 
 
 @app.put("/graph/memory/{memory_id}")
 def update_memory(memory_id: str, req: UpdateMemoryRequest):
+    if not req.content.strip():
+        raise HTTPException(status_code=400, detail="Memory content cannot be empty")
     db = _require_db()
     result = db.query(
         "UPDATE memory SET content = $content WHERE mid = $id RETURN mid AS id",
@@ -1181,6 +1190,10 @@ async def put_settings(req: UpdateSettingsRequest):
     if req.notes_path is not None:
         new_path = Path(req.notes_path).expanduser()
         init_notes(new_path)
+
+        # Recreate pipeline with new notes_path so relative path computation works
+        if _db is not None and _pipeline is not None:
+            _pipeline = create_kg_pipeline(_db, new_path)
 
         # Restart file watcher for new path
         global _observer

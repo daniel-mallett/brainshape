@@ -100,6 +100,23 @@ class TestSyncSemantic:
         assert stats["skipped"] == 1
         assert stats["processed"] == 0
 
+    def test_no_chunk_pre_delete(self, tmp_path):
+        """Regression: sync_semantic should NOT delete chunks before processing.
+
+        The pipeline's _write_chunks handles its own cleanup. Pre-deleting
+        causes data loss if the pipeline fails after the delete.
+        """
+        (tmp_path / "note.md").write_text("Content for embedding")
+        db = MagicMock()
+        pipeline = MagicMock()
+        pipeline.run_async = AsyncMock(return_value=None)
+        db.query.return_value = []
+        sync_semantic(db, pipeline, tmp_path)
+        # The only DELETE should NOT happen before run_async — verify that
+        # no standalone "DELETE chunk" call is made outside the pipeline
+        delete_calls = [c for c in db.query.call_args_list if "DELETE chunk" in str(c)]
+        assert len(delete_calls) == 0
+
 
 class TestSyncEmptyDir:
     def test_structural_empty_dir(self, tmp_path):

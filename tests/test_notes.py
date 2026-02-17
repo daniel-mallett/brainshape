@@ -284,6 +284,21 @@ class TestParseNoteRegexFixes:
         assert "real" in result["tags"]
         assert "fake-tag" not in result["tags"]
 
+    def test_wikilinks_not_extracted_from_code_blocks(self, tmp_path):
+        """Regression: wikilinks inside fenced code blocks should be ignored."""
+        f = tmp_path / "test.md"
+        f.write_text(
+            "Link to [[Real Note]]\n\n"
+            "```python\n"
+            "# Example: [[Fake Link]]\n"
+            "```\n\n"
+            "Another [[Also Real]]"
+        )
+        result = parse_note(f, tmp_path)
+        assert "Real Note" in result["links"]
+        assert "Also Real" in result["links"]
+        assert "Fake Link" not in result["links"]
+
     def test_tag_case_insensitive_dedup(self, tmp_path):
         f = tmp_path / "test.md"
         f.write_text("#Python and #python are the same")
@@ -457,3 +472,21 @@ class TestImportVault:
         assert stats["files_copied"] == 1
         assert not (dest / "image.png").exists()
         assert not (dest / "data.json").exists()
+
+    def test_skips_existing_files(self, tmp_path):
+        """Regression: existing files at destination should not be overwritten."""
+        source = tmp_path / "source"
+        dest = tmp_path / "dest"
+        source.mkdir()
+        dest.mkdir()
+        (source / "existing.md").write_text("# New version")
+        (dest / "existing.md").write_text("# Old version — keep this")
+        (source / "new.md").write_text("# Brand new")
+
+        stats = import_vault(source, dest)
+        assert stats["files_copied"] == 1
+        assert stats["files_skipped"] == 1
+        # Existing file should NOT be overwritten
+        assert (dest / "existing.md").read_text() == "# Old version — keep this"
+        # New file should be imported
+        assert (dest / "new.md").read_text() == "# Brand new"

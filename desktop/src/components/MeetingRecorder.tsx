@@ -79,6 +79,7 @@ export function MeetingRecorder({ onClose, onComplete }: MeetingRecorderProps) {
               size="sm"
               className="h-6 w-6 p-0 text-muted-foreground"
               onClick={onClose}
+              aria-label="Close"
             >
               &times;
             </Button>

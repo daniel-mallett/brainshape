@@ -41,7 +41,8 @@ class NoteChangeHandler(FileSystemEventHandler):
             self._timer.start()
 
     def _fire(self) -> None:
-        self._timer = None
+        with self._lock:
+            self._timer = None
         try:
             self._on_change()
         except Exception:

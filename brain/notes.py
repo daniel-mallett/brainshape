@@ -47,9 +47,13 @@ def _clean_wikilink(raw: str) -> str:
 
 
 def _extract_wikilinks(content: str) -> list[str]:
-    """Extract wikilink targets from content, skipping image/file embeds."""
+    """Extract wikilink targets from content, skipping image/file embeds.
+
+    Strips fenced code blocks first so ``[[links]]`` inside code aren't treated
+    as real wikilinks.
+    """
     links = []
-    for raw in WIKILINK_RE.findall(content):
+    for raw in WIKILINK_RE.findall(_strip_fenced_code(content)):
         cleaned = _clean_wikilink(raw)
         if not cleaned:
             continue
@@ -413,6 +417,10 @@ def import_vault(source_path: Path, notes_path: Path) -> dict:
             dest.parent.mkdir(parents=True, exist_ok=True)
             created_dirs.add(dest.parent)
             stats["folders_created"] += 1
+
+        if dest.exists():
+            stats["files_skipped"] += 1
+            continue
 
         shutil.copy2(md_file, dest)
         stats["files_copied"] += 1

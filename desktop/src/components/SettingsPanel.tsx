@@ -246,6 +246,8 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
   const [themeOverrides, setThemeOverrides] = useState<Record<string, string>>({});
   const [customThemes, setCustomThemes] = useState<Theme[]>([]);
   const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [savingAsCustom, setSavingAsCustom] = useState(false);
+  const [customThemeName, setCustomThemeName] = useState("");
   const [fontFamily, setFontFamily] = useState("");
   const [editorFontSize, setEditorFontSize] = useState(14);
 
@@ -425,6 +427,26 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
     markDirty();
   };
 
+  const handleSaveCustomTheme = () => {
+    const name = customThemeName.trim();
+    if (!name) return;
+    const base = BUILTIN_THEMES.find((t) => t.name === themeName) ||
+      customThemes.find((t) => t.name === themeName) || DEFAULT_THEME;
+    const newTheme: Theme = {
+      ...base,
+      ...themeOverrides,
+      name,
+      mode: base.mode,
+      codeTheme: base.codeTheme,
+    } as Theme;
+    setCustomThemes((prev) => [...prev.filter((t) => t.name !== name), newTheme]);
+    setThemeName(name);
+    setThemeOverrides({});
+    setSavingAsCustom(false);
+    setCustomThemeName("");
+    markDirty();
+  };
+
   const handleImport = async () => {
     if (!importPath.trim()) return;
     setImporting(true);
@@ -564,30 +586,42 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
                   <Button variant="ghost" size="sm" className="text-xs flex-1" onClick={handleResetColors}>
                     Reset to defaults
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs flex-1"
-                    onClick={() => {
-                      const name = prompt("Name for custom theme:");
-                      if (!name?.trim()) return;
-                      const base = BUILTIN_THEMES.find((t) => t.name === themeName) ||
-                        customThemes.find((t) => t.name === themeName) || DEFAULT_THEME;
-                      const newTheme: Theme = {
-                        ...base,
-                        ...themeOverrides,
-                        name: name.trim(),
-                        mode: base.mode,
-                        codeTheme: base.codeTheme,
-                      } as Theme;
-                      setCustomThemes((prev) => [...prev.filter((t) => t.name !== name.trim()), newTheme]);
-                      setThemeName(name.trim());
-                      setThemeOverrides({});
-                      markDirty();
-                    }}
-                  >
-                    Save as Custom
-                  </Button>
+                  {savingAsCustom ? (
+                    <div className="flex gap-1 flex-1">
+                      <Input
+                        value={customThemeName}
+                        onChange={(e) => setCustomThemeName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleSaveCustomTheme();
+                          if (e.key === "Escape") {
+                            setSavingAsCustom(false);
+                            setCustomThemeName("");
+                          }
+                        }}
+                        placeholder="Theme name..."
+                        className="h-7 text-xs flex-1"
+                        autoFocus
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={handleSaveCustomTheme}
+                        disabled={!customThemeName.trim()}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs flex-1"
+                      onClick={() => setSavingAsCustom(true)}
+                    >
+                      Save as Custom
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
@@ -652,6 +686,9 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
             <section className="flex items-center justify-between">
               <FieldLabel>Line Numbers</FieldLabel>
               <button
+                role="switch"
+                aria-checked={editorLineNumbers}
+                aria-label="Line Numbers"
                 onClick={() => { setEditorLineNumbers(!editorLineNumbers); markDirty(); }}
                 className={`relative w-9 h-5 rounded-full transition-colors ${editorLineNumbers ? "bg-primary" : "bg-muted"}`}
               >
@@ -662,6 +699,9 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
             <section className="flex items-center justify-between">
               <FieldLabel>Word Wrap</FieldLabel>
               <button
+                role="switch"
+                aria-checked={editorWordWrap}
+                aria-label="Word Wrap"
                 onClick={() => { setEditorWordWrap(!editorWordWrap); markDirty(); }}
                 className={`relative w-9 h-5 rounded-full transition-colors ${editorWordWrap ? "bg-primary" : "bg-muted"}`}
               >
@@ -673,6 +713,9 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
               <div className="flex items-center justify-between">
                 <FieldLabel>Inline Formatting</FieldLabel>
                 <button
+                  role="switch"
+                  aria-checked={editorInlineFormatting}
+                  aria-label="Inline Formatting"
                   onClick={() => { setEditorInlineFormatting(!editorInlineFormatting); markDirty(); }}
                   className={`relative w-9 h-5 rounded-full transition-colors ${editorInlineFormatting ? "bg-primary" : "bg-muted"}`}
                 >

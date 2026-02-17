@@ -17,14 +17,23 @@ export function useAgentStream() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const sessionIdRef = useRef<string | null>(null);
+  const sessionInitRef = useRef<Promise<string> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const ensureSession = useCallback(async () => {
-    if (!sessionIdRef.current) {
-      const { session_id } = await initSession();
-      sessionIdRef.current = session_id;
+    if (sessionIdRef.current) return sessionIdRef.current;
+    // Guard against concurrent init calls — reuse in-flight promise
+    if (!sessionInitRef.current) {
+      sessionInitRef.current = initSession()
+        .then(({ session_id }) => {
+          sessionIdRef.current = session_id;
+          return session_id;
+        })
+        .finally(() => {
+          sessionInitRef.current = null;
+        });
     }
-    return sessionIdRef.current;
+    return sessionInitRef.current;
   }, []);
 
   const sendMessage = useCallback(
@@ -40,6 +49,7 @@ export function useAgentStream() {
       const controller = new AbortController();
       abortRef.current = controller;
 
+      let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
       try {
         const res = await fetch(`${BASE_URL}/agent/message`, {
           method: "POST",
@@ -52,13 +62,14 @@ export function useAgentStream() {
           throw new Error(`${res.status}: ${await res.text()}`);
         }
 
-        const reader = res.body?.getReader();
+        reader = res.body?.getReader();
         if (!reader) throw new Error("No response body");
 
         const decoder = new TextDecoder();
         let buffer = "";
 
         while (true) {
+          if (controller.signal.aborted) break;
           const { done, value } = await reader.read();
           if (done) break;
 
@@ -130,6 +141,7 @@ export function useAgentStream() {
           return updated;
         });
       } finally {
+        reader?.cancel().catch(() => {});
         abortRef.current = null;
         setIsStreaming(false);
       }
@@ -141,6 +153,7 @@ export function useAgentStream() {
     abortRef.current?.abort();
     abortRef.current = null;
     sessionIdRef.current = null;
+    sessionInitRef.current = null;
     setMessages([]);
     setIsStreaming(false);
   }, []);

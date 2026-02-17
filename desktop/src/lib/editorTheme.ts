@@ -123,8 +123,13 @@ export function isDarkTheme(): boolean {
   return document.documentElement.classList.contains("dark");
 }
 
+/** Build the dark/light-sensitive theme (without highlight styles). */
+export function brainBaseTheme(dark: boolean) {
+  return EditorView.theme(themeSpec, { dark });
+}
+
 /** Build theme extension with correct dark/light mode. Called when editor is created. */
 export function brainThemeExtension(dark?: boolean) {
   const isDark = dark ?? isDarkTheme();
-  return [EditorView.theme(themeSpec, { dark: isDark }), highlightExt];
+  return [brainBaseTheme(isDark), highlightExt];
 }

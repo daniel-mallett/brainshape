@@ -60,6 +60,7 @@ export function VoiceRecorder({ onTranscription, disabled }: VoiceRecorderProps)
         disabled={disabled || transcribing}
         className="h-8 px-2"
         title={isRecording ? "Stop recording" : "Start voice recording"}
+        aria-label={isRecording ? "Stop recording" : "Start voice recording"}
       >
         {transcribing ? (
           <span className="text-xs">Transcribing...</span>

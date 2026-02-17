@@ -6,8 +6,11 @@ via the settings UI: LLM provider, model selection, etc.
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Settings file lives next to the notes directory
 SETTINGS_FILE = Path("~/.config/brain/settings.json").expanduser()
@@ -108,8 +111,12 @@ def load_settings() -> dict[str, Any]:
             stored = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
             stored = _migrate_settings(stored)
             settings.update(stored)
-        except (json.JSONDecodeError, OSError):
-            pass  # Corrupt file — use defaults
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning(
+                "Failed to read settings file %s: %s — using defaults",
+                SETTINGS_FILE,
+                exc,
+            )
     return settings
 
 

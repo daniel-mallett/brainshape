@@ -127,6 +127,11 @@
   }
 }
 
+/* ─── CodeMirror focus outline override ─── */
+.cm-editor.cm-focused {
+  outline: none !important;
+}
+
 /* ─── Resize handles (react-resizable-panels Separator) ─── */
 
 [data-separator] {

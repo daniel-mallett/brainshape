@@ -23,6 +23,7 @@ export function SearchPanel({ onNavigateToNote }: SearchPanelProps) {
   const [tags, setTags] = useState<string[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestIdRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Fetch available tags on mount
@@ -44,18 +45,21 @@ export function SearchPanel({ onNavigateToNote }: SearchPanelProps) {
         setHasSearched(false);
         return;
       }
+      const thisRequest = ++requestIdRef.current;
       setLoading(true);
       try {
         const searchFn = m === "semantic" ? searchSemantic : searchKeyword;
         const data = await searchFn(q, t || undefined);
+        if (thisRequest !== requestIdRef.current) return; // stale
         setResults(data.results);
         setHasSearched(true);
       } catch (err) {
+        if (thisRequest !== requestIdRef.current) return; // stale
         console.error("Search failed:", err);
         setResults([]);
         setHasSearched(true);
       } finally {
-        setLoading(false);
+        if (thisRequest === requestIdRef.current) setLoading(false);
       }
     },
     []
@@ -110,8 +114,10 @@ export function SearchPanel({ onNavigateToNote }: SearchPanelProps) {
         </div>
         <div className="flex items-center gap-2">
           {/* Mode toggle */}
-          <div className="flex rounded-md overflow-hidden border border-border">
+          <div className="flex rounded-md overflow-hidden border border-border" role="radiogroup" aria-label="Search mode">
             <button
+              role="radio"
+              aria-checked={mode === "keyword"}
               onClick={() => setMode("keyword")}
               className={`px-3 py-1 text-xs font-medium transition-colors ${
                 mode === "keyword"
@@ -122,6 +128,8 @@ export function SearchPanel({ onNavigateToNote }: SearchPanelProps) {
               Keyword
             </button>
             <button
+              role="radio"
+              aria-checked={mode === "semantic"}
               onClick={() => setMode("semantic")}
               className={`px-3 py-1 text-xs font-medium transition-colors ${
                 mode === "semantic"

@@ -109,7 +109,7 @@ export function GraphPanel({ onNavigateToNote }: GraphPanelProps) {
 
       {/* Graph */}
       <div className="flex-1 relative overflow-hidden min-h-0">
-        {loading && (
+        {loading && nodes.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center z-10">
             <span className="text-muted-foreground text-sm">Loading graph...</span>
           </div>

@@ -81,7 +81,8 @@
 - Health check with auto-reconnect polling
 
 ### Testing & CI
-- 429 unit tests (89% coverage) covering all modules including tools (edge cleanup, entity-type matrix, reserved names, duplicate prevention), graph_db (table discovery), server (graph endpoints, memory connections, search), notes (wikilink dedup), settings, transcription providers, watcher, MCP client/server, vault import, trash system, note rename, Claude Code provider, error boundary
+- 445 unit tests (90% coverage) covering all modules including tools (edge cleanup, entity-type matrix, reserved names, duplicate prevention), graph_db (table discovery), server (graph endpoints, memory connections, search), notes (wikilink dedup, code-block filtering), settings, transcription providers, watcher, MCP client/server, vault import (skip-existing), trash system, note rename, Claude Code provider, error boundary
+- Regression tests for: watcher thread safety, settings corrupt file warning, kg_pipeline index migration logging, wikilinks-in-code-blocks, vault import skip-existing, sync chunk pre-delete
 - Server tests properly isolated (noop lifespan, no SurrealDB connection required)
 - CI: GitHub Actions workflow runs ruff, ty, and pytest (with coverage) on push/PR to main
 - Pre-commit hooks: ruff lint, ruff format, gitleaks secret detection, pytest
@@ -91,6 +92,33 @@
 ## Known Issues
 
 - None currently tracked
+
+## Recent Bug Fixes (Session 3)
+
+### Backend
+- **Watcher thread safety**: `_fire()` now clears `self._timer` inside the lock to prevent race conditions with concurrent `_schedule_sync` calls
+- **Settings corrupt file warning**: `load_settings()` now logs a WARNING when the settings file is corrupt instead of silently falling back to defaults
+- **KG pipeline migration logging**: Vector index rebuilds due to dimension changes now log a WARNING instead of silently proceeding
+
+### Frontend
+- **SearchPanel race condition**: Added request counter (`requestIdRef`) to prevent stale search results from overwriting newer ones when rapidly switching modes
+- **GraphPanel loading flicker**: Loading overlay only shows when no nodes exist yet, preventing flash during filter changes
+- **SettingsPanel `window.prompt()` replacement**: Custom theme save now uses inline input instead of blocking browser dialog
+- **useAgentStream session initialization guard**: Added promise-based lock so concurrent `ensureSession` calls share a single `initSession()` request instead of creating duplicates
+- **MemoryPanel error feedback**: Failed delete/edit operations now show visible error messages instead of only logging to console
+- **ARIA accessibility**: Added proper ARIA attributes across 8 components — role="switch" on toggles, role="radiogroup" on search mode, aria-label on icon-only buttons (SearchPanel, SettingsPanel, Chat, Sidebar, App, MeetingRecorder, VoiceRecorder)
+- **Wikilink/tag theme support**: Replaced hardcoded colors with CSS variables (`var(--editor-link)`, `var(--editor-tag)`) so wikilinks and tags follow the active theme
+
+## Recent Bug Fixes (Session 4)
+
+### Backend
+- **Wikilinks extracted from code blocks**: `_extract_wikilinks()` now strips fenced code blocks before extracting, preventing phantom graph edges from `[[links]]` inside code examples
+- **Vault import file overwrite**: `import_vault()` now skips files that already exist at the destination instead of silently overwriting them, preventing data loss during re-imports
+- **Sync redundant chunk deletion**: Removed pre-delete of chunks in `sync_semantic_async()` — the pipeline's `_write_chunks()` handles its own cleanup. The pre-delete caused data loss when the pipeline failed after deleting but before rewriting
+
+### Frontend
+- **Chat scroll-to-bottom during streaming**: Chat now tracks whether the user has scrolled up and only auto-scrolls if they're near the bottom, allowing review of earlier messages during long streaming responses
+- **Editor external content sync**: Editor now updates its CodeMirror document when the `content` prop changes externally (e.g., agent edits a note), instead of requiring a file switch to see changes
 
 ## Next Steps
 

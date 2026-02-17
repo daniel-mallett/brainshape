@@ -380,6 +380,24 @@ class TestGraphOverview:
         resp = client.get("/graph/overview?label=INVALID")
         assert resp.status_code == 400
 
+    def test_limit_capped_at_500(self, client, server_db):
+        """Limit parameter should be capped at 500 (regression test)."""
+        server_db.get_relation_tables.return_value = []
+        server_db.get_custom_node_tables.return_value = []
+
+        captured_params = []
+
+        def route_query(sql, params=None):
+            if params and "limit" in (params or {}):
+                captured_params.append(params["limit"])
+            return []
+
+        server_db.query.side_effect = route_query
+        resp = client.get("/graph/overview?limit=9999")
+        assert resp.status_code == 200
+        # Verify the limit was capped to 500
+        assert all(p <= 500 for p in captured_params)
+
 
 class TestGraphNeighborhood:
     def test_returns_neighborhood(self, client, server_db):
@@ -630,6 +648,18 @@ class TestGraphMemories:
             json={"content": "x"},
         )
         assert resp.status_code == 404
+
+    def test_update_memory_empty_content(self, client, server_db):
+        """Empty memory content should be rejected (regression test)."""
+        resp = client.put("/graph/memory/m1", json={"content": ""})
+        assert resp.status_code == 400
+        assert "empty" in resp.json()["detail"].lower()
+
+    def test_update_memory_whitespace_only_content(self, client, server_db):
+        """Whitespace-only memory content should be rejected (regression test)."""
+        resp = client.put("/graph/memory/m1", json={"content": "   "})
+        assert resp.status_code == 400
+        assert "empty" in resp.json()["detail"].lower()
 
 
 class TestNoteTags:
@@ -1416,3 +1446,66 @@ class TestOllamaModels:
 
         resp = client.get("/ollama/models?base_url=http://127.0.0.1:11434")
         assert resp.status_code == 200
+
+
+class TestDeleteNoteCustomEdges:
+    """Regression: deleting a note must clean up custom agent-created edges."""
+
+    def test_delete_cleans_custom_edges(self, client, tmp_notes, server_db):
+        """_delete_note_from_graph should clean ALL relation tables, not just
+        tagged_with and links_to."""
+        # Mock get_relation_tables to include a custom edge table
+        server_db.get_relation_tables.return_value = [
+            "tagged_with",
+            "links_to",
+            "from_document",
+            "about",  # custom agent-created edge
+        ]
+        server_db.query.return_value = []
+
+        resp = client.delete("/notes/file/Welcome.md")
+        assert resp.status_code == 200
+
+        # Verify DELETE was called for the custom 'about' table too
+        delete_calls = [str(c) for c in server_db.query.call_args_list if "DELETE about" in str(c)]
+        assert len(delete_calls) >= 1
+
+
+class TestDeleteMemoryCustomEdges:
+    """Regression: deleting a memory must clean up custom agent-created edges."""
+
+    def test_delete_cleans_custom_edges(self, client, server_db):
+        """delete_memory should clean edges from ALL relation tables."""
+        # First call returns existing memory, subsequent calls return []
+        server_db.query.side_effect = lambda q, *a, **kw: (
+            [{"mid": "m1"}] if "SELECT mid" in q else []
+        )
+        server_db.get_relation_tables.return_value = [
+            "tagged_with",
+            "links_to",
+            "from_document",
+            "relates_to",  # custom agent-created edge
+        ]
+        resp = client.delete("/graph/memory/m1")
+        assert resp.status_code == 200
+
+        delete_calls = [
+            str(c) for c in server_db.query.call_args_list if "DELETE relates_to" in str(c)
+        ]
+        assert len(delete_calls) >= 1
+
+
+class TestPipelineNotesPathRefresh:
+    """Regression: changing notes_path in settings must recreate the pipeline."""
+
+    def test_pipeline_recreated_on_notes_path_change(self, client, tmp_path, monkeypatch):
+        new_path = str(tmp_path / "new-notes")
+        mock_create = MagicMock()
+        monkeypatch.setattr("brain.server.create_kg_pipeline", mock_create)
+
+        resp = client.put("/settings", json={"notes_path": new_path})
+        assert resp.status_code == 200
+        # create_kg_pipeline should have been called with the new path
+        mock_create.assert_called_once()
+        call_args = mock_create.call_args
+        assert str(call_args[0][1]) == new_path

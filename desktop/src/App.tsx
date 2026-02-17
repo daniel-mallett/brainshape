@@ -294,7 +294,7 @@ function App() {
               if (panel) {
                 if (sidebarOpen) { panel.collapse(); setSidebarOpen(false); } else { panel.expand(); setSidebarOpen(true); }
               }
-            }} className="h-6 w-6 p-0" title="Toggle file tree">
+            }} className="h-6 w-6 p-0" title="Toggle file tree" aria-label="Toggle file tree" aria-expanded={sidebarOpen}>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
                 <path d="M3.75 3A1.75 1.75 0 0 0 2 4.75v3.26a3.235 3.235 0 0 1 1.75-.51h12.5c.644 0 1.245.188 1.75.51V6.75A1.75 1.75 0 0 0 16.25 5h-4.836a.25.25 0 0 1-.177-.073L9.823 3.513A1.75 1.75 0 0 0 8.586 3H3.75ZM3.75 9A1.75 1.75 0 0 0 2 10.75v4.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0 0 18 15.25v-4.5A1.75 1.75 0 0 0 16.25 9H3.75Z" />
               </svg>
@@ -398,7 +398,7 @@ function App() {
           <div className="relative bg-background border border-border rounded-lg shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between px-4 py-2 border-b border-border">
               <h2 className="text-sm font-semibold">Settings</h2>
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground" onClick={handleCloseSettings}>&times;</Button>
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground" onClick={handleCloseSettings} aria-label="Close settings">&times;</Button>
             </div>
             <div className="flex-1 overflow-y-auto">
               <SettingsPanel dirty={settingsDirty} setDirty={setSettingsDirty} />

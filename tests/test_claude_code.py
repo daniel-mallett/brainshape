@@ -387,3 +387,51 @@ class TestStreamClaudeCodeResponse:
 
         assert "CLAUDECODE" not in captured_env
         assert "PATH" in captured_env
+
+    @pytest.mark.asyncio
+    async def test_subprocess_terminated_on_generator_exit(self):
+        """Regression: subprocess should be terminated if still running when generator closes."""
+        import asyncio as _asyncio
+
+        process = AsyncMock()
+        process.returncode = None  # Still running
+        process.terminate = MagicMock()
+        process.kill = MagicMock()
+        process.wait = AsyncMock()
+
+        # Stdout that yields one event then blocks forever (simulates long-running process)
+        hang = _asyncio.Event()
+
+        async def hanging_stdout():
+            yield (
+                json.dumps(
+                    {
+                        "type": "content_block_delta",
+                        "delta": {"type": "text_delta", "text": "Hello"},
+                    }
+                ).encode("utf-8")
+                + b"\n"
+            )
+            # Block forever — the generator will be closed while waiting here
+            await hang.wait()
+
+        process.stdout = hanging_stdout()
+        process.stderr = AsyncMock()
+        process.stderr.read = AsyncMock(return_value=b"")
+
+        patches = _subprocess_patches(process=process)
+        with patches[0], patches[1], patches[2], patches[3], patches[4]:
+            gen = claude_code.stream_claude_code_response(
+                message="hi",
+                system_prompt="test",
+                session_id="term-test",
+                model="sonnet",
+            )
+            # Get first event
+            event = await gen.__anext__()
+            assert event["event"] == "text"
+            # Explicitly close generator (simulates consumer disconnect)
+            await gen.aclose()
+
+        # The subprocess should have been terminated
+        process.terminate.assert_called_once()

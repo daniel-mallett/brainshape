@@ -31,6 +31,7 @@ export function MemoryPanel() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchMemories = useCallback(async () => {
     try {
@@ -49,17 +50,20 @@ export function MemoryPanel() {
   }, [fetchMemories]);
 
   const handleDelete = async (id: string) => {
+    setError(null);
     try {
       await deleteMemory(id);
       setMemories((prev) => prev.filter((m) => m.id !== id));
       setDeletingId(null);
     } catch (err) {
       console.error("Failed to delete memory:", err);
+      setError("Failed to delete memory");
     }
   };
 
   const handleSaveEdit = async () => {
-    if (!editingId) return;
+    if (!editingId || !editContent.trim()) return;
+    setError(null);
     try {
       await updateMemory(editingId, editContent);
       setMemories((prev) =>
@@ -71,6 +75,7 @@ export function MemoryPanel() {
       setEditContent("");
     } catch (err) {
       console.error("Failed to update memory:", err);
+      setError("Failed to save changes");
     }
   };
 
@@ -109,6 +114,12 @@ export function MemoryPanel() {
         <span>What Brain knows about you</span>
         <span>{memories.length} memories</span>
       </div>
+
+      {error && (
+        <div className="px-3 py-1.5 text-xs text-destructive bg-destructive/10 border-b border-destructive/20">
+          {error}
+        </div>
+      )}
 
       <ScrollArea className="flex-1">
         <div className="p-3 space-y-2">
