@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Compartment, EditorState } from "@codemirror/state";
-import { EditorView, keymap, lineNumbers as lineNumbersExt } from "@codemirror/view";
+import { EditorView, drawSelection, keymap, lineNumbers as lineNumbersExt } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
@@ -98,6 +98,7 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
     if (!containerRef.current) return;
 
     const extensions = [
+      drawSelection(),
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       markdown({ codeLanguages: languages, extensions: GFM }),
@@ -237,7 +238,7 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
 
       {showPreview && (
         <ScrollArea className="flex-1 overflow-hidden">
-          <div className="p-6 max-w-prose">
+          <div className="p-6 max-w-prose mx-auto">
             <Streamdown
               className="sdm-chat"
               plugins={previewPlugins}
@@ -250,10 +251,11 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
         </ScrollArea>
       )}
       <div
-        ref={containerRef}
-        className="flex-1 overflow-hidden"
+        className="flex-1 overflow-hidden flex justify-center"
         style={{ display: showPreview ? "none" : undefined }}
-      />
+      >
+        <div ref={containerRef} className="h-full w-full max-w-[65ch]" />
+      </div>
     </div>
   );
 }

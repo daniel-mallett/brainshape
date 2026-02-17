@@ -24,7 +24,13 @@ const themeSpec = {
   ".cm-cursor, .cm-dropCursor": {
     borderLeftColor: "var(--editor-cursor)",
   },
-  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
+  "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": {
+    background: "var(--editor-selection)",
+  },
+  ".cm-selectionBackground": {
+    background: "var(--editor-selection)",
+  },
+  ".cm-content ::selection": {
     backgroundColor: "var(--editor-selection)",
   },
   ".cm-activeLine": {
