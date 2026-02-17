@@ -21,6 +21,7 @@ brain/
 ├── agent.py                 # create_brain_agent() — model + tools + system prompt
 ├── server.py                # FastAPI server (HTTP + SSE) for desktop app
 ├── settings.py              # Persistent user settings (JSON on disk), LLM provider config
+├── claude_code.py           # Claude Code CLI provider (spawns claude subprocess, stream-json)
 ├── mcp_client.py            # MCP server client, loads external tools via langchain-mcp-adapters
 ├── mcp_server.py            # MCP server exposing tools to external agents (HTTP + stdio)
 ├── watcher.py               # Watchdog file watcher for auto-sync on notes changes
@@ -75,7 +76,8 @@ tests/
 ├── test_watcher.py          # File watcher event handling
 ├── test_transcribe.py       # Transcription provider dispatch, all providers mocked
 ├── test_trash.py            # Trash system (move, list, restore, empty, list exclusion)
-└── test_rename.py           # Note rename, wikilink rewriting
+├── test_rename.py           # Note rename, wikilink rewriting
+└── test_claude_code.py      # Claude Code provider subprocess handling
 ```
 
 ## Data Flow

@@ -38,9 +38,10 @@ interface EditorProps {
   canGoForward?: boolean;
   onGoBack?: () => void;
   onGoForward?: () => void;
+  onShowSidebar?: () => void;
 }
 
-export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode = "vim", lineNumbers = false, wordWrap = true, inlineFormatting = false, shikiTheme, canGoBack, canGoForward, onGoBack, onGoForward }: EditorProps) {
+export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode = "vim", lineNumbers = false, wordWrap = true, inlineFormatting = false, shikiTheme, canGoBack, canGoForward, onGoBack, onGoForward, onShowSidebar }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -181,6 +182,19 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
     <div ref={wikilinkRef} className="h-full flex flex-col min-w-0">
       <div className="px-4 py-1.5 border-b border-border text-sm text-muted-foreground flex items-center justify-between">
         <div className="flex items-center gap-1.5 min-w-0">
+          {onShowSidebar && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 w-5 p-0 shrink-0"
+              onClick={onShowSidebar}
+              title="Show file tree"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                <path d="M3.75 3A1.75 1.75 0 0 0 2 4.75v3.26a3.235 3.235 0 0 1 1.75-.51h12.5c.644 0 1.245.188 1.75.51V6.75A1.75 1.75 0 0 0 16.25 5h-4.836a.25.25 0 0 1-.177-.073L9.823 3.513A1.75 1.75 0 0 0 8.586 3H3.75ZM3.75 9A1.75 1.75 0 0 0 2 10.75v4.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0 0 18 15.25v-4.5A1.75 1.75 0 0 0 16.25 9H3.75Z" />
+              </svg>
+            </Button>
+          )}
           <div className="flex gap-0.5 shrink-0">
             <Button
               variant="ghost"

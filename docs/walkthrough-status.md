@@ -36,7 +36,7 @@
 
 ### Unit Tests — DONE
 
-396 unit tests (89% coverage) covering all modules including tools (edge cleanup, entity-type matrix, reserved names, duplicate prevention), graph_db (table discovery), server (graph endpoints, memory connections, search), notes (wikilink dedup), settings, transcription providers, watcher, MCP client/server, vault import, trash system, note rename. All external deps mocked. Run with `uv run pytest`.
+429 unit tests (89% coverage) covering all modules including tools (edge cleanup, entity-type matrix, reserved names, duplicate prevention), graph_db (table discovery), server (graph endpoints, memory connections, search), notes (wikilink dedup), settings, transcription providers, watcher, MCP client/server, vault import, trash system, note rename, Claude Code provider. All external deps mocked. Run with `uv run pytest`.
 
 ### Other Items — DONE
 

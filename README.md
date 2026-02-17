@@ -2,32 +2,35 @@
 
 [![CI](https://github.com/daniel-mallett/brain/actions/workflows/ci.yml/badge.svg)](https://github.com/daniel-mallett/brain/actions/workflows/ci.yml)
 
-A personal second-brain agent with knowledge graph memory. Brain connects your markdown notes to a Neo4j knowledge graph, enabling an AI agent to read, search, create, and edit notes while building its own persistent memory over time.
+A personal second-brain agent with knowledge graph memory. Brain connects your markdown notes to a SurrealDB embedded knowledge graph, enabling an AI agent to read, search, create, and edit notes while building its own persistent memory over time.
 
 ## Features
 
 - **Markdown notes** with wikilinks (`[[Note]]`), tags (`#topic`), and YAML frontmatter
-- **Knowledge graph** powered by Neo4j — structural (tags, wikilinks) and semantic (vector embeddings) connections
-- **AI agent** with tool-based note access — search, read, create, edit, query graph, find related
-- **Vector search** for semantic discovery using sentence-transformers embeddings
-- **Desktop app** (Tauri 2 + React) with three-mode editor, chat, graph visualization, and memory panel
+- **Knowledge graph** powered by SurrealDB embedded — structural (tags, wikilinks) and semantic (vector embeddings) connections, zero infrastructure required
+- **AI agent** with 9 tools — search, semantic search, read, create, edit notes, query graph, find related, store memory, create connections
+- **Vector search** for semantic discovery using local sentence-transformers embeddings
+- **Desktop app** (Tauri 2 + React) with three-mode editor (edit/inline/preview), chat, graph visualization, search, and memory panel
 - **Voice transcription** via local mlx-whisper, OpenAI Whisper, or Mistral Voxtral
 - **Meeting recorder** that transcribes audio and saves timestamped notes
 - **MCP server** exposing all tools to external agents (Claude Code, etc.)
+- **Claude Code provider** — use your Claude Code subscription as the LLM backend (no separate API key needed)
 - **Auto-sync** on file changes with debounced structural + semantic sync
 - **Trash system** with restore — deleted notes are recoverable
 - **Note rename** with automatic wikilink rewriting across all notes
 - **Obsidian vault import** preserving folder structure
-- **Theme engine** with 4 built-in themes and full color customization
+- **Theme engine** with 12 built-in themes (6 light/dark pairs) and full color customization
 - **Command palette** (Cmd+K) for quick note search and actions
+- **Search** with keyword (BM25) and semantic (vector) modes, tag filtering
 
 ## Prerequisites
 
 - **Python 3.13+** (see `.python-version`)
 - **[uv](https://docs.astral.sh/uv/)** for Python dependency management
-- **Docker** (for Neo4j)
 - **Node.js 22+** and npm (see `.nvmrc`)
 - **Rust** and Cargo (for Tauri shell)
+
+No Docker or external database required — SurrealDB runs embedded in the Python process.
 
 ## Quick Start
 
@@ -42,7 +45,7 @@ cd desktop && npm install && cd ..
 cp .env.example .env
 # Edit .env: set ANTHROPIC_API_KEY and NOTES_PATH
 
-# 3. Start everything (Neo4j + server + desktop app)
+# 3. Start everything (server + desktop app)
 ./scripts/dev.sh
 ```
 
@@ -53,24 +56,25 @@ Press Ctrl+C to stop all processes.
 ### Environment Variables (`.env`)
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...   # Required for default LLM
-NOTES_PATH=~/Brain             # Your notes directory
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=brain-dev-password
+ANTHROPIC_API_KEY=sk-ant-...          # Required for default LLM
+NOTES_PATH=~/Brain                    # Your notes directory
+SURREALDB_PATH=~/.config/brain/surrealdb  # Database storage (optional)
 ```
 
 ### LLM Provider
 
-Brain supports three LLM providers, configurable via the Settings UI:
+Brain supports four LLM providers, configurable via the Settings UI:
 
 | Provider | API Key | Default Model |
 |----------|---------|---------------|
 | **Anthropic** (default) | `ANTHROPIC_API_KEY` | `claude-haiku-4-5-20251001` |
 | **OpenAI** | `OPENAI_API_KEY` | `gpt-4o` |
 | **Ollama** (local) | None needed | `llama3.1` |
+| **Claude Code** | None (uses subscription) | Via `claude` CLI |
 
 For Ollama: install from [ollama.ai](https://ollama.ai), pull a model (`ollama pull llama3.1`), then switch provider in Settings.
+
+For Claude Code: install the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), then switch provider in Settings. Brain connects via MCP stdio transport — no API key needed.
 
 ### Embedding Model
 
@@ -80,9 +84,9 @@ Default: `sentence-transformers/all-mpnet-base-v2` (768 dimensions, ungated — 
 
 | Provider | Requirements | Model |
 |----------|-------------|-------|
-| **local** | Apple Silicon Mac | `mlx-community/whisper-large-v3-turbo` |
-| **openai** | `OPENAI_API_KEY` | `whisper-1` |
-| **mistral** | `MISTRAL_API_KEY` | `codestral-voxtral-2501` |
+| **local** | Apple Silicon Mac | `mlx-community/whisper-small` |
+| **openai** | `OPENAI_API_KEY` | `gpt-4o-mini-transcribe` |
+| **mistral** | `MISTRAL_API_KEY` | `voxtral-mini-latest` |
 
 See [docs/configuration.md](docs/configuration.md) for full configuration reference.
 
@@ -135,19 +139,25 @@ uv run pre-commit install        # Install git hooks
 brain/                    # Python backend
   server.py               # FastAPI (HTTP + SSE)
   agent.py                # LangChain agent factory
-  tools.py                # 7 agent tools
+  tools.py                # 9 agent tools
   notes.py                # Notes reader/writer/parser + trash + rename
-  graph_db.py             # Neo4j connection wrapper
-  kg_pipeline.py          # Embedding pipeline
+  graph_db.py             # SurrealDB embedded wrapper
+  kg_pipeline.py          # Embedding pipeline (load → split → embed → write)
   sync.py                 # Structural + semantic sync
-  settings.py             # Runtime settings (JSON)
+  settings.py             # Runtime settings (JSON on disk)
   config.py               # Env-based secrets (pydantic-settings)
+  claude_code.py          # Claude Code CLI provider
+  mcp_client.py           # External MCP server client
   mcp_server.py           # MCP server (stdio + HTTP)
+  watcher.py              # File watcher for auto-sync
+  transcribe.py           # Voice transcription providers
+  cli.py                  # Interactive CLI chat loop
+  batch.py                # Batch sync for cron/launchd
 
 desktop/                  # Tauri 2 + React + TypeScript
-  src/components/         # Editor, Chat, Sidebar, Settings, Graph, Memory
+  src/components/         # Editor, Chat, Sidebar, Settings, Graph, Memory, Search
   src/lib/                # API client, themes, editor extensions
   src-tauri/              # Rust shell
 ```
 
-See [CLAUDE.md](CLAUDE.md) for the full codebase guide.
+See [CLAUDE.md](CLAUDE.md) for the full codebase guide and [docs/architecture.md](docs/architecture.md) for detailed architecture documentation.

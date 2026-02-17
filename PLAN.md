@@ -58,7 +58,7 @@
 - **Editor three-mode toggle**: Edit (plain CodeMirror), Inline (WYSIWYG decorations that hide syntax on non-cursor lines), Preview (read-only Streamdown rendering)
 - **Token-by-token SSE streaming**: server streams via `stream_mode="messages"`, JSON-encoded tokens preserve newlines across SSE transport
 - **Settings panel**: Appearance (theme selector + per-property color customizer), Fonts (unified font family + editor font size), Editor (keybindings, line numbers, word wrap), Import Notes (vault/directory import), LLM provider, transcription provider, MCP server editor
-- **Theme engine**: 4 built-in themes (Midnight, Dawn, Nord, Solarized Dark), ~40 CSS variables covering all UI elements (base colors, surfaces, editor syntax, graph nodes, sidebar). Full per-property customization with color pickers and live preview. Themes persist to backend settings.
+- **Theme engine**: 12 built-in themes (6 light/dark pairs: Monochrome, Gruvbox, Tokyo Night, Catppuccin, Nord, Everforest), ~40 CSS variables covering all UI elements (base colors, surfaces, editor syntax, graph nodes, sidebar). Full per-property customization with color pickers and live preview. Themes persist to backend settings.
 - **Meeting recording**: Header button opens modal recorder — captures audio, shows elapsed time, then transcribes via `/transcribe/meeting` and creates a timestamped note
 - **Resizable panels**: Sidebar and Chat panels are resizable and collapsible via drag handles (`react-resizable-panels`), sizes persist to localStorage
 - **Command palette**: Cmd+K to search notes and run actions (switch views, create note, sync, etc.). Inline note creation from palette, mouse-hover gating to prevent accidental selection.
@@ -72,11 +72,16 @@
 - **Inline rename**: Context menu "Rename" shows inline input in sidebar, submits on Enter/blur, escapes to cancel
 - **Editor save status**: Shows "Saving...", "Saved", or "Save failed" indicator in editor header
 - **Chat suggested prompts**: 4 clickable prompt pills in empty chat state for discoverability
+- **New chat button**: Start fresh conversations from the chat panel
+- **Inline tool calls**: Tool call indicators rendered inline within the message flow
+- **Vim visual mode**: Improved selection behavior with centered editor and better selection contrast
+- **Sidebar toggle**: File icon appears in editor toolbar when sidebar is collapsed, click to restore
+- **Navigation history**: Browser-style back/forward (Cmd+[/]) for note navigation
 - ShadCN UI components (button, input, scroll-area) + Tailwind v4
 - Health check with auto-reconnect polling
 
 ### Testing & CI
-- 416 unit tests (89% coverage) covering all modules including tools (edge cleanup, entity-type matrix, reserved names, duplicate prevention), graph_db (table discovery), server (graph endpoints, memory connections, search), notes (wikilink dedup), settings, transcription providers, watcher, MCP client/server, vault import, trash system, note rename, error boundary
+- 429 unit tests (89% coverage) covering all modules including tools (edge cleanup, entity-type matrix, reserved names, duplicate prevention), graph_db (table discovery), server (graph endpoints, memory connections, search), notes (wikilink dedup), settings, transcription providers, watcher, MCP client/server, vault import, trash system, note rename, Claude Code provider, error boundary
 - Server tests properly isolated (noop lifespan, no SurrealDB connection required)
 - CI: GitHub Actions workflow runs ruff, ty, and pytest (with coverage) on push/PR to main
 - Pre-commit hooks: ruff lint, ruff format, gitleaks secret detection, pytest

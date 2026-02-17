@@ -75,6 +75,8 @@ function App() {
   const [meetingOpen, setMeetingOpen] = useState(false);
   const [shikiTheme, setShikiTheme] = useState<[string, string]>(DEFAULT_THEME.codeTheme);
   const sidebarRef = useRef<SidebarHandle>(null);
+  const sidebarPanelRef = useRef<PanelImperativeHandle>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const chatPanelRef = useRef<PanelImperativeHandle>(null);
   // Layout persistence
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
@@ -310,7 +312,7 @@ function App() {
           {/* Sidebar — only in editor view */}
           {activeView === "editor" && (
             <>
-              <Panel id="sidebar" defaultSize="15%" minSize="8%" maxSize="30%" collapsible>
+              <Panel id="sidebar" defaultSize="15%" minSize="8%" maxSize="30%" collapsible panelRef={sidebarPanelRef} onResize={(size) => setSidebarOpen(size.asPercentage > 0)}>
                 <Sidebar ref={sidebarRef} selectedPath={selectedPath} onSelectFile={handleSelectFile} />
               </Panel>
               <Separator />
@@ -333,6 +335,7 @@ function App() {
                 canGoForward={canGoForward}
                 onGoBack={goBack}
                 onGoForward={goForward}
+                onShowSidebar={!sidebarOpen ? () => sidebarPanelRef.current?.expand() : undefined}
               />
             )}
             {activeView === "graph" && <GraphPanel onNavigateToNote={handleNavigateToNote} />}

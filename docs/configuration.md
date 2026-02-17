@@ -68,6 +68,15 @@ Settings:
 - `llm_model`: `"llama3.1"` (or any model you pulled)
 - `ollama_base_url`: `"http://localhost:11434"` (default)
 
+### Claude Code
+
+Uses your existing Claude Code subscription — no separate API key needed. Requires the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) to be installed and authenticated.
+
+Brain spawns `claude` as a subprocess with `--output-format stream-json`, connects to Brain's MCP tools via stdio transport, and uses `--session-id` + `--resume` for conversation continuity. Only Brain MCP tools are allowed (built-in tools like Bash/Read are disabled via `--allowedTools`).
+
+Settings:
+- `llm_provider`: `"claude-code"`
+
 ## Embedding Model
 
 Default: `sentence-transformers/all-mpnet-base-v2` (768 dimensions, ungated — no HuggingFace login required).
@@ -89,7 +98,7 @@ Requirements: Apple Silicon Mac with sufficient RAM.
 
 Settings:
 - `transcription_provider`: `"local"`
-- `transcription_model`: `"mlx-community/whisper-large-v3-turbo"` (default)
+- `transcription_model`: `"mlx-community/whisper-small"` (default)
 
 ### OpenAI Whisper API
 
@@ -97,7 +106,7 @@ Requires `OPENAI_API_KEY`.
 
 Settings:
 - `transcription_provider`: `"openai"`
-- `transcription_model`: `"whisper-1"`
+- `transcription_model`: `"gpt-4o-mini-transcribe"` (default)
 
 ### Mistral Voxtral API
 
@@ -107,7 +116,7 @@ MISTRAL_API_KEY=...
 
 Settings:
 - `transcription_provider`: `"mistral"`
-- `transcription_model`: `"codestral-voxtral-2501"`
+- `transcription_model`: `"voxtral-mini-latest"` (default)
 
 ## Runtime Settings
 
