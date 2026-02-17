@@ -22,6 +22,7 @@ const headingStyles: Record<number, Decoration> = {
 
 const boldDeco = Decoration.mark({ class: "cm-md-bold" });
 const italicDeco = Decoration.mark({ class: "cm-md-italic" });
+const strikethroughDeco = Decoration.mark({ class: "cm-md-strikethrough" });
 const codeDeco = Decoration.mark({ class: "cm-md-code" });
 const linkTextDeco = Decoration.mark({ class: "cm-md-link" });
 const blockquoteDeco = Decoration.mark({ class: "cm-md-blockquote" });
@@ -111,6 +112,27 @@ function buildDecorations(state: EditorState): DecorationSet {
           if (to - from > 2) {
             decos.push(hideDeco.range(from, from + 1));
             decos.push(hideDeco.range(to - 1, to));
+          }
+        }
+      }
+
+      // --- Strikethrough (GFM ~~text~~) ---
+      if (name === "Strikethrough") {
+        decos.push(strikethroughDeco.range(from, to));
+        const startLine = lineOfPos(state, from);
+        const endLine = lineOfPos(state, to);
+        let cursorOnNode = false;
+        for (let l = startLine; l <= endLine; l++) {
+          if (active.has(l)) {
+            cursorOnNode = true;
+            break;
+          }
+        }
+        if (!cursorOnNode) {
+          // Hide the ~~ markers (first 2 and last 2 chars)
+          if (to - from > 4) {
+            decos.push(hideDeco.range(from, from + 2));
+            decos.push(hideDeco.range(to - 2, to));
           }
         }
       }
@@ -209,66 +231,21 @@ const inlineMarkdownPlugin = ViewPlugin.fromClass(
   }
 );
 
-// --- Theme ---
+// --- Theme (CodeMirror-specific overrides only) ---
+// Visual styles (colors, sizes, weights) live in App.css as a single source
+// of truth shared with Streamdown preview/chat. This baseTheme only contains
+// rules that need EditorView scope to override CodeMirror's syntax highlighter.
 
 const inlineMarkdownTheme = EditorView.baseTheme({
-  ".cm-md-h1": {
-    fontSize: "1.8em",
-    fontWeight: "700",
-    lineHeight: "1.3",
-  },
-  ".cm-md-h2": {
-    fontSize: "1.5em",
-    fontWeight: "700",
-    lineHeight: "1.3",
-  },
-  ".cm-md-h3": {
-    fontSize: "1.25em",
-    fontWeight: "600",
-    lineHeight: "1.3",
-  },
-  ".cm-md-h4": {
-    fontSize: "1.1em",
-    fontWeight: "600",
-    lineHeight: "1.3",
-  },
-  ".cm-md-h5": {
-    fontSize: "1.05em",
-    fontWeight: "600",
-    lineHeight: "1.3",
-  },
-  ".cm-md-h6": {
-    fontSize: "1em",
-    fontWeight: "600",
-    lineHeight: "1.3",
-  },
-  ".cm-md-bold": {
-    fontWeight: "700",
-  },
-  ".cm-md-italic": {
-    fontStyle: "italic",
-  },
-  ".cm-md-code": {
-    fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: "3px",
-    padding: "1px 4px",
-  },
-  ".cm-md-link": {
-    color: "#3b82f6",
-    textDecoration: "underline",
-    textDecorationStyle: "dotted",
-  },
-  ".cm-md-blockquote": {
-    borderLeft: "3px solid rgba(255,255,255,0.2)",
-    paddingLeft: "12px",
-    color: "rgba(255,255,255,0.6)",
-  },
-  ".cm-md-hr": {
-    border: "none",
-    borderTop: "1px solid rgba(255,255,255,0.2)",
-    margin: "8px 0",
-  },
+  // Force syntax highlighter child spans to inherit inline decoration colors
+  ".cm-md-h1 span, .cm-md-h2 span, .cm-md-h3 span, .cm-md-h4 span, .cm-md-h5 span, .cm-md-h6 span":
+    { color: "inherit", fontSize: "inherit", fontWeight: "inherit" },
+  ".cm-md-bold span": { color: "inherit" },
+  ".cm-md-italic span": { color: "inherit" },
+  ".cm-md-strikethrough span": { color: "inherit" },
+  ".cm-md-code span": { color: "inherit" },
+  ".cm-md-link span": { color: "inherit" },
+  ".cm-md-blockquote span": { color: "inherit" },
 });
 
 // --- Export ---

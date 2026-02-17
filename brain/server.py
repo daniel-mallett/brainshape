@@ -14,6 +14,8 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from brain.agent import create_brain_agent
+from brain.claude_code import clear_sessions as clear_claude_sessions
+from brain.claude_code import stream_claude_code_response
 from brain.config import settings
 from brain.graph_db import GraphDB
 from brain.kg_pipeline import KGPipeline, create_kg_pipeline
@@ -55,12 +57,25 @@ _sessions: dict[str, dict] = {}
 async def lifespan(app: FastAPI):
     global _agent, _db, _pipeline, _observer
 
-    # Load MCP tools (async, may be empty if none configured)
-    mcp_tools = await load_mcp()
+    current_settings = load_settings()
+    provider = current_settings.get("llm_provider", "anthropic")
 
-    _agent, _db, _pipeline = create_brain_agent(mcp_tools=mcp_tools or None)
+    if provider == "claude-code":
+        # Claude Code provider bypasses LangChain — init db/pipeline directly
+        try:
+            _db = GraphDB()
+            _db.bootstrap_schema()
+            notes_path = Path(get_notes_path()).expanduser()
+            _pipeline = create_kg_pipeline(_db, notes_path)
+        except ConnectionError:
+            logger.warning("Starting without database — graph features unavailable")
+        _agent = None
+    else:
+        # Load MCP tools (async, may be empty if none configured)
+        mcp_tools = await load_mcp()
+        _agent, _db, _pipeline = create_brain_agent(mcp_tools=mcp_tools or None)
 
-    if _agent is None:
+    if _agent is None and provider != "claude-code":
         logger.warning("Server starting in degraded mode — no database connection")
         logger.warning("Notes CRUD will work, but agent and graph features are unavailable")
 
@@ -169,11 +184,13 @@ class UpdateSettingsRequest(BaseModel):
     embedding_dimensions: int | None = None
     mcp_servers: list[dict] | None = None
     theme: dict | None = None
+    custom_themes: list[dict] | None = None
     font_family: str | None = None
     editor_font_size: int | None = None
     editor_keymap: str | None = None
     editor_line_numbers: bool | None = None
     editor_word_wrap: bool | None = None
+    editor_inline_formatting: bool | None = None
 
 
 # --- Health ---
@@ -212,12 +229,19 @@ def agent_init():
 
 @app.post("/agent/message")
 async def agent_message(req: MessageRequest):
-    if _agent is None:
-        raise HTTPException(status_code=503, detail="Agent not initialized")
-
     config = _sessions.get(req.session_id)
     if config is None:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    # Branch based on LLM provider
+    current_settings = load_settings()
+    provider = current_settings.get("llm_provider", "anthropic")
+
+    if provider == "claude-code":
+        return await _agent_message_claude_code(req)
+
+    if _agent is None:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
 
     messages = {"messages": [{"role": "user", "content": req.message}]}
 
@@ -254,6 +278,29 @@ async def agent_message(req: MessageRequest):
         except Exception as e:
             yield {"event": "error", "data": str(e)}
         yield {"event": "done", "data": ""}
+
+    return EventSourceResponse(event_generator())
+
+
+async def _agent_message_claude_code(req: MessageRequest):
+    """Handle agent messages via the Claude Code CLI subprocess."""
+    from brain.agent import SYSTEM_PROMPT
+
+    current_settings = load_settings()
+    model = current_settings.get("llm_model", "sonnet")
+
+    async def event_generator():
+        try:
+            async for event in stream_claude_code_response(
+                message=req.message,
+                system_prompt=SYSTEM_PROMPT,
+                session_id=req.session_id,
+                model=model,
+            ):
+                yield event
+        except FileNotFoundError as e:
+            yield {"event": "error", "data": str(e)}
+            yield {"event": "done", "data": ""}
 
     return EventSourceResponse(event_generator())
 
@@ -1037,6 +1084,8 @@ async def put_settings(req: UpdateSettingsRequest):
         updates["mcp_servers"] = req.mcp_servers
     if req.theme is not None:
         updates["theme"] = req.theme
+    if req.custom_themes is not None:
+        updates["custom_themes"] = req.custom_themes
     if req.font_family is not None:
         updates["font_family"] = req.font_family
     if req.editor_font_size is not None:
@@ -1047,6 +1096,8 @@ async def put_settings(req: UpdateSettingsRequest):
         updates["editor_line_numbers"] = req.editor_line_numbers
     if req.editor_word_wrap is not None:
         updates["editor_word_wrap"] = req.editor_word_wrap
+    if req.editor_inline_formatting is not None:
+        updates["editor_inline_formatting"] = req.editor_inline_formatting
 
     updated = update_settings(updates)
 
@@ -1086,15 +1137,23 @@ async def put_settings(req: UpdateSettingsRequest):
         ]
     )
     if (needs_agent_reload or needs_pipeline_reload) and _db is not None and _pipeline is not None:
-        from brain.agent import recreate_agent
-        from brain.mcp_client import reload_mcp_tools
+        new_provider = updated.get("llm_provider", "anthropic")
 
         if needs_pipeline_reload:
             _pipeline = create_kg_pipeline(_db, _notes_path())
 
-        mcp_tools = await reload_mcp_tools()
-        _agent = recreate_agent(_db, _pipeline, mcp_tools=mcp_tools or None)
-        _sessions.clear()  # Clear stale sessions since agent was recreated
+        if new_provider == "claude-code":
+            # Claude Code doesn't use LangChain — just clear sessions
+            _agent = None
+            clear_claude_sessions()
+        else:
+            from brain.agent import recreate_agent
+            from brain.mcp_client import reload_mcp_tools
+
+            mcp_tools = await reload_mcp_tools()
+            _agent = recreate_agent(_db, _pipeline, mcp_tools=mcp_tools or None)
+
+        _sessions.clear()  # Clear stale sessions since provider/model changed
 
     # Hot-reload notes directory when notes_path changes
     if req.notes_path is not None:

@@ -84,6 +84,7 @@ const brainHighlightStyle = HighlightStyle.define([
   // Emphasis
   { tag: tags.strong, color: "var(--editor-bold)", fontWeight: "bold" },
   { tag: tags.emphasis, color: "var(--editor-italic)", fontStyle: "italic" },
+  { tag: tags.strikethrough, color: "var(--muted-foreground)", textDecoration: "line-through" },
 
   // Links
   { tag: tags.link, color: "var(--editor-link)", textDecoration: "underline" },
@@ -111,16 +112,9 @@ const brainHighlightStyle = HighlightStyle.define([
 
 const highlightExt = syntaxHighlighting(brainHighlightStyle);
 
-/** Detect whether the current theme is dark by checking background luminance. */
+/** Detect whether the current theme is dark via the .dark class on <html>. */
 export function isDarkTheme(): boolean {
-  const bg = getComputedStyle(document.documentElement).getPropertyValue("--background").trim();
-  if (!bg.startsWith("#") || bg.length < 7) return true;
-  const r = parseInt(bg.slice(1, 3), 16);
-  const g = parseInt(bg.slice(3, 5), 16);
-  const b = parseInt(bg.slice(5, 7), 16);
-  // Relative luminance (simplified sRGB)
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance < 0.5;
+  return document.documentElement.classList.contains("dark");
 }
 
 /** Build theme extension with correct dark/light mode. Called when editor is created. */

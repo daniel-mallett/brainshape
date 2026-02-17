@@ -78,17 +78,24 @@ class TestThemeAndEditorDefaults:
         assert settings["editor_font_size"] == 14
         assert settings["editor_line_numbers"] is False
         assert settings["editor_word_wrap"] is True
+        assert settings["editor_inline_formatting"] is False
         assert settings["font_family"] == ""
 
     def test_theme_round_trip(self, tmp_settings_file):
-        theme = {"name": "Nord", "background": "#2e3440"}
+        theme = {"name": "Nord Dark", "background": "#2e3440"}
         result = update_settings({"theme": theme, "editor_keymap": "default"})
-        assert result["theme"]["name"] == "Nord"
+        assert result["theme"]["name"] == "Nord Dark"
         assert result["editor_keymap"] == "default"
         # Verify persistence
         reloaded = load_settings()
-        assert reloaded["theme"]["name"] == "Nord"
+        assert reloaded["theme"]["name"] == "Nord Dark"
         assert reloaded["editor_keymap"] == "default"
+
+    def test_inline_formatting_round_trip(self, tmp_settings_file):
+        result = update_settings({"editor_inline_formatting": True})
+        assert result["editor_inline_formatting"] is True
+        reloaded = load_settings()
+        assert reloaded["editor_inline_formatting"] is True
 
 
 class TestGetLlmModelString:
@@ -146,7 +153,7 @@ class TestGetNotesPath:
 
 
 def test_valid_providers():
-    assert {"anthropic", "openai", "ollama"} == VALID_PROVIDERS
+    assert {"anthropic", "openai", "ollama", "claude-code"} == VALID_PROVIDERS
 
 
 def test_valid_transcription_providers():
@@ -195,6 +202,65 @@ class TestMigrateSettings:
         settings = load_settings()
         assert settings["transcription_model"] == "mlx-community/whisper-large-v3-turbo"
         assert "whisper_model" not in settings
+
+
+class TestCustomThemes:
+    def test_defaults_include_custom_themes(self):
+        assert "custom_themes" in DEFAULTS
+        assert DEFAULTS["custom_themes"] == []
+
+    def test_custom_themes_round_trip(self, tmp_settings_file):
+        themes = [{"name": "My Theme", "background": "#123456", "mode": "dark"}]
+        result = update_settings({"custom_themes": themes})
+        assert result["custom_themes"] == themes
+        reloaded = load_settings()
+        assert reloaded["custom_themes"] == themes
+
+    def test_custom_themes_persisted(self, tmp_settings_file):
+        themes = [{"name": "Custom 1"}, {"name": "Custom 2"}]
+        save_settings({"custom_themes": themes})
+        saved = json.loads(tmp_settings_file.read_text())
+        assert saved["custom_themes"] == themes
+
+
+class TestThemeNameMigration:
+    def test_midnight_migrates_to_monochrome_dark(self):
+        old = {"theme": {"name": "Midnight", "background": "#111"}}
+        result = _migrate_settings(old)
+        assert result["theme"]["name"] == "Monochrome Dark"
+        assert result["theme"]["background"] == "#111"
+
+    def test_dawn_migrates_to_gruvbox_light(self):
+        old = {"theme": {"name": "Dawn"}}
+        result = _migrate_settings(old)
+        assert result["theme"]["name"] == "Gruvbox Light"
+
+    def test_nord_migrates_to_nord_dark(self):
+        old = {"theme": {"name": "Nord"}}
+        result = _migrate_settings(old)
+        assert result["theme"]["name"] == "Nord Dark"
+
+    def test_solarized_dark_migrates_to_monochrome_dark(self):
+        old = {"theme": {"name": "Solarized Dark"}}
+        result = _migrate_settings(old)
+        assert result["theme"]["name"] == "Monochrome Dark"
+
+    def test_new_theme_name_unchanged(self):
+        old = {"theme": {"name": "Catppuccin Dark"}}
+        result = _migrate_settings(old)
+        assert result["theme"]["name"] == "Catppuccin Dark"
+
+    def test_no_theme_key_unchanged(self):
+        old = {"llm_provider": "anthropic"}
+        result = _migrate_settings(old)
+        assert "theme" not in result
+
+    def test_migration_on_load(self, tmp_settings_file):
+        tmp_settings_file.write_text(
+            json.dumps({"theme": {"name": "Midnight", "background": "#000"}})
+        )
+        settings = load_settings()
+        assert settings["theme"]["name"] == "Monochrome Dark"
 
 
 class TestTranscriptionSettings:

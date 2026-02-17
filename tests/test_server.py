@@ -864,6 +864,7 @@ class TestSettings:
                 "editor_keymap": "default",
                 "editor_line_numbers": True,
                 "editor_word_wrap": False,
+                "editor_inline_formatting": True,
             },
         )
         assert resp.status_code == 200
@@ -875,6 +876,7 @@ class TestSettings:
         assert data["editor_keymap"] == "default"
         assert data["editor_line_numbers"] is True
         assert data["editor_word_wrap"] is False
+        assert data["editor_inline_formatting"] is True
 
     def test_get_settings_includes_theme_defaults(self, client):
         """GET /settings returns theme and editor defaults."""
@@ -922,6 +924,27 @@ class TestSettings:
         assert resp.status_code == 200
         mock_reload.assert_awaited_once()
         mock_recreate.assert_called_once()
+
+    def test_custom_themes_round_trip(self, client):
+        """PUT /settings with custom_themes persists and GET returns them."""
+        themes = [
+            {"name": "My Theme", "background": "#111", "mode": "dark"},
+            {"name": "My Light", "background": "#fff", "mode": "light"},
+        ]
+        resp = client.put("/settings", json={"custom_themes": themes})
+        assert resp.status_code == 200
+        assert resp.json()["custom_themes"] == themes
+
+        # Verify GET also returns them
+        resp = client.get("/settings")
+        assert resp.status_code == 200
+        assert resp.json()["custom_themes"] == themes
+
+    def test_get_settings_includes_custom_themes_default(self, client):
+        """GET /settings returns empty custom_themes by default."""
+        resp = client.get("/settings")
+        assert resp.status_code == 200
+        assert resp.json()["custom_themes"] == []
 
 
 class TestTranscriptionErrors:
@@ -989,7 +1012,10 @@ class TestUninitializedServer:
         assert bare_client.post("/sync/full").status_code == 503
 
     def test_agent_message_503(self, bare_client):
-        resp = bare_client.post("/agent/message", json={"session_id": "x", "message": "hi"})
+        # Create a session first so we get past the 404 check
+        init_resp = bare_client.post("/agent/init")
+        session_id = init_resp.json()["session_id"]
+        resp = bare_client.post("/agent/message", json={"session_id": session_id, "message": "hi"})
         assert resp.status_code == 503
 
     def test_import_vault_503(self, bare_client):
@@ -1249,3 +1275,71 @@ class TestNotesPathSettings:
         resp = client.put("/settings", json={"notes_path": project_root})
         assert resp.status_code == 400
         assert "project directory" in resp.json()["detail"]
+
+
+class TestClaudeCodeProvider:
+    def test_agent_message_routes_to_claude_code(self, client, tmp_path, monkeypatch):
+        """When provider is claude-code, agent_message uses the CLI handler."""
+        # Write settings with claude-code provider
+        import json
+
+        settings_file = tmp_path / "settings.json"
+        settings_file.write_text(json.dumps({"llm_provider": "claude-code", "llm_model": "sonnet"}))
+        monkeypatch.setattr("brain.settings.SETTINGS_FILE", settings_file)
+
+        # Create a session first
+        init_resp = client.post("/agent/init")
+        session_id = init_resp.json()["session_id"]
+
+        # Mock stream_claude_code_response to yield test events
+        async def mock_stream(**kwargs):
+            yield {"event": "text", "data": json.dumps("Hello from Claude Code!")}
+            yield {"event": "done", "data": ""}
+
+        monkeypatch.setattr("brain.server.stream_claude_code_response", mock_stream)
+
+        resp = client.post(
+            "/agent/message",
+            json={"session_id": session_id, "message": "hi"},
+        )
+        assert resp.status_code == 200
+
+        # Parse SSE events
+        lines = resp.text.strip().split("\n")
+        events = []
+        for line in lines:
+            if line.startswith("data:"):
+                events.append(line)
+        # Should have at least a text event and done event
+        assert any("Hello from Claude Code!" in line for line in lines)
+
+    def test_claude_code_provider_accepted_in_settings(self, client):
+        """Verify claude-code is a valid provider in settings."""
+        resp = client.put("/settings", json={"llm_provider": "claude-code"})
+        assert resp.status_code == 200
+        assert resp.json()["llm_provider"] == "claude-code"
+
+    def test_agent_not_required_for_claude_code(self, client, tmp_path, monkeypatch):
+        """claude-code should work even when _agent is None."""
+        import json
+
+        settings_file = tmp_path / "settings.json"
+        settings_file.write_text(json.dumps({"llm_provider": "claude-code", "llm_model": "sonnet"}))
+        monkeypatch.setattr("brain.settings.SETTINGS_FILE", settings_file)
+
+        server._agent = None
+
+        init_resp = client.post("/agent/init")
+        session_id = init_resp.json()["session_id"]
+
+        async def mock_stream(**kwargs):
+            yield {"event": "text", "data": json.dumps("Works without LangChain agent")}
+            yield {"event": "done", "data": ""}
+
+        monkeypatch.setattr("brain.server.stream_claude_code_response", mock_stream)
+
+        resp = client.post(
+            "/agent/message",
+            json={"session_id": session_id, "message": "hi"},
+        )
+        assert resp.status_code == 200

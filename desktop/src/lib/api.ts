@@ -161,11 +161,13 @@ export interface Settings {
   transcription_model: string;
   mcp_servers: MCPServer[];
   theme: Record<string, string>;
+  custom_themes: Record<string, string>[];
   font_family: string;
   editor_font_size: number;
   editor_keymap: string;
   editor_line_numbers: boolean;
   editor_word_wrap: boolean;
+  editor_inline_formatting: boolean;
 }
 
 export function getSettings(): Promise<Settings> {
@@ -185,11 +187,13 @@ export function updateSettings(
     transcription_model: string;
     mcp_servers: MCPServer[];
     theme: Record<string, string>;
+    custom_themes: Record<string, string>[];
     font_family: string;
     editor_font_size: number;
     editor_keymap: string;
     editor_line_numbers: boolean;
     editor_word_wrap: boolean;
+    editor_inline_formatting: boolean;
   }>
 ): Promise<Settings> {
   return request("/settings", {

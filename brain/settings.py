@@ -41,6 +41,8 @@ DEFAULTS: dict[str, Any] = {
     "mcp_servers": [],
     # Theme: full theme object (JSON) — see desktop/src/lib/themes.ts
     "theme": {},
+    # Custom themes: list of serialized Theme objects
+    "custom_themes": [],
     # Font settings
     "font_family": "",
     "editor_font_size": 14,
@@ -48,10 +50,11 @@ DEFAULTS: dict[str, Any] = {
     "editor_keymap": "vim",
     "editor_line_numbers": False,
     "editor_word_wrap": True,
+    "editor_inline_formatting": False,
 }
 
 # Valid LLM providers
-VALID_PROVIDERS = {"anthropic", "openai", "ollama"}
+VALID_PROVIDERS = {"anthropic", "openai", "ollama", "claude-code"}
 
 # Valid transcription providers
 VALID_TRANSCRIPTION_PROVIDERS = {"local", "openai", "mistral"}
@@ -75,6 +78,17 @@ def _migrate_settings(settings: dict[str, Any]) -> dict[str, Any]:
         if not settings.get("transcription_model"):
             settings["transcription_model"] = settings["whisper_model"]
         del settings["whisper_model"]
+    # Migrate old theme names
+    _theme_name_map = {
+        "Midnight": "Monochrome Dark",
+        "Dawn": "Gruvbox Light",
+        "Nord": "Nord Dark",
+        "Solarized Dark": "Monochrome Dark",
+    }
+    theme = settings.get("theme", {})
+    if isinstance(theme, dict) and theme.get("name") in _theme_name_map:
+        theme["name"] = _theme_name_map[theme["name"]]
+        settings["theme"] = theme
     # ui_font_family + editor_font_family → font_family
     if "ui_font_family" in settings or "editor_font_family" in settings:
         if not settings.get("font_family"):

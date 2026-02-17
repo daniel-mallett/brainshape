@@ -37,6 +37,7 @@ desktop/                  # Tauri 2 + React + TypeScript
 - `brain/server.py` — FastAPI server (HTTP + SSE) for desktop app
 - `brain/kg_pipeline.py` — embedding pipeline: load → split → embed → write (no LLM entity extraction)
 - `brain/sync.py` — orchestrates incremental structural + semantic sync from notes to graph
+- `brain/claude_code.py` — Claude Code CLI provider: spawns `claude` subprocess, parses stream-json output, yields SSE events matching existing contract
 - `brain/settings.py` — persistent user settings (JSON on disk), LLM provider config, transcription config, MCP servers, font/editor prefs, auto-migration of old keys
 - `brain/mcp_client.py` — MCP server client, loads external tools via `langchain-mcp-adapters`
 - `brain/mcp_server.py` — MCP server exposing all 9 tools; HTTP transport mounted at `/mcp` on the FastAPI server, stdio transport for standalone use

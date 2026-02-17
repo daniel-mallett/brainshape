@@ -9,8 +9,10 @@ import {
 } from "../lib/api";
 import {
   BUILTIN_THEMES,
+  DEFAULT_THEME,
   THEME_GROUPS,
   THEME_KEY_LABELS,
+  THEME_MIGRATION,
   applyTheme,
   type Theme,
 } from "../lib/themes";
@@ -27,6 +29,7 @@ const PROVIDERS = [
   { value: "anthropic", label: "Anthropic" },
   { value: "openai", label: "OpenAI" },
   { value: "ollama", label: "Ollama" },
+  { value: "claude-code", label: "Claude Code" },
 ] as const;
 
 const SUGGESTED_MODELS: Record<string, ModelOption[]> = {
@@ -44,6 +47,11 @@ const SUGGESTED_MODELS: Record<string, ModelOption[]> = {
     { value: "llama3.3", label: "Llama 3.3" },
     { value: "mistral", label: "Mistral" },
     { value: "deepseek-r1", label: "DeepSeek R1" },
+  ],
+  "claude-code": [
+    { value: "sonnet", label: "Sonnet" },
+    { value: "opus", label: "Opus" },
+    { value: "haiku", label: "Haiku" },
   ],
 };
 
@@ -234,8 +242,9 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
 
   // Theme & appearance
-  const [themeName, setThemeName] = useState("Midnight");
+  const [themeName, setThemeName] = useState(DEFAULT_THEME.name);
   const [themeOverrides, setThemeOverrides] = useState<Record<string, string>>({});
+  const [customThemes, setCustomThemes] = useState<Theme[]>([]);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [fontFamily, setFontFamily] = useState("");
   const [editorFontSize, setEditorFontSize] = useState(14);
@@ -244,6 +253,7 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
   const [editorKeymap, setEditorKeymap] = useState("vim");
   const [editorLineNumbers, setEditorLineNumbers] = useState(false);
   const [editorWordWrap, setEditorWordWrap] = useState(true);
+  const [editorInlineFormatting, setEditorInlineFormatting] = useState(false);
 
   // Ollama
   const [ollamaModels, setOllamaModels] = useState<ModelOption[]>([]);
@@ -274,10 +284,21 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
 
       // Theme
       const t = s.theme || {};
-      setThemeName(t.name || "Midnight");
+      let loadedName = t.name || DEFAULT_THEME.name;
+      if (loadedName in THEME_MIGRATION) loadedName = THEME_MIGRATION[loadedName];
+      setThemeName(loadedName);
       const overrides = { ...t };
       delete overrides.name;
       setThemeOverrides(overrides);
+
+      // Custom themes
+      const ct = (s.custom_themes || []).map((raw: Record<string, string>) => ({
+        ...DEFAULT_THEME,
+        ...raw,
+        mode: (raw.mode as "light" | "dark") || "dark",
+        codeTheme: raw.codeTheme ? JSON.parse(raw.codeTheme as string) : DEFAULT_THEME.codeTheme,
+      })) as Theme[];
+      setCustomThemes(ct);
 
       // Fonts & editor
       setFontFamily(s.font_family || "");
@@ -285,6 +306,7 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
       setEditorKeymap(s.editor_keymap || "vim");
       setEditorLineNumbers(s.editor_line_numbers ?? false);
       setEditorWordWrap(s.editor_word_wrap ?? true);
+      setEditorInlineFormatting(s.editor_inline_formatting ?? false);
     } catch (err) {
       console.error("Failed to load settings:", err);
     } finally {
@@ -328,10 +350,13 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
 
   // Live preview: apply theme as user changes colors
   const livePreviewTheme = useCallback(() => {
-    const base = BUILTIN_THEMES.find((t) => t.name === themeName) || BUILTIN_THEMES[0];
+    const base =
+      BUILTIN_THEMES.find((t) => t.name === themeName) ||
+      customThemes.find((t) => t.name === themeName) ||
+      DEFAULT_THEME;
     const merged = { ...base, ...themeOverrides, name: themeName } as Theme;
     applyTheme(merged);
-  }, [themeName, themeOverrides]);
+  }, [themeName, themeOverrides, customThemes]);
 
   useEffect(() => { livePreviewTheme(); }, [livePreviewTheme]);
 
@@ -339,6 +364,14 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
     setSaving(true);
     try {
       const themeData: Record<string, string> = { name: themeName, ...themeOverrides };
+      // Serialize custom themes for storage
+      const serializedCustomThemes = customThemes.map((t) => {
+        const obj: Record<string, string> = {};
+        for (const [k, v] of Object.entries(t)) {
+          obj[k] = k === "codeTheme" ? JSON.stringify(v) : String(v);
+        }
+        return obj;
+      });
       const updates: Record<string, unknown> = {
         notes_path: notesPath,
         llm_provider: provider,
@@ -348,11 +381,13 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
         transcription_model: txModel,
         mcp_servers: mcpServers,
         theme: themeData,
+        custom_themes: serializedCustomThemes,
         font_family: fontFamily,
         editor_font_size: editorFontSize,
         editor_keymap: editorKeymap,
         editor_line_numbers: editorLineNumbers,
         editor_word_wrap: editorWordWrap,
+        editor_inline_formatting: editorInlineFormatting,
       };
       if (anthropicKey) updates.anthropic_api_key = anthropicKey;
       if (openaiKey) updates.openai_api_key = openaiKey;
@@ -417,7 +452,10 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
     ? ollamaModels
     : (SUGGESTED_MODELS[provider] || []);
   const txSuggestions = SUGGESTED_TRANSCRIPTION_MODELS[txProvider] || [];
-  const currentBaseTheme = BUILTIN_THEMES.find((t) => t.name === themeName) || BUILTIN_THEMES[0];
+  const currentBaseTheme =
+    BUILTIN_THEMES.find((t) => t.name === themeName) ||
+    customThemes.find((t) => t.name === themeName) ||
+    DEFAULT_THEME;
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -466,9 +504,18 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
                   onChange={(e) => handleThemeChange(e.target.value)}
                   className="flex-1 h-8 text-sm rounded-md border border-input bg-background px-3 text-foreground"
                 >
-                  {BUILTIN_THEMES.map((t) => (
-                    <option key={t.name} value={t.name}>{t.name}</option>
-                  ))}
+                  <optgroup label="Built-in">
+                    {BUILTIN_THEMES.map((t) => (
+                      <option key={t.name} value={t.name}>{t.name}</option>
+                    ))}
+                  </optgroup>
+                  {customThemes.length > 0 && (
+                    <optgroup label="Custom">
+                      {customThemes.map((t) => (
+                        <option key={t.name} value={t.name}>{t.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
                 <Button
                   variant={customizeOpen ? "secondary" : "outline"}
@@ -479,6 +526,21 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
                   {customizeOpen ? "Close" : "Customize"}
                 </Button>
               </div>
+              {customThemes.some((t) => t.name === themeName) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-destructive"
+                  onClick={() => {
+                    setCustomThemes((prev) => prev.filter((t) => t.name !== themeName));
+                    setThemeName(DEFAULT_THEME.name);
+                    setThemeOverrides({});
+                    markDirty();
+                  }}
+                >
+                  Delete custom theme
+                </Button>
+              )}
             </section>
 
             {customizeOpen && (
@@ -498,9 +560,35 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
                     </div>
                   </div>
                 ))}
-                <Button variant="ghost" size="sm" className="text-xs w-full" onClick={handleResetColors}>
-                  Reset to theme defaults
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" className="text-xs flex-1" onClick={handleResetColors}>
+                    Reset to defaults
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs flex-1"
+                    onClick={() => {
+                      const name = prompt("Name for custom theme:");
+                      if (!name?.trim()) return;
+                      const base = BUILTIN_THEMES.find((t) => t.name === themeName) ||
+                        customThemes.find((t) => t.name === themeName) || DEFAULT_THEME;
+                      const newTheme: Theme = {
+                        ...base,
+                        ...themeOverrides,
+                        name: name.trim(),
+                        mode: base.mode,
+                        codeTheme: base.codeTheme,
+                      } as Theme;
+                      setCustomThemes((prev) => [...prev.filter((t) => t.name !== name.trim()), newTheme]);
+                      setThemeName(name.trim());
+                      setThemeOverrides({});
+                      markDirty();
+                    }}
+                  >
+                    Save as Custom
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -579,6 +667,19 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
               >
                 <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${editorWordWrap ? "translate-x-4" : ""}`} />
               </button>
+            </section>
+
+            <section className="space-y-1">
+              <div className="flex items-center justify-between">
+                <FieldLabel>Inline Formatting</FieldLabel>
+                <button
+                  onClick={() => { setEditorInlineFormatting(!editorInlineFormatting); markDirty(); }}
+                  className={`relative w-9 h-5 rounded-full transition-colors ${editorInlineFormatting ? "bg-primary" : "bg-muted"}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${editorInlineFormatting ? "translate-x-4" : ""}`} />
+                </button>
+              </div>
+              <FieldHint>Render headings, bold, italic inline while editing.</FieldHint>
             </section>
           </div>
 
@@ -690,6 +791,9 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
                   )}
                 </section>
               </>
+            )}
+            {provider === "claude-code" && (
+              <FieldHint>Uses your Claude Code subscription. No API key needed. Requires the <code className="bg-muted px-1 rounded text-[11px]">claude</code> CLI to be installed.</FieldHint>
             )}
           </div>
 

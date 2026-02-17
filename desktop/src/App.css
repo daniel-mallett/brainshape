@@ -5,6 +5,8 @@
 
 @source "../node_modules/streamdown/dist/*.js";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --font-sans: Inter, system-ui, -apple-system, sans-serif;
   font-family: var(--font-sans);
@@ -148,4 +150,104 @@
 [data-separator][data-separator="active"] {
   background: var(--ring);
   width: 3px;
+}
+
+/* ─── Shared Markdown formatting (editor inline + preview + chat) ─── */
+/* Single source of truth — .cm-md-* classes are used by the CodeMirror
+   inline formatting plugin, .sdm-chat selectors by Streamdown preview/chat. */
+
+.cm-md-h1, .sdm-chat h1 { font-size: 1.8em; font-weight: 700; }
+.cm-md-h2, .sdm-chat h2 { font-size: 1.5em; font-weight: 700; }
+.cm-md-h3, .sdm-chat h3 { font-size: 1.25em; font-weight: 600; }
+.cm-md-h4, .sdm-chat h4 { font-size: 1.1em; font-weight: 600; }
+.cm-md-h5, .sdm-chat h5 { font-size: 1.05em; font-weight: 600; }
+.cm-md-h6, .sdm-chat h6 { font-size: 1em; font-weight: 600; }
+
+.cm-md-h1, .cm-md-h2, .cm-md-h3, .cm-md-h4, .cm-md-h5, .cm-md-h6,
+.sdm-chat h1, .sdm-chat h2, .sdm-chat h3, .sdm-chat h4, .sdm-chat h5, .sdm-chat h6 {
+  color: var(--editor-heading);
+  line-height: 1.3;
+}
+.sdm-chat h1, .sdm-chat h2, .sdm-chat h3, .sdm-chat h4, .sdm-chat h5, .sdm-chat h6 {
+  margin: 0.75em 0 0.25em;
+}
+
+.cm-md-bold, .sdm-chat strong {
+  font-weight: 700;
+  color: var(--editor-bold);
+}
+
+.cm-md-italic, .sdm-chat em {
+  font-style: italic;
+  color: var(--editor-italic);
+}
+
+.cm-md-strikethrough, .sdm-chat del {
+  text-decoration: line-through;
+  color: var(--muted-foreground);
+  opacity: 0.7;
+}
+
+.cm-md-code, .sdm-chat :not(pre) > code {
+  background: var(--muted);
+  color: var(--editor-code);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+.cm-md-code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.cm-md-link, .sdm-chat a {
+  color: var(--editor-link);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+
+.cm-md-blockquote, .sdm-chat blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 12px;
+  color: var(--muted-foreground);
+}
+.sdm-chat blockquote {
+  margin: 0.5em 0;
+}
+
+.cm-md-hr, .sdm-chat hr {
+  border: none;
+  border-top: 1px solid var(--border);
+}
+.cm-md-hr { margin: 8px 0; }
+.sdm-chat hr { margin: 1em 0; }
+
+/* ─── Monochrome code blocks ─── */
+/* Desaturate shiki syntax highlighting for Monochrome themes */
+
+:root[data-theme^="Monochrome"] [data-streamdown="code-block"] pre {
+  filter: saturate(0);
+}
+
+/* ─── Markdown tables (Streamdown) ─── */
+
+[data-streamdown="table"] {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+  margin: 0.75em 0;
+}
+
+[data-streamdown="table"] th,
+[data-streamdown="table"] td {
+  border: 1px solid var(--border);
+  padding: 0.35em 0.75em;
+  text-align: left;
+}
+
+[data-streamdown="table"] th {
+  background: var(--secondary);
+  font-weight: 600;
+}
+
+[data-streamdown="table"] tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--secondary) 40%, transparent);
 }

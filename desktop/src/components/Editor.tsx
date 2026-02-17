@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
-import { EditorState } from "@codemirror/state";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers as lineNumbersExt } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
+import { GFM } from "@lezer/markdown";
 import { vim } from "@replit/codemirror-vim";
 import { updateNoteFile } from "../lib/api";
 import { brainAutocompletion, prefetchCompletions } from "../lib/completions";
@@ -11,18 +12,18 @@ import { wikilinkExtension, setWikilinkNavigate } from "../lib/wikilinks";
 import { inlineMarkdownExtension } from "../lib/inlineMarkdown";
 import { brainThemeExtension } from "../lib/editorTheme";
 import { Streamdown } from "streamdown";
-import { code } from "@streamdown/code";
+import { createCodePlugin } from "@streamdown/code";
+import type { BundledTheme } from "shiki";
+import remarkGfm from "remark-gfm";
 import { remarkWikilinks } from "../lib/remarkWikilinks";
 import { wikilinkComponents } from "../lib/WikilinkComponents";
 import { useWikilinkClick } from "../lib/useWikilinkClick";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 
-type EditorMode = "edit" | "inline" | "preview";
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
-const streamdownPlugins = { code };
-const wikilinkRemarkPlugins = [remarkWikilinks];
+const previewRemarkPlugins = [remarkGfm, remarkWikilinks];
 
 interface EditorProps {
   filePath: string | null;
@@ -31,26 +32,36 @@ interface EditorProps {
   keymap?: string;
   lineNumbers?: boolean;
   wordWrap?: boolean;
+  inlineFormatting?: boolean;
+  shikiTheme?: [string, string];
   canGoBack?: boolean;
   canGoForward?: boolean;
   onGoBack?: () => void;
   onGoForward?: () => void;
 }
 
-export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode = "vim", lineNumbers = false, wordWrap = true, canGoBack, canGoForward, onGoBack, onGoForward }: EditorProps) {
+export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode = "vim", lineNumbers = false, wordWrap = true, inlineFormatting = false, shikiTheme, canGoBack, canGoForward, onGoBack, onGoForward }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const filePathRef = useRef(filePath);
-  const [editorMode, setEditorMode] = useState<EditorMode>("edit");
+  const liveContentRef = useRef(content);
+  const inlineCompartmentRef = useRef(new Compartment());
+  const [showPreview, setShowPreview] = useState(false);
   const [liveContent, setLiveContent] = useState(content);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const saveStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const previewPlugins = useMemo(() => {
+    const themes = (shikiTheme || ["min-light", "min-dark"]) as [BundledTheme, BundledTheme];
+    return { code: createCodePlugin({ themes }) };
+  }, [shikiTheme]);
 
   filePathRef.current = filePath;
 
   useEffect(() => {
     setLiveContent(content);
+    liveContentRef.current = content;
   }, [content]);
 
   function saveToServer(text: string) {
@@ -82,23 +93,29 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
     }
   }, [onNavigateToNote]);
 
+  // Main editor creation — only recreates for filePath, keymap, lineNumbers, wordWrap changes
   useEffect(() => {
-    if (!containerRef.current || editorMode === "preview") return;
+    if (!containerRef.current) return;
 
     const extensions = [
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
-      markdown({ codeLanguages: languages }),
+      markdown({ codeLanguages: languages, extensions: GFM }),
       ...brainThemeExtension(),
       brainAutocompletion,
       wikilinkExtension,
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           const text = update.state.doc.toString();
+          liveContentRef.current = text;
           setLiveContent(text);
           saveToServer(text);
         }
       }),
+      // Inline formatting via compartment — toggled without recreating editor
+      inlineCompartmentRef.current.of(
+        inlineFormatting ? inlineMarkdownExtension : []
+      ),
     ];
 
     // Keybinding mode
@@ -116,12 +133,8 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
       extensions.push(EditorView.lineWrapping);
     }
 
-    if (editorMode === "inline") {
-      extensions.push(inlineMarkdownExtension);
-    }
-
     const state = EditorState.create({
-      doc: content,
+      doc: liveContentRef.current,
       extensions,
     });
 
@@ -138,7 +151,16 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
       view.destroy();
       viewRef.current = null;
     };
-  }, [filePath, editorMode, keymapMode, lineNumbers, wordWrap]);
+  }, [filePath, keymapMode, lineNumbers, wordWrap]);
+
+  // Reconfigure inline formatting compartment without recreating editor
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: inlineCompartmentRef.current.reconfigure(
+        inlineFormatting ? inlineMarkdownExtension : []
+      ),
+    });
+  }, [inlineFormatting]);
 
   if (!filePath) {
     return (
@@ -194,39 +216,44 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
           )}
         </div>
         <div className="flex gap-0.5">
-          {(["edit", "inline", "preview"] as const).map((mode) => (
-            <Button
-              key={mode}
-              variant={editorMode === mode ? "secondary" : "ghost"}
-              size="sm"
-              className="h-5 text-xs px-2"
-              onClick={() => setEditorMode(mode)}
-            >
-              {mode === "edit"
-                ? "Edit"
-                : mode === "inline"
-                  ? "Inline"
-                  : "Preview"}
-            </Button>
-          ))}
+          <Button
+            variant={showPreview ? "ghost" : "secondary"}
+            size="sm"
+            className="h-5 text-xs px-2"
+            onClick={() => setShowPreview(false)}
+          >
+            Edit
+          </Button>
+          <Button
+            variant={showPreview ? "secondary" : "ghost"}
+            size="sm"
+            className="h-5 text-xs px-2"
+            onClick={() => setShowPreview(true)}
+          >
+            Preview
+          </Button>
         </div>
       </div>
 
-      {editorMode === "preview" ? (
+      {showPreview && (
         <ScrollArea className="flex-1 overflow-hidden">
           <div className="p-6 max-w-prose">
             <Streamdown
-              plugins={streamdownPlugins}
-              remarkPlugins={wikilinkRemarkPlugins}
+              className="sdm-chat"
+              plugins={previewPlugins}
+              remarkPlugins={previewRemarkPlugins}
               components={wikilinkComponents}
             >
               {liveContent}
             </Streamdown>
           </div>
         </ScrollArea>
-      ) : (
-        <div ref={containerRef} className="flex-1 overflow-hidden" />
       )}
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-hidden"
+        style={{ display: showPreview ? "none" : undefined }}
+      />
     </div>
   );
 }

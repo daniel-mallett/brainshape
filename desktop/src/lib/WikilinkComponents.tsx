@@ -16,7 +16,8 @@ export const wikilinkComponents: Partial<Components> = {
       return (
         <a
           href={href}
-          className="text-blue-400 underline decoration-dotted cursor-pointer hover:text-blue-300"
+          className="underline decoration-dotted cursor-pointer"
+          style={{ color: "var(--editor-link)" }}
         >
           {children}
         </a>

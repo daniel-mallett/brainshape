@@ -15,7 +15,8 @@
 - Folder-aware note creation and editing (edit_note looks up path from graph)
 - Tool responses use notes-relative paths only (no system path leakage)
 - Seed notes for first-run experience (Welcome, About Me, 3 Tutorials)
-- **Settings system**: persistent JSON config (~/.config/brain/settings.json), runtime-configurable LLM provider (Anthropic/OpenAI/Ollama), model selection, unified font family, auto-migration of old settings keys
+- **Settings system**: persistent JSON config (~/.config/brain/settings.json), runtime-configurable LLM provider (Anthropic/OpenAI/Ollama/Claude Code), model selection, unified font family, auto-migration of old settings keys
+- **Claude Code provider**: spawns `claude` CLI as subprocess with `--output-format stream-json`, connects to Brain's MCP tools via stdio transport. Uses `--session-id` + `--resume` for conversation continuity. No API key needed — uses Claude Code subscription. Only Brain MCP tools are allowed (built-in tools like Bash/Read disabled via `--allowedTools`).
 - **Configurable embedding model**: default `sentence-transformers/all-mpnet-base-v2` (ungated), switchable via settings, auto-migrates vector index on dimension change
 - **MCP client**: consume external MCP servers via `langchain-mcp-adapters`, stdio + HTTP transports, hot-reload on settings change (no restart required)
 - **MCP server**: exposes all 9 tools via MCP protocol for external agents. Two transports: HTTP (mounted at `/mcp` on the FastAPI server, available automatically when the app is running) and stdio (standalone via `uv run python -m brain.mcp_server`)
@@ -75,7 +76,7 @@
 - Health check with auto-reconnect polling
 
 ### Testing & CI
-- 396 unit tests (89% coverage) covering all modules including tools (edge cleanup, entity-type matrix, reserved names, duplicate prevention), graph_db (table discovery), server (graph endpoints, memory connections, search), notes (wikilink dedup), settings, transcription providers, watcher, MCP client/server, vault import, trash system, note rename, error boundary
+- 416 unit tests (89% coverage) covering all modules including tools (edge cleanup, entity-type matrix, reserved names, duplicate prevention), graph_db (table discovery), server (graph endpoints, memory connections, search), notes (wikilink dedup), settings, transcription providers, watcher, MCP client/server, vault import, trash system, note rename, error boundary
 - Server tests properly isolated (noop lifespan, no SurrealDB connection required)
 - CI: GitHub Actions workflow runs ruff, ty, and pytest (with coverage) on push/PR to main
 - Pre-commit hooks: ruff lint, ruff format, gitleaks secret detection, pytest

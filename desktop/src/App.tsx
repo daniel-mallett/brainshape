@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
+import { Group, Panel, Separator, useDefaultLayout, type PanelImperativeHandle } from "react-resizable-panels";
 import { health, getConfig, getNoteFile, getNoteFiles, getSettings, syncStructural, type Config, type HealthStatus, type Settings } from "./lib/api";
-import { applyTheme, BUILTIN_THEMES, DEFAULT_THEME, type Theme } from "./lib/themes";
+import { applyTheme, BUILTIN_THEMES, DEFAULT_THEME, THEME_MIGRATION, type Theme } from "./lib/themes";
 import { Sidebar, type SidebarHandle } from "./components/Sidebar";
 import { Editor } from "./components/Editor";
 import { Chat } from "./components/Chat";
@@ -34,13 +34,24 @@ function MeetingIcon({ className }: { className?: string }) {
   );
 }
 
-/** Resolve the active theme from settings, falling back to Midnight */
+/** Resolve the active theme from settings, migrating old names and searching custom themes. */
 function resolveTheme(settings: Settings | null): Theme {
   if (!settings?.theme || Object.keys(settings.theme).length === 0) {
     return DEFAULT_THEME;
   }
-  const base = BUILTIN_THEMES.find((t) => t.name === settings.theme.name) || DEFAULT_THEME;
-  return { ...base, ...settings.theme } as Theme;
+  // Migrate old theme names
+  let themeName = settings.theme.name || "";
+  if (themeName in THEME_MIGRATION) {
+    themeName = THEME_MIGRATION[themeName];
+  }
+  // Search built-in themes, then custom themes
+  const base =
+    BUILTIN_THEMES.find((t) => t.name === themeName) ||
+    (settings.custom_themes || []).find((t) => t.name === themeName) ||
+    DEFAULT_THEME;
+  // Merge overrides but preserve mode/codeTheme from base (not from overrides)
+  const { mode: _m, codeTheme: _c, ...overrides } = settings.theme as Record<string, unknown>;
+  return { ...base, ...overrides, name: themeName, mode: base.mode, codeTheme: base.codeTheme } as Theme;
 }
 
 function App() {
@@ -62,7 +73,9 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [meetingOpen, setMeetingOpen] = useState(false);
+  const [shikiTheme, setShikiTheme] = useState<[string, string]>(DEFAULT_THEME.codeTheme);
   const sidebarRef = useRef<SidebarHandle>(null);
+  const chatPanelRef = useRef<PanelImperativeHandle>(null);
   // Layout persistence
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: "brain-layout",
@@ -73,6 +86,7 @@ function App() {
   useEffect(() => {
     const theme = resolveTheme(settings);
     applyTheme(theme);
+    setShikiTheme(theme.codeTheme);
     if (settings?.font_family) {
       document.documentElement.style.setProperty("--font-sans", settings.font_family);
       document.documentElement.style.setProperty("--editor-font", settings.font_family);
@@ -261,8 +275,14 @@ function App() {
           <Button variant={activeView === "memory" ? "secondary" : "ghost"} size="sm" onClick={() => setActiveView("memory")} className="h-6 text-xs">Memory</Button>
           <Button variant={activeView === "search" ? "secondary" : "ghost"} size="sm" onClick={() => setActiveView("search")} className="h-6 text-xs">Search</Button>
           <div className="border-l border-border h-4 mx-1" />
-          <Button variant={chatOpen ? "secondary" : "ghost"} size="sm" onClick={() => setChatOpen(!chatOpen)} className="h-6 text-xs">Chat</Button>
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 ml-1" />
+          <Button variant={chatOpen ? "secondary" : "ghost"} size="sm" onClick={() => {
+            const panel = chatPanelRef.current;
+            if (panel) {
+              if (panel.isCollapsed()) { panel.expand(); } else { panel.collapse(); }
+            } else {
+              setChatOpen(!chatOpen);
+            }
+          }} className="h-6 text-xs">Chat</Button>
           <div className="border-l border-border h-4 mx-1" />
           <Button variant={meetingOpen ? "secondary" : "ghost"} size="sm" onClick={() => setMeetingOpen(!meetingOpen)} className="h-6 w-6 p-0" title="Record Meeting">
             <MeetingIcon className="w-3.5 h-3.5" />
@@ -307,6 +327,8 @@ function App() {
                 keymap={settings?.editor_keymap || "vim"}
                 lineNumbers={settings?.editor_line_numbers ?? false}
                 wordWrap={settings?.editor_word_wrap ?? true}
+                inlineFormatting={settings?.editor_inline_formatting ?? false}
+                shikiTheme={shikiTheme}
                 canGoBack={canGoBack}
                 canGoForward={canGoForward}
                 onGoBack={goBack}
@@ -319,19 +341,18 @@ function App() {
           </Panel>
 
           {/* Chat panel */}
-          {chatOpen && (
-            <>
-              <Separator />
-              <Panel
-                id="chat"
-                defaultSize="20%"
-                minSize="12%"
-                maxSize="40%"
-              >
-                <Chat onNavigateToNote={handleNavigateByTitle} />
-              </Panel>
-            </>
-          )}
+          <Separator />
+          <Panel
+            id="chat"
+            defaultSize="20%"
+            minSize="12%"
+            maxSize="40%"
+            collapsible
+            panelRef={chatPanelRef}
+            onResize={(size) => setChatOpen(size.asPercentage > 0)}
+          >
+            <Chat onNavigateToNote={handleNavigateByTitle} shikiTheme={shikiTheme} />
+          </Panel>
         </Group>
 
       </div>

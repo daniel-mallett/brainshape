@@ -1,24 +1,27 @@
-import { useRef, useEffect, useState, type FormEvent } from "react";
+import { useRef, useEffect, useState, useMemo, type FormEvent } from "react";
 import { useAgentStream, type Message } from "../lib/useAgentStream";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { Streamdown } from "streamdown";
-import { code } from "@streamdown/code";
+import { createCodePlugin } from "@streamdown/code";
+import type { BundledTheme } from "shiki";
+import remarkGfm from "remark-gfm";
 import { remarkWikilinks } from "../lib/remarkWikilinks";
 import { wikilinkComponents } from "../lib/WikilinkComponents";
 import { useWikilinkClick } from "../lib/useWikilinkClick";
 
-const streamdownPlugins = { code };
-const wikilinkRemarkPlugins = [remarkWikilinks];
+const streamdownRemarkPlugins = [remarkGfm, remarkWikilinks];
 
 function MessageBubble({
   message,
   isAnimating,
+  plugins,
 }: {
   message: Message;
   isAnimating: boolean;
+  plugins: Record<string, unknown>;
 }) {
   const isUser = message.role === "user";
 
@@ -49,8 +52,9 @@ function MessageBubble({
           ) : (
             <Streamdown
               animated
-              plugins={streamdownPlugins}
-              remarkPlugins={wikilinkRemarkPlugins}
+              className="sdm-chat"
+              plugins={plugins}
+              remarkPlugins={streamdownRemarkPlugins}
               components={wikilinkComponents}
               isAnimating={isAnimating}
             >
@@ -62,12 +66,20 @@ function MessageBubble({
   );
 }
 
-export function Chat({ onNavigateToNote }: { onNavigateToNote?: (title: string) => void }) {
+export function Chat({ onNavigateToNote, shikiTheme }: {
+  onNavigateToNote?: (title: string) => void;
+  shikiTheme?: [string, string];
+}) {
   const { messages, isStreaming, streamingMessageIndex, sendMessage } =
     useAgentStream();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const wikilinkRef = useWikilinkClick(onNavigateToNote);
+
+  const streamdownPlugins = useMemo(() => {
+    const themes = (shikiTheme || ["min-light", "min-dark"]) as [BundledTheme, BundledTheme];
+    return { code: createCodePlugin({ themes }) };
+  }, [shikiTheme]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -120,6 +132,7 @@ export function Chat({ onNavigateToNote }: { onNavigateToNote?: (title: string) 
               key={i}
               message={msg}
               isAnimating={i === streamingMessageIndex}
+              plugins={streamdownPlugins}
             />
           ))}
           {isStreaming && (() => {
