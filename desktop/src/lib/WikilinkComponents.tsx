@@ -1,18 +1,18 @@
 /**
  * Custom Streamdown component overrides for wikilink navigation.
  *
- * Renders wikilinks (href="#brain/...") as styled inline links.
+ * Renders wikilinks (href="#brainshape/...") as styled inline links.
  * Actual click handling is done via event delegation in the parent
  * component (useWikilinkClick hook) to avoid stale closure issues
  * with Streamdown's internal block memoization.
  */
 import type { Components } from "streamdown";
 
-const BRAIN_PREFIX = "#brain/";
+const BRAINSHAPE_PREFIX = "#brainshape/";
 
 export const wikilinkComponents: Partial<Components> = {
   a: ({ href, children }) => {
-    if (href?.startsWith(BRAIN_PREFIX)) {
+    if (href?.startsWith(BRAINSHAPE_PREFIX)) {
       return (
         <a
           href={href}

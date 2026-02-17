@@ -4,12 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-"Brain" is a personal second-brain agent with knowledge graph memory. It connects a markdown notes directory to a SurrealDB embedded knowledge graph, allowing an AI agent to read/search/create/edit notes and maintain its own long-term memory. It includes a standalone desktop app (Tauri 2 + React) and a FastAPI backend server.
+"Brainshape" is a personal second-brain agent with knowledge graph memory. It connects a markdown notes directory to a SurrealDB embedded knowledge graph, allowing an AI agent to read/search/create/edit notes and maintain its own long-term memory. It includes a standalone desktop app (Tauri 2 + React) and a FastAPI backend server.
 
 ## Architecture
 
 ```
-brain/                    # Python backend
+brainshape/               # Python backend
 ├── server.py             # FastAPI (HTTP + SSE) — desktop app backend
 ├── agent.py → tools → graph_db / notes / kg_pipeline
 ├── transcribe.py         # Voice transcription (local / OpenAI / Mistral)
@@ -30,22 +30,22 @@ desktop/                  # Tauri 2 + React + TypeScript
 
 ### Module Reference
 
-- `brain/agent.py` — agent factory (`create_brain_agent()`), interface-agnostic
-- `brain/tools.py` — 9 LangChain tools (search, semantic search, read, create, edit notes; query graph; find related; store memory; create connection)
-- `brain/graph_db.py` — SurrealDB embedded connection wrapper
-- `brain/notes.py` — notes reader/writer/parser (wikilinks, tags, frontmatter), vault import, trash system (move/list/restore/empty), rename with wikilink rewriting
-- `brain/server.py` — FastAPI server (HTTP + SSE) for desktop app
-- `brain/kg_pipeline.py` — embedding pipeline: load → split → embed → write (no LLM entity extraction)
-- `brain/sync.py` — orchestrates incremental structural + semantic sync from notes to graph
-- `brain/claude_code.py` — Claude Code CLI provider: spawns `claude` subprocess, parses stream-json output, yields SSE events matching existing contract
-- `brain/settings.py` — persistent user settings (JSON on disk), LLM provider config, transcription config, MCP servers, font/editor prefs, auto-migration of old keys
-- `brain/mcp_client.py` — MCP server client, loads external tools via `langchain-mcp-adapters`
-- `brain/mcp_server.py` — MCP server exposing all 9 tools; HTTP transport mounted at `/mcp` on the FastAPI server, stdio transport for standalone use
-- `brain/watcher.py` — watchdog file watcher for auto-sync on notes changes
-- `brain/transcribe.py` — voice transcription with pluggable providers (local mlx-whisper, OpenAI, Mistral)
-- `brain/cli.py` — interactive CLI chat loop with `/sync` commands
-- `brain/batch.py` — standalone batch sync entry point for cron/launchd
-- `brain/config.py` — pydantic-settings from .env (secrets/infra), exports API keys to `os.environ`
+- `brainshape/agent.py` — agent factory (`create_brainshape_agent()`), interface-agnostic
+- `brainshape/tools.py` — 9 LangChain tools (search, semantic search, read, create, edit notes; query graph; find related; store memory; create connection)
+- `brainshape/graph_db.py` — SurrealDB embedded connection wrapper
+- `brainshape/notes.py` — notes reader/writer/parser (wikilinks, tags, frontmatter), vault import, trash system (move/list/restore/empty), rename with wikilink rewriting
+- `brainshape/server.py` — FastAPI server (HTTP + SSE) for desktop app
+- `brainshape/kg_pipeline.py` — embedding pipeline: load → split → embed → write (no LLM entity extraction)
+- `brainshape/sync.py` — orchestrates incremental structural + semantic sync from notes to graph
+- `brainshape/claude_code.py` — Claude Code CLI provider: spawns `claude` subprocess, parses stream-json output, yields SSE events matching existing contract
+- `brainshape/settings.py` — persistent user settings (JSON on disk), LLM provider config, transcription config, MCP servers, font/editor prefs, auto-migration of old keys
+- `brainshape/mcp_client.py` — MCP server client, loads external tools via `langchain-mcp-adapters`
+- `brainshape/mcp_server.py` — MCP server exposing all 9 tools; HTTP transport mounted at `/mcp` on the FastAPI server, stdio transport for standalone use
+- `brainshape/watcher.py` — watchdog file watcher for auto-sync on notes changes
+- `brainshape/transcribe.py` — voice transcription with pluggable providers (local mlx-whisper, OpenAI, Mistral)
+- `brainshape/cli.py` — interactive CLI chat loop with `/sync` commands
+- `brainshape/batch.py` — standalone batch sync entry point for cron/launchd
+- `brainshape/config.py` — pydantic-settings from .env (secrets/infra), exports API keys to `os.environ`
 - `tests/` — unit tests (all external deps mocked, no Docker or network access required)
 
 ## Development Environment
@@ -64,9 +64,9 @@ desktop/                  # Tauri 2 + React + TypeScript
 
 ### Python Backend
 - **Run CLI**: `uv run main.py`
-- **Run server**: `uv run python -m brain.server` (starts FastAPI on port 8765)
-- **Run MCP server**: `uv run python -m brain.mcp_server` (stdio transport for Claude Code)
-- **Batch sync**: `uv run python -m brain.batch` (semantic), `--structural`, or `--full`
+- **Run server**: `uv run python -m brainshape.server` (starts FastAPI on port 8765)
+- **Run MCP server**: `uv run python -m brainshape.mcp_server` (stdio transport for Claude Code)
+- **Batch sync**: `uv run python -m brainshape.batch` (semantic), `--structural`, or `--full`
 - **Test**: `uv run pytest` (all tests), `uv run pytest -v` (verbose), `uv run pytest tests/test_notes.py` (single file)
 - **Lint**: `uv run ruff check`
 - **Lint fix**: `uv run ruff check --fix`
@@ -109,15 +109,15 @@ This project uses **uv** for all dependency management. Do not use pip directly.
 - **Sync environment after editing pyproject.toml**: `uv sync`
 - **Run anything in the venv**: `uv run <command>`
 
-There is no `[build-system]` table in `pyproject.toml` — the project is not an installable package. Tests use pytest's `pythonpath = ["."]` config to import `brain/` modules directly.
+There is no `[build-system]` table in `pyproject.toml` — the project is not an installable package. Tests use pytest's `pythonpath = ["."]` config to import `brainshape/` modules directly.
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in `ANTHROPIC_API_KEY` and `NOTES_PATH`. SurrealDB data is stored at `~/.config/brain/surrealdb` by default (configurable via `SURREALDB_PATH`).
+Copy `.env.example` to `.env` and fill in `ANTHROPIC_API_KEY` and `NOTES_PATH`. SurrealDB data is stored at `~/.config/brainshape/surrealdb` by default (configurable via `SURREALDB_PATH`).
 
-API keys are loaded from both `.env` (via pydantic-settings) and `~/.config/brain/settings.json` (via the settings UI). `config.py` exports them to `os.environ` at startup so downstream libraries (LangChain, Anthropic SDK, etc.) find them automatically. Shell-exported keys take precedence.
+API keys are loaded from both `.env` (via pydantic-settings) and `~/.config/brainshape/settings.json` (via the settings UI). `config.py` exports them to `os.environ` at startup so downstream libraries (LangChain, Anthropic SDK, etc.) find them automatically. Shell-exported keys take precedence.
 
-**Embedding model:** The default embedding model is `sentence-transformers/all-mpnet-base-v2` (ungated, no login required). This can be changed via the settings UI or `~/.config/brain/settings.json` (`embedding_model` and `embedding_dimensions` keys). Changing the model triggers automatic vector index migration on next sync.
+**Embedding model:** The default embedding model is `sentence-transformers/all-mpnet-base-v2` (ungated, no login required). This can be changed via the settings UI or `~/.config/brainshape/settings.json` (`embedding_model` and `embedding_dimensions` keys). Changing the model triggers automatic vector index migration on next sync.
 
 **Transcription:** Supports three providers — `local` (mlx-whisper, Apple Silicon only), `openai` (Whisper API), `mistral` (Voxtral API). Configured via `transcription_provider` and `transcription_model` in settings. Old `whisper_model` setting auto-migrates.
 

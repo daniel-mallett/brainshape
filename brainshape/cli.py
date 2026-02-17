@@ -1,14 +1,14 @@
 import sys
 from pathlib import Path
 
-from brain.agent import create_brain_agent
-from brain.graph_db import GraphDB
-from brain.kg_pipeline import KGPipeline
-from brain.sync import sync_all, sync_semantic, sync_structural
+from brainshape.agent import create_brainshape_agent
+from brainshape.graph_db import GraphDB
+from brainshape.kg_pipeline import KGPipeline
+from brainshape.sync import sync_all, sync_semantic, sync_structural
 
 
 def _run_sync(db: GraphDB, pipeline: KGPipeline, args: list[str]) -> None:
-    from brain.settings import get_notes_path
+    from brainshape.settings import get_notes_path
 
     notes_path = Path(get_notes_path()).expanduser()
     if not notes_path.exists():
@@ -44,21 +44,21 @@ def _handle_command(command: str, db: GraphDB, pipeline: KGPipeline) -> None:
         print("  /sync --full       — Full sync: structural + semantic (incremental)")
         print("  /sync --semantic   — Semantic sync only (incremental)")
         print("  /help              — Show this help")
-        print("  quit / exit        — Exit Brain")
+        print("  quit / exit        — Exit Brainshape")
     else:
         print(f"Unknown command: {cmd}. Type /help for available commands.")
 
 
 def run_cli():
-    print("Starting Brain...")
-    agent, db, pipeline = create_brain_agent()
+    print("Starting Brainshape...")
+    agent, db, pipeline = create_brainshape_agent()
 
     if agent is None or db is None or pipeline is None:
         print("Failed to initialize — check DB connection and API keys.", file=sys.stderr)
         sys.exit(1)
 
     # Structural sync on startup
-    from brain.settings import get_notes_path
+    from brainshape.settings import get_notes_path
 
     notes_path = Path(get_notes_path()).expanduser()
     if notes_path.exists():
@@ -75,7 +75,7 @@ def run_cli():
         print(f"Notes path {notes_path} not found. Starting without sync.")
         print(f"  Create it with: mkdir -p {notes_path}")
 
-    print("\nBrain is ready. Type 'quit' or 'exit' to stop. Type /help for commands.\n")
+    print("\nBrainshape is ready. Type 'quit' or 'exit' to stop. Type /help for commands.\n")
 
     thread_id = "cli-session"
     config = {"configurable": {"thread_id": thread_id}}
@@ -99,7 +99,7 @@ def run_cli():
             continue
 
         messages = {"messages": [{"role": "user", "content": user_input}]}
-        print("Brain: ", end="", flush=True)
+        print("Brainshape: ", end="", flush=True)
 
         try:
             for chunk in agent.stream(messages, config=config, stream_mode="updates"):

@@ -7,7 +7,7 @@ and returns their tools as LangChain tools that can be added to the agent.
 import logging
 from typing import Any
 
-from brain.settings import load_settings
+from brainshape.settings import load_settings
 
 logger = logging.getLogger(__name__)
 

@@ -1,5 +1,5 @@
 /**
- * Theme engine for Brain desktop app.
+ * Theme engine for Brainshape desktop app.
  *
  * A theme is a flat object mapping CSS variable names to color values.
  * Built-in themes ship as defaults; users can customize any property.

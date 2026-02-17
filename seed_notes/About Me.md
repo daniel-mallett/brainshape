@@ -5,7 +5,7 @@ tags:
 ---
 # About Me
 
-This note helps your Brain agent understand who you are. Edit it with whatever context you'd like the agent to have when answering your questions or creating notes.
+This note helps your Brainshape agent understand who you are. Edit it with whatever context you'd like the agent to have when answering your questions or creating notes.
 
 ## Basics
 

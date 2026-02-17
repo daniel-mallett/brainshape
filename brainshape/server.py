@@ -1,4 +1,4 @@
-"""FastAPI server exposing Brain agent, notes, and sync operations over HTTP + SSE."""
+"""FastAPI server exposing Brainshape agent, notes, and sync operations over HTTP + SSE."""
 
 import json
 import logging
@@ -14,16 +14,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from brain.agent import create_brain_agent
-from brain.claude_code import clear_sessions as clear_claude_sessions
-from brain.claude_code import stream_claude_code_response
-from brain.config import settings
-from brain.graph_db import GraphDB
-from brain.kg_pipeline import KGPipeline, create_kg_pipeline
-from brain.mcp_client import close_mcp_client
-from brain.mcp_client import load_mcp_tools as load_mcp
-from brain.mcp_server import create_mcp_server
-from brain.notes import (
+from brainshape.agent import create_brainshape_agent
+from brainshape.claude_code import clear_sessions as clear_claude_sessions
+from brainshape.claude_code import stream_claude_code_response
+from brainshape.config import settings
+from brainshape.graph_db import GraphDB
+from brainshape.kg_pipeline import KGPipeline, create_kg_pipeline
+from brainshape.mcp_client import close_mcp_client
+from brainshape.mcp_client import load_mcp_tools as load_mcp
+from brainshape.mcp_server import create_mcp_server
+from brainshape.notes import (
     _ensure_within_notes_dir,
     delete_note,
     empty_trash,
@@ -38,9 +38,9 @@ from brain.notes import (
     rewrite_wikilinks,
     write_note,
 )
-from brain.settings import VALID_PROVIDERS, get_notes_path, load_settings, update_settings
-from brain.sync import sync_semantic, sync_semantic_async, sync_structural
-from brain.watcher import start_watcher
+from brainshape.settings import VALID_PROVIDERS, get_notes_path, load_settings, update_settings
+from brainshape.sync import sync_semantic, sync_semantic_async, sync_structural
+from brainshape.watcher import start_watcher
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ async def lifespan(app: FastAPI):
     else:
         # Load MCP tools (async, may be empty if none configured)
         mcp_tools = await load_mcp()
-        _agent, _db, _pipeline = create_brain_agent(mcp_tools=mcp_tools or None)
+        _agent, _db, _pipeline = create_brainshape_agent(mcp_tools=mcp_tools or None)
 
     if _agent is None and provider != "claude-code":
         logger.warning("Server starting in degraded mode — no database connection")
@@ -118,7 +118,7 @@ async def lifespan(app: FastAPI):
         _db.close()
 
 
-app = FastAPI(title="Brain", lifespan=lifespan)
+app = FastAPI(title="Brainshape", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,  # type: ignore[arg-type]  # Starlette middleware typing is too strict for ty
@@ -306,7 +306,7 @@ async def agent_message(req: MessageRequest):
 
 async def _agent_message_claude_code(req: MessageRequest):
     """Handle agent messages via the Claude Code CLI subprocess."""
-    from brain.agent import SYSTEM_PROMPT
+    from brainshape.agent import SYSTEM_PROMPT
 
     current_settings = load_settings()
     model = current_settings.get("llm_model", "sonnet")
@@ -914,7 +914,7 @@ async def _save_upload_to_temp(audio: UploadFile) -> str:
 @app.post("/transcribe")
 async def transcribe(audio: UploadFile = File(...)):  # noqa: B008
     """Transcribe an uploaded audio file using the configured provider."""
-    from brain.transcribe import transcribe_audio
+    from brainshape.transcribe import transcribe_audio
 
     tmp_path = None
     try:
@@ -940,9 +940,9 @@ async def transcribe_meeting(
     """Transcribe audio and save as a new note with timestamps."""
     from datetime import datetime
 
-    from brain.notes import write_note
-    from brain.settings import load_settings
-    from brain.transcribe import transcribe_audio
+    from brainshape.notes import write_note
+    from brainshape.settings import load_settings
+    from brainshape.transcribe import transcribe_audio
 
     tmp_path = None
     try:
@@ -1090,7 +1090,7 @@ async def put_settings(req: UpdateSettingsRequest):
     if req.mistral_api_key is not None:
         updates["mistral_api_key"] = req.mistral_api_key
     if req.transcription_provider is not None:
-        from brain.settings import VALID_TRANSCRIPTION_PROVIDERS
+        from brainshape.settings import VALID_TRANSCRIPTION_PROVIDERS
 
         if req.transcription_provider not in VALID_TRANSCRIPTION_PROVIDERS:
             raise HTTPException(
@@ -1098,12 +1098,12 @@ async def put_settings(req: UpdateSettingsRequest):
                 detail=f"Invalid transcription provider: {req.transcription_provider}",
             )
         updates["transcription_provider"] = req.transcription_provider
-        from brain.transcribe import reset_model
+        from brainshape.transcribe import reset_model
 
         reset_model()
     if req.transcription_model is not None:
         updates["transcription_model"] = req.transcription_model
-        from brain.transcribe import reset_model
+        from brainshape.transcribe import reset_model
 
         reset_model()
     if req.embedding_model is not None:
@@ -1141,7 +1141,7 @@ async def put_settings(req: UpdateSettingsRequest):
         ]
     )
     if any_key_changed:
-        from brain.config import export_api_keys
+        from brainshape.config import export_api_keys
 
         # Clear existing values so export_api_keys' setdefault can update them
         if req.anthropic_api_key is not None:
@@ -1178,8 +1178,8 @@ async def put_settings(req: UpdateSettingsRequest):
             _agent = None
             clear_claude_sessions()
         else:
-            from brain.agent import recreate_agent
-            from brain.mcp_client import reload_mcp_tools
+            from brainshape.agent import recreate_agent
+            from brainshape.mcp_client import reload_mcp_tools
 
             mcp_tools = await reload_mcp_tools()
             _agent = recreate_agent(_db, _pipeline, mcp_tools=mcp_tools or None)
@@ -1326,4 +1326,4 @@ def import_vault_endpoint(req: ImportVaultRequest):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("brain.server:app", host="127.0.0.1", port=8765, reload=True)
+    uvicorn.run("brainshape.server:app", host="127.0.0.1", port=8765, reload=True)

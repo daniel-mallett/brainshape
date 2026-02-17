@@ -1,6 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock
 
-from brain.sync import _get_stored_hashes, sync_all, sync_semantic, sync_structural
+from brainshape.sync import _get_stored_hashes, sync_all, sync_semantic, sync_structural
 
 
 class TestGetStoredHashes:
@@ -59,7 +59,7 @@ class TestSyncSemantic:
         pipeline = MagicMock()
         pipeline.run_async = AsyncMock(return_value=None)
         # Precompute hashes so everything appears unchanged
-        from brain.notes import compute_file_hash, list_notes
+        from brainshape.notes import compute_file_hash, list_notes
 
         hashes = {}
         for f in list_notes(tmp_notes):

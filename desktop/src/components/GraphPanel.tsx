@@ -9,11 +9,11 @@ import {
 import { GraphView } from "./GraphView";
 import { Button } from "./ui/button";
 
-const LABEL_BADGE_COLORS: Record<string, string> = {
-  Note: "bg-slate-600",
-  Tag: "bg-blue-600",
-  Memory: "bg-purple-600",
-  Chunk: "bg-gray-600",
+const LABEL_CSS_VARS: Record<string, string> = {
+  Note: "var(--graph-note)",
+  Tag: "var(--graph-tag)",
+  Memory: "var(--graph-memory)",
+  Chunk: "var(--graph-chunk)",
 };
 
 interface GraphPanelProps {
@@ -95,7 +95,8 @@ export function GraphPanel({ onNavigateToNote }: GraphPanelProps) {
             {Object.entries(stats.nodes).map(([label, count]) => (
               <span key={label} className="flex items-center gap-1">
                 <span
-                  className={`inline-block w-2 h-2 rounded-full ${LABEL_BADGE_COLORS[label] || "bg-gray-500"}`}
+                  className="inline-block w-2 h-2 rounded-full"
+                  style={{ backgroundColor: LABEL_CSS_VARS[label] || "var(--graph-note)" }}
                 />
                 {count} {label === "Memory" ? "Memories" : `${label}s`}
               </span>

@@ -1,32 +1,32 @@
 """Batch sync entry point for cron/launchd jobs.
 
 Usage:
-    uv run python -m brain.batch                  # semantic only (default)
-    uv run python -m brain.batch --structural     # structural only
-    uv run python -m brain.batch --full           # structural + semantic
+    uv run python -m brainshape.batch                  # semantic only (default)
+    uv run python -m brainshape.batch --structural     # structural only
+    uv run python -m brainshape.batch --full           # structural + semantic
 
 Only processes dirty files (content hash comparison).
 
 Example cron (overnight semantic processing):
-    0 3 * * * cd /path/to/brain && uv run python -m brain.batch
+    0 3 * * * cd /path/to/brainshape && uv run python -m brainshape.batch
 """
 
 import argparse
 import sys
 from pathlib import Path
 
-from brain.graph_db import GraphDB
-from brain.kg_pipeline import create_kg_pipeline
-from brain.sync import sync_all, sync_semantic, sync_structural
+from brainshape.graph_db import GraphDB
+from brainshape.kg_pipeline import create_kg_pipeline
+from brainshape.sync import sync_all, sync_semantic, sync_structural
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Brain notes sync (batch mode)")
+    parser = argparse.ArgumentParser(description="Brainshape notes sync (batch mode)")
     parser.add_argument("--structural", action="store_true", help="Run structural sync only")
     parser.add_argument("--full", action="store_true", help="Run structural + semantic sync")
     args = parser.parse_args()
 
-    from brain.settings import get_notes_path
+    from brainshape.settings import get_notes_path
 
     notes_path = Path(get_notes_path()).expanduser()
     if not notes_path.exists():

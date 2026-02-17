@@ -1,13 +1,13 @@
 /**
  * Hook that attaches a delegated click handler to a container ref,
- * intercepting clicks on wikilink anchors (href="#brain/...").
+ * intercepting clicks on wikilink anchors (href="#brainshape/...").
  *
  * Uses event delegation so the callback is always current — avoids
  * stale closures from Streamdown's internal block memoization.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const BRAIN_PREFIX = "#brain/";
+const BRAINSHAPE_PREFIX = "#brainshape/";
 
 export function useWikilinkClick(
   onNavigateToNote?: (title: string) => void,
@@ -30,9 +30,9 @@ export function useWikilinkClick(
       if (!anchor) return;
 
       const href = anchor.getAttribute("href");
-      if (href?.startsWith(BRAIN_PREFIX) && callbackRef.current) {
+      if (href?.startsWith(BRAINSHAPE_PREFIX) && callbackRef.current) {
         e.preventDefault();
-        const title = decodeURIComponent(href.slice(BRAIN_PREFIX.length));
+        const title = decodeURIComponent(href.slice(BRAINSHAPE_PREFIX.length));
         callbackRef.current(title);
       }
     }

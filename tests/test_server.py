@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from brain import server
+from brainshape import server
 
 
 @pytest.fixture
@@ -20,8 +20,8 @@ def server_db():
 @pytest.fixture
 def client(tmp_notes, tmp_path, monkeypatch, mock_agent, server_db):
     """Create a test client with mocked agent/db/pipeline and tmp notes."""
-    monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
-    monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
+    monkeypatch.setattr("brainshape.config.settings.notes_path", str(tmp_notes))
+    monkeypatch.setattr("brainshape.settings.SETTINGS_FILE", tmp_path / "settings.json")
 
     # Bypass lifespan entirely by replacing it with a no-op
     from contextlib import asynccontextmanager
@@ -726,7 +726,7 @@ class TestSearch:
 class TestTranscription:
     def test_transcribe_audio(self, client, monkeypatch):
         mock_transcribe = MagicMock(return_value={"text": "Hello world", "segments": []})
-        monkeypatch.setattr("brain.transcribe.transcribe_audio", mock_transcribe)
+        monkeypatch.setattr("brainshape.transcribe.transcribe_audio", mock_transcribe)
 
         resp = client.post(
             "/transcribe",
@@ -748,7 +748,7 @@ class TestTranscribeMeeting:
                 ],
             }
         )
-        monkeypatch.setattr("brain.transcribe.transcribe_audio", mock_transcribe)
+        monkeypatch.setattr("brainshape.transcribe.transcribe_audio", mock_transcribe)
 
         resp = client.post(
             "/transcribe/meeting",
@@ -764,7 +764,7 @@ class TestTranscribeMeeting:
 
     def test_meeting_default_title(self, client, tmp_notes, monkeypatch):
         mock_transcribe = MagicMock(return_value={"text": "Hello", "segments": []})
-        monkeypatch.setattr("brain.transcribe.transcribe_audio", mock_transcribe)
+        monkeypatch.setattr("brainshape.transcribe.transcribe_audio", mock_transcribe)
 
         resp = client.post(
             "/transcribe/meeting",
@@ -776,7 +776,7 @@ class TestTranscribeMeeting:
 
     def test_meeting_default_tags(self, client, tmp_notes, monkeypatch):
         mock_transcribe = MagicMock(return_value={"text": "Hello", "segments": []})
-        monkeypatch.setattr("brain.transcribe.transcribe_audio", mock_transcribe)
+        monkeypatch.setattr("brainshape.transcribe.transcribe_audio", mock_transcribe)
 
         resp = client.post(
             "/transcribe/meeting",
@@ -797,14 +797,14 @@ class TestTranscribeMeeting:
 
 class TestFmtTime:
     def test_minutes_seconds(self):
-        from brain.server import _fmt_time
+        from brainshape.server import _fmt_time
 
         assert _fmt_time(0) == "0:00"
         assert _fmt_time(65) == "1:05"
         assert _fmt_time(599) == "9:59"
 
     def test_hours(self):
-        from brain.server import _fmt_time
+        from brainshape.server import _fmt_time
 
         assert _fmt_time(3600) == "1:00:00"
         assert _fmt_time(3661) == "1:01:01"
@@ -813,7 +813,7 @@ class TestFmtTime:
 class TestTranscribeMeetingWithFolder:
     def test_meeting_in_folder(self, client, tmp_notes, monkeypatch):
         mock_transcribe = MagicMock(return_value={"text": "Hello", "segments": []})
-        monkeypatch.setattr("brain.transcribe.transcribe_audio", mock_transcribe)
+        monkeypatch.setattr("brainshape.transcribe.transcribe_audio", mock_transcribe)
 
         resp = client.post(
             "/transcribe/meeting",
@@ -843,8 +843,8 @@ class TestSettings:
     def test_update_settings(self, client, monkeypatch):
         mock_reload = AsyncMock(return_value=[])
         mock_recreate = MagicMock(return_value=MagicMock())
-        monkeypatch.setattr("brain.mcp_client.reload_mcp_tools", mock_reload)
-        monkeypatch.setattr("brain.agent.recreate_agent", mock_recreate)
+        monkeypatch.setattr("brainshape.mcp_client.reload_mcp_tools", mock_reload)
+        monkeypatch.setattr("brainshape.agent.recreate_agent", mock_recreate)
 
         resp = client.put("/settings", json={"llm_provider": "ollama", "llm_model": "llama3.3"})
         assert resp.status_code == 200
@@ -865,10 +865,10 @@ class TestSettings:
         mock_reload = AsyncMock(return_value=[])
         mock_recreate = MagicMock(return_value=MagicMock())
         mock_pipeline = MagicMock()
-        monkeypatch.setattr("brain.mcp_client.reload_mcp_tools", mock_reload)
-        monkeypatch.setattr("brain.agent.recreate_agent", mock_recreate)
+        monkeypatch.setattr("brainshape.mcp_client.reload_mcp_tools", mock_reload)
+        monkeypatch.setattr("brainshape.agent.recreate_agent", mock_recreate)
         monkeypatch.setattr(
-            "brain.server.create_kg_pipeline", MagicMock(return_value=mock_pipeline)
+            "brainshape.server.create_kg_pipeline", MagicMock(return_value=mock_pipeline)
         )
 
         resp = client.put(
@@ -921,8 +921,8 @@ class TestSettings:
         """PUT /settings with mcp_servers triggers agent reload."""
         mock_reload = AsyncMock(return_value=[])
         mock_recreate = MagicMock(return_value=MagicMock())
-        monkeypatch.setattr("brain.mcp_client.reload_mcp_tools", mock_reload)
-        monkeypatch.setattr("brain.agent.recreate_agent", mock_recreate)
+        monkeypatch.setattr("brainshape.mcp_client.reload_mcp_tools", mock_reload)
+        monkeypatch.setattr("brainshape.agent.recreate_agent", mock_recreate)
 
         resp = client.put(
             "/settings",
@@ -947,8 +947,8 @@ class TestSettings:
         """PUT /settings with llm_provider triggers agent reload."""
         mock_reload = AsyncMock(return_value=[])
         mock_recreate = MagicMock(return_value=MagicMock())
-        monkeypatch.setattr("brain.mcp_client.reload_mcp_tools", mock_reload)
-        monkeypatch.setattr("brain.agent.recreate_agent", mock_recreate)
+        monkeypatch.setattr("brainshape.mcp_client.reload_mcp_tools", mock_reload)
+        monkeypatch.setattr("brainshape.agent.recreate_agent", mock_recreate)
 
         resp = client.put("/settings", json={"llm_provider": "ollama"})
         assert resp.status_code == 200
@@ -980,7 +980,7 @@ class TestSettings:
 class TestTranscriptionErrors:
     def test_transcribe_failure(self, client, monkeypatch):
         monkeypatch.setattr(
-            "brain.transcribe.transcribe_audio",
+            "brainshape.transcribe.transcribe_audio",
             MagicMock(side_effect=RuntimeError("model not found")),
         )
         resp = client.post(
@@ -994,8 +994,8 @@ class TestTranscriptionErrors:
 @pytest.fixture
 def bare_client(tmp_notes, tmp_path, monkeypatch):
     """Client with _db and _pipeline set to None (degraded mode)."""
-    monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_notes))
-    monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
+    monkeypatch.setattr("brainshape.config.settings.notes_path", str(tmp_notes))
+    monkeypatch.setattr("brainshape.settings.SETTINGS_FILE", tmp_path / "settings.json")
 
     from contextlib import asynccontextmanager
 
@@ -1076,32 +1076,32 @@ class TestSync:
 
 class TestHelperFunctions:
     def test_primary_label_capitalizes(self):
-        from brain.server import _primary_label
+        from brainshape.server import _primary_label
 
         assert _primary_label("note") == "Note"
 
     def test_primary_label_tag(self):
-        from brain.server import _primary_label
+        from brainshape.server import _primary_label
 
         assert _primary_label("tag") == "Tag"
 
     def test_primary_label_empty(self):
-        from brain.server import _primary_label
+        from brainshape.server import _primary_label
 
         assert _primary_label("") == "Unknown"
 
     def test_truncate_long_text(self):
-        from brain.server import _truncate
+        from brainshape.server import _truncate
 
         assert _truncate("a" * 100, 50) == "a" * 50 + "..."
 
     def test_truncate_short_text(self):
-        from brain.server import _truncate
+        from brainshape.server import _truncate
 
         assert _truncate("short", 50) == "short"
 
     def test_truncate_none(self):
-        from brain.server import _truncate
+        from brainshape.server import _truncate
 
         assert _truncate(None, 50) is None
 
@@ -1266,7 +1266,7 @@ class TestImportVault:
         (source / "note.md").write_text("# Note")
 
         mock_sync = MagicMock(return_value={"notes": 1, "tags": 0, "links": 0})
-        monkeypatch.setattr("brain.server.sync_structural", mock_sync)
+        monkeypatch.setattr("brainshape.server.sync_structural", mock_sync)
 
         resp = client.post("/import/vault", json={"source_path": str(source)})
         assert resp.status_code == 200
@@ -1276,7 +1276,7 @@ class TestImportVault:
         source = tmp_path_factory.mktemp("empty_vault")
 
         mock_sync = MagicMock()
-        monkeypatch.setattr("brain.server.sync_structural", mock_sync)
+        monkeypatch.setattr("brainshape.server.sync_structural", mock_sync)
 
         resp = client.post("/import/vault", json={"source_path": str(source)})
         assert resp.status_code == 200
@@ -1315,7 +1315,7 @@ class TestClaudeCodeProvider:
 
         settings_file = tmp_path / "settings.json"
         settings_file.write_text(json.dumps({"llm_provider": "claude-code", "llm_model": "sonnet"}))
-        monkeypatch.setattr("brain.settings.SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("brainshape.settings.SETTINGS_FILE", settings_file)
 
         # Create a session first
         init_resp = client.post("/agent/init")
@@ -1326,7 +1326,7 @@ class TestClaudeCodeProvider:
             yield {"event": "text", "data": json.dumps("Hello from Claude Code!")}
             yield {"event": "done", "data": ""}
 
-        monkeypatch.setattr("brain.server.stream_claude_code_response", mock_stream)
+        monkeypatch.setattr("brainshape.server.stream_claude_code_response", mock_stream)
 
         resp = client.post(
             "/agent/message",
@@ -1355,7 +1355,7 @@ class TestClaudeCodeProvider:
 
         settings_file = tmp_path / "settings.json"
         settings_file.write_text(json.dumps({"llm_provider": "claude-code", "llm_model": "sonnet"}))
-        monkeypatch.setattr("brain.settings.SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("brainshape.settings.SETTINGS_FILE", settings_file)
 
         server._agent = None
 
@@ -1366,7 +1366,7 @@ class TestClaudeCodeProvider:
             yield {"event": "text", "data": json.dumps("Works without LangChain agent")}
             yield {"event": "done", "data": ""}
 
-        monkeypatch.setattr("brain.server.stream_claude_code_response", mock_stream)
+        monkeypatch.setattr("brainshape.server.stream_claude_code_response", mock_stream)
 
         resp = client.post(
             "/agent/message",
@@ -1501,7 +1501,7 @@ class TestPipelineNotesPathRefresh:
     def test_pipeline_recreated_on_notes_path_change(self, client, tmp_path, monkeypatch):
         new_path = str(tmp_path / "new-notes")
         mock_create = MagicMock()
-        monkeypatch.setattr("brain.server.create_kg_pipeline", mock_create)
+        monkeypatch.setattr("brainshape.server.create_kg_pipeline", mock_create)
 
         resp = client.put("/settings", json={"notes_path": new_path})
         assert resp.status_code == 200

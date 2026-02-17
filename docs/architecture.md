@@ -2,23 +2,23 @@
 
 ## Overview
 
-Brain is a personal second-brain agent with knowledge graph memory. It connects a markdown notes directory to a SurrealDB embedded knowledge graph, allowing an AI agent to read/search/create/edit notes and maintain its own long-term memory. It includes a standalone desktop app (Tauri 2 + React) backed by a FastAPI server.
+Brainshape is a personal second-brain agent with knowledge graph memory. It connects a markdown notes directory to a SurrealDB embedded knowledge graph, allowing an AI agent to read/search/create/edit notes and maintain its own long-term memory. It includes a standalone desktop app (Tauri 2 + React) backed by a FastAPI server.
 
 ## Module Map
 
 ```
-main.py                      # Thin entry point → brain.cli.run_cli()
+main.py                      # Thin entry point → brainshape.cli.run_cli()
 .env / .env.example          # Configuration (gitignored / template)
 scripts/dev.sh               # Start full dev environment (server + Tauri)
 
-brain/
+brainshape/
 ├── config.py                # pydantic-settings, loads from .env
 ├── graph_db.py              # SurrealDB embedded wrapper, schema bootstrap, query() helper
 ├── notes.py                 # Notes reader/writer/parser, trash system, rename + wikilink rewriting
 ├── kg_pipeline.py           # Embedding pipeline: load → split → embed → write (no LLM extraction)
 ├── sync.py                  # Orchestrates incremental semantic + structural sync
 ├── tools.py                 # 9 LangChain tools for the agent
-├── agent.py                 # create_brain_agent() — model + tools + system prompt
+├── agent.py                 # create_brainshape_agent() — model + tools + system prompt
 ├── server.py                # FastAPI server (HTTP + SSE) for desktop app
 ├── settings.py              # Persistent user settings (JSON on disk), LLM provider config
 ├── claude_code.py           # Claude Code CLI provider (spawns claude subprocess, stream-json)
@@ -83,25 +83,25 @@ tests/
 ## Data Flow
 
 ```
-                              ┌─ brain/cli.py (terminal)
+                              ┌─ brainshape/cli.py (terminal)
 main.py ──┤                   │
-           └─ brain/server.py ─┬─ FastAPI HTTP+SSE ← desktop/ (Tauri app)
-                               │
-                               └─ brain/agent.py → tools → graph_db / notes / kg_pipeline
+           └─ brainshape/server.py ─┬─ FastAPI HTTP+SSE ← desktop/ (Tauri app)
+                                    │
+                                    └─ brainshape/agent.py → tools → graph_db / notes / kg_pipeline
 ```
 
 ## Interface-Agnostic Design
 
-The agent core (`agent.py`) is completely decoupled from any UI. `create_brain_agent()` returns a compiled LangGraph agent that any interface can call via `invoke()` or `stream()`. Current consumers:
+The agent core (`agent.py`) is completely decoupled from any UI. `create_brainshape_agent()` returns a compiled LangGraph agent that any interface can call via `invoke()` or `stream()`. Current consumers:
 
 - **CLI** (`cli.py`) — terminal chat loop
 - **Server** (`server.py`) — FastAPI with SSE streaming, consumed by the desktop app
 
-Future interfaces (Slack, Discord, voice) each import `create_brain_agent()` and provide their own message loop.
+Future interfaces (Slack, Discord, voice) each import `create_brainshape_agent()` and provide their own message loop.
 
 ## Server Architecture
 
-`brain/server.py` is a FastAPI app on `localhost:8765` that exposes:
+`brainshape/server.py` is a FastAPI app on `localhost:8765` that exposes:
 
 - `GET /health` — health check (includes `surrealdb_connected`, `agent_available` status)
 - `GET /config` — current configuration
@@ -140,7 +140,7 @@ Two independent sync layers with different cost profiles:
 
 - **Structural sync** (cheap, always current): runs on every startup (CLI and server) and via `/sync` or `POST /sync/structural`. Two-pass approach: first UPSERT all note records (so every note exists before linking), then create tag and wikilink relationships. No hash-gating because it's just SurrealQL queries.
 - **Semantic sync** (expensive, incremental): runs via `/sync --full`, `/sync --semantic`, or `POST /sync/semantic`. Uses local embedding model to chunk and embed notes. Tracked by SHA-256 content hash — only dirty (changed) files are processed.
-- **Batch processing**: `uv run python -m brain.batch` for cron/launchd jobs.
+- **Batch processing**: `uv run python -m brainshape.batch` for cron/launchd jobs.
 
 ## Key Dependencies
 
@@ -182,7 +182,7 @@ Uses **uv** — all deps managed via `pyproject.toml`. No `requirements.txt`, no
 
 ## Configuration
 
-All config flows through `brain/config.py` using `pydantic-settings.BaseSettings`:
+All config flows through `brainshape/config.py` using `pydantic-settings.BaseSettings`:
 - Loads from `.env` file automatically
 - Validates types at startup
 - Singleton `settings` object imported by all other modules

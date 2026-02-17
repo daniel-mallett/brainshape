@@ -2,7 +2,7 @@
 
 ## Overview
 
-The knowledge graph embedding pipeline in `brain/kg_pipeline.py` processes markdown notes into chunk embeddings for semantic search. It uses `sentence-transformers` for embedding and writes directly to SurrealDB via SurrealQL.
+The knowledge graph embedding pipeline in `brainshape/kg_pipeline.py` processes markdown notes into chunk embeddings for semantic search. It uses `sentence-transformers` for embedding and writes directly to SurrealDB via SurrealQL.
 
 The pipeline is intentionally simple: load → split → embed → write. There is no LLM entity extraction — the knowledge graph grows organically through structural sync (tags, wikilinks from the notes themselves) and agent-driven memory (the agent creates memory records and custom entities during conversation via `store_memory` and `create_connection`).
 
@@ -49,7 +49,7 @@ RELATE $chunk->from_document->$doc;
 
 Default model: `sentence-transformers/all-mpnet-base-v2` (768 dimensions). Runs locally — no API cost, no authentication required (ungated on HuggingFace).
 
-The embedding model is configurable via the settings UI or `~/.config/brain/settings.json` (`embedding_model` and `embedding_dimensions` keys). Changing the model triggers automatic vector index migration: the old index is dropped, existing chunks are deleted, and content hashes are cleared to force re-embedding on next sync.
+The embedding model is configurable via the settings UI or `~/.config/brainshape/settings.json` (`embedding_model` and `embedding_dimensions` keys). Changing the model triggers automatic vector index migration: the old index is dropped, existing chunks are deleted, and content hashes are cleared to force re-embedding on next sync.
 
 An HNSW vector index (`chunk_embeddings`) is created on `chunk.embedding` during pipeline initialization, enabling cosine similarity search via the `semantic_search` tool:
 

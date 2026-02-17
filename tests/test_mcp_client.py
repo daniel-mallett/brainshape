@@ -2,7 +2,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from brain.mcp_client import _build_mcp_config, close_mcp_client, load_mcp_tools, reload_mcp_tools
+from brainshape.mcp_client import (
+    _build_mcp_config,
+    close_mcp_client,
+    load_mcp_tools,
+    reload_mcp_tools,
+)
 
 
 class TestBuildMcpConfig:
@@ -117,7 +122,7 @@ class TestBuildMcpConfig:
 @pytest.mark.asyncio
 async def test_load_mcp_tools_empty(monkeypatch, tmp_path):
     """Returns empty list when no MCP servers configured."""
-    monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
+    monkeypatch.setattr("brainshape.settings.SETTINGS_FILE", tmp_path / "settings.json")
     result = await load_mcp_tools()
     assert result == []
 
@@ -125,9 +130,9 @@ async def test_load_mcp_tools_empty(monkeypatch, tmp_path):
 @pytest.mark.asyncio
 async def test_load_mcp_tools_success(monkeypatch, tmp_path):
     """Returns tools from MultiServerMCPClient when servers are configured."""
-    import brain.mcp_client
+    import brainshape.mcp_client
 
-    monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
+    monkeypatch.setattr("brainshape.settings.SETTINGS_FILE", tmp_path / "settings.json")
 
     # Write settings with a server
     import json
@@ -142,10 +147,10 @@ async def test_load_mcp_tools_success(monkeypatch, tmp_path):
     mock_client.get_tools.return_value = mock_tools
     mock_class = MagicMock(return_value=mock_client)
 
-    with patch("brain.mcp_client.MultiServerMCPClient", mock_class, create=True):
+    with patch("brainshape.mcp_client.MultiServerMCPClient", mock_class, create=True):
         # Patch the import inside load_mcp_tools
         monkeypatch.setattr(
-            "brain.mcp_client.load_mcp_tools",
+            "brainshape.mcp_client.load_mcp_tools",
             load_mcp_tools,  # use the real function
         )
         # We need to mock the dynamic import
@@ -155,11 +160,11 @@ async def test_load_mcp_tools_success(monkeypatch, tmp_path):
         fake_module.MultiServerMCPClient = mock_class
         monkeypatch.setitem(__import__("sys").modules, "langchain_mcp_adapters.client", fake_module)
 
-        brain.mcp_client._active_client = None
+        brainshape.mcp_client._active_client = None
         result = await load_mcp_tools()
 
     assert len(result) == 2
-    assert brain.mcp_client._active_client is mock_client
+    assert brainshape.mcp_client._active_client is mock_client
 
 
 @pytest.mark.asyncio
@@ -167,9 +172,9 @@ async def test_load_mcp_tools_failure(monkeypatch, tmp_path):
     """Returns empty list when client connection fails."""
     import json
 
-    import brain.mcp_client
+    import brainshape.mcp_client
 
-    monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
+    monkeypatch.setattr("brainshape.settings.SETTINGS_FILE", tmp_path / "settings.json")
     settings_file = tmp_path / "settings.json"
     settings_file.write_text(
         json.dumps({"mcp_servers": [{"name": "bad", "transport": "stdio", "command": "fail"}]})
@@ -182,54 +187,54 @@ async def test_load_mcp_tools_failure(monkeypatch, tmp_path):
     fake_module.MultiServerMCPClient = mock_class
     monkeypatch.setitem(__import__("sys").modules, "langchain_mcp_adapters.client", fake_module)
 
-    brain.mcp_client._active_client = None
+    brainshape.mcp_client._active_client = None
     result = await load_mcp_tools()
     assert result == []
-    assert brain.mcp_client._active_client is None
+    assert brainshape.mcp_client._active_client is None
 
 
 @pytest.mark.asyncio
 async def test_reload_mcp_tools(monkeypatch, tmp_path):
     """reload_mcp_tools closes old client then loads fresh tools."""
-    import brain.mcp_client
+    import brainshape.mcp_client
 
-    monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
+    monkeypatch.setattr("brainshape.settings.SETTINGS_FILE", tmp_path / "settings.json")
 
     # Set up an existing active client
     old_client = AsyncMock()
-    brain.mcp_client._active_client = old_client
+    brainshape.mcp_client._active_client = old_client
 
     # No servers configured → reload returns empty list
     result = await reload_mcp_tools()
 
     old_client.close.assert_awaited_once()
     assert result == []
-    assert brain.mcp_client._active_client is None
+    assert brainshape.mcp_client._active_client is None
 
 
 @pytest.mark.asyncio
 async def test_close_mcp_client_success():
     """Closes the active client and resets reference."""
-    import brain.mcp_client
+    import brainshape.mcp_client
 
     mock_client = AsyncMock()
-    brain.mcp_client._active_client = mock_client
+    brainshape.mcp_client._active_client = mock_client
 
     await close_mcp_client()
 
     mock_client.close.assert_awaited_once()
-    assert brain.mcp_client._active_client is None
+    assert brainshape.mcp_client._active_client is None
 
 
 @pytest.mark.asyncio
 async def test_close_mcp_client_error():
     """Handles close errors gracefully."""
-    import brain.mcp_client
+    import brainshape.mcp_client
 
     mock_client = AsyncMock()
     mock_client.close.side_effect = RuntimeError("close failed")
-    brain.mcp_client._active_client = mock_client
+    brainshape.mcp_client._active_client = mock_client
 
     await close_mcp_client()  # should not raise
 
-    assert brain.mcp_client._active_client is None
+    assert brainshape.mcp_client._active_client is None

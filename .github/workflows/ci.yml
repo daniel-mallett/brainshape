@@ -20,7 +20,7 @@ jobs:
       - run: uv sync
       - run: uv run ruff check
       - run: uv run ty check
-      - run: uv run pytest --cov=brain --cov-report=term-missing
+      - run: uv run pytest --cov=brainshape --cov-report=term-missing
 
       - uses: actions/setup-node@v4
         with:

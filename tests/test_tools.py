@@ -1,6 +1,6 @@
 import pytest
 
-from brain.tools import (
+from brainshape.tools import (
     create_connection,
     create_note,
     edit_note,
@@ -116,7 +116,7 @@ class TestCreateNote:
 class TestEditNote:
     def test_updates_note(self, mock_db, notes_settings):
         # Create the note on disk first
-        from brain.notes import write_note
+        from brainshape.notes import write_note
 
         write_note(notes_settings, "Editable", "Old content")
         mock_db.query.return_value = [{"path": "Editable.md"}]
@@ -130,7 +130,7 @@ class TestEditNote:
 
     def test_edge_cleanup_via_sync(self, mock_db, notes_settings):
         """edit_note relies on _sync_note_structural for edge cleanup."""
-        from brain.notes import write_note
+        from brainshape.notes import write_note
 
         write_note(notes_settings, "Tagged", "Content #mytag")
         mock_db.query.return_value = [{"path": "Tagged.md"}]

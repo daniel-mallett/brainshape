@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the full Brain dev environment: Python server + Tauri frontend
+# Start the full Brainshape dev environment: Python server + Tauri frontend
 # Usage: ./scripts/dev.sh
 
 set -e
@@ -21,7 +21,7 @@ trap cleanup EXIT INT TERM
 # 1. Start Python FastAPI server
 echo "Starting Python server on :8765..."
 cd "$ROOT"
-uv run python -m brain.server &
+uv run python -m brainshape.server &
 PIDS+=($!)
 
 # Wait for server to be healthy
@@ -41,7 +41,7 @@ npm run tauri dev &
 PIDS+=($!)
 
 echo ""
-echo "=== Brain dev environment running ==="
+echo "=== Brainshape dev environment running ==="
 echo "  Python server: http://127.0.0.1:8765"
 echo "  Press Ctrl+C to stop all"
 echo ""

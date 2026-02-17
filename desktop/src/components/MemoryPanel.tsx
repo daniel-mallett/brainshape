@@ -101,7 +101,7 @@ export function MemoryPanel() {
             No memories yet.
           </p>
           <p className="text-muted-foreground/60 text-xs">
-            Chat with Brain and it will remember things about you.
+            Chat with Brainshape and it will remember things about you.
           </p>
         </div>
       </div>
@@ -111,7 +111,7 @@ export function MemoryPanel() {
   return (
     <div className="h-full flex flex-col min-h-0">
       <div className="px-3 py-1.5 border-b border-border text-xs text-muted-foreground flex items-center justify-between">
-        <span>What Brain knows about you</span>
+        <span>What Brainshape knows about you</span>
         <span>{memories.length} memories</span>
       </div>
 

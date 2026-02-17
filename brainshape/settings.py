@@ -7,17 +7,34 @@ via the settings UI: LLM provider, model selection, etc.
 
 import json
 import logging
+import shutil
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Settings file lives next to the notes directory
-SETTINGS_FILE = Path("~/.config/brain/settings.json").expanduser()
+# Config directory paths
+_OLD_CONFIG_DIR = Path("~/.config/brain").expanduser()
+_NEW_CONFIG_DIR = Path("~/.config/brainshape").expanduser()
+
+# Settings file lives in the config directory
+SETTINGS_FILE = _NEW_CONFIG_DIR / "settings.json"
+
+
+def _migrate_config_dir() -> None:
+    """One-time migration: move ~/.config/brain/ to ~/.config/brainshape/."""
+    if _OLD_CONFIG_DIR.exists() and not _NEW_CONFIG_DIR.exists():
+        _NEW_CONFIG_DIR.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(_OLD_CONFIG_DIR), str(_NEW_CONFIG_DIR))
+        logger.info("Migrated config from %s to %s", _OLD_CONFIG_DIR, _NEW_CONFIG_DIR)
+
+
+# Run migration on import so settings and SurrealDB data are in the new location
+_migrate_config_dir()
 
 # Defaults for all settings
 DEFAULTS: dict[str, Any] = {
-    # Notes directory path (empty = use .env or default ~/brain)
+    # Notes directory path (empty = use .env or default ~/brainshape)
     "notes_path": "",
     # LLM provider: "anthropic", "openai", "ollama"
     "llm_provider": "anthropic",
@@ -176,7 +193,7 @@ def get_notes_path() -> str:
 
     Returns the raw path string (not expanded).
     """
-    from brain.config import settings as config_settings
+    from brainshape.config import settings as config_settings
 
     runtime = load_settings()
     path = runtime.get("notes_path", "")

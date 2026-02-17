@@ -7,10 +7,10 @@ import { languages } from "@codemirror/language-data";
 import { GFM } from "@lezer/markdown";
 import { vim } from "@replit/codemirror-vim";
 import { updateNoteFile } from "../lib/api";
-import { brainAutocompletion, prefetchCompletions } from "../lib/completions";
+import { brainshapeAutocompletion, prefetchCompletions } from "../lib/completions";
 import { wikilinkExtension, setWikilinkNavigate } from "../lib/wikilinks";
 import { inlineMarkdownExtension } from "../lib/inlineMarkdown";
-import { brainThemeExtension } from "../lib/editorTheme";
+import { brainshapeThemeExtension } from "../lib/editorTheme";
 import { Streamdown } from "streamdown";
 import { createCodePlugin } from "@streamdown/code";
 import type { BundledTheme } from "shiki";
@@ -117,8 +117,8 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       markdown({ codeLanguages: languages, extensions: GFM }),
-      themeCompartmentRef.current.of(brainThemeExtension()),
-      brainAutocompletion,
+      themeCompartmentRef.current.of(brainshapeThemeExtension()),
+      brainshapeAutocompletion,
       wikilinkExtension,
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
@@ -183,7 +183,7 @@ export function Editor({ filePath, content, onNavigateToNote, keymap: keymapMode
     const observer = new MutationObserver(() => {
       viewRef.current?.dispatch({
         effects: themeCompartmentRef.current.reconfigure(
-          brainThemeExtension()
+          brainshapeThemeExtension()
         ),
       });
     });

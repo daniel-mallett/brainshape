@@ -378,7 +378,7 @@ _SKIP_DIRS = frozenset(
 
 
 def import_vault(source_path: Path, notes_path: Path) -> dict:
-    """Import markdown notes from a source directory into the Brain notes directory.
+    """Import markdown notes from a source directory into the Brainshape notes directory.
 
     Copies .md files preserving folder structure.  Skips hidden directories
     and known non-note directories (.obsidian, .trash, .git, etc.).

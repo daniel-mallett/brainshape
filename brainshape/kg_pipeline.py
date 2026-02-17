@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from brain.graph_db import GraphDB
+from brainshape.graph_db import GraphDB
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +124,7 @@ def create_kg_pipeline(db: GraphDB, notes_path: Path) -> KGPipeline:
 
     Reads embedding model config from user settings.
     """
-    from brain.settings import load_settings
+    from brainshape.settings import load_settings
 
     s = load_settings()
     return KGPipeline(

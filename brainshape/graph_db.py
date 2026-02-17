@@ -5,7 +5,7 @@ from typing import Any
 from surrealdb import Surreal
 from surrealdb.data.types.record_id import RecordID
 
-from brain.config import settings
+from brainshape.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +33,31 @@ class GraphDB:
         try:
             self._conn = Surreal(f"surrealkv://{db_path}")
             self._conn.connect()  # type: ignore[union-attr]  # surrealkv:// connections have connect()
-            self._conn.use("brain", "main")
+            self._migrate_namespace()
         except Exception as e:
             logger.error("Failed to open SurrealDB at %s: %s", db_path, e)
             raise ConnectionError(f"Cannot open SurrealDB: {e}") from e
+
+    def _migrate_namespace(self) -> None:
+        """Switch to 'brainshape' namespace, migrating data from 'brain' if needed."""
+        has_new = self._namespace_has_tables("brainshape")
+        if has_new:
+            return
+
+        has_old = self._namespace_has_tables("brain")
+        if has_old:
+            logger.info("Found data in old 'brain' namespace — please re-sync with /sync --full")
+
+        self._conn.use("brainshape", "main")
+
+    def _namespace_has_tables(self, namespace: str) -> bool:
+        """Check if a namespace has any tables defined."""
+        try:
+            self._conn.use(namespace, "main")
+            result = _convert_record_ids(self._conn.query("INFO FOR DB"))
+            return bool(result and isinstance(result[0], dict) and result[0].get("tables"))
+        except Exception:
+            return False
 
     def close(self):
         self._conn.close()

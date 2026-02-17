@@ -1,9 +1,9 @@
-# Brain — Current Status & Next Steps
+# Brainshape — Current Status & Next Steps
 
 ## What's Working
 
 ### Core (Python Backend)
-- **SurrealDB embedded** (`surrealkv://`) — zero-config graph database, no Docker required. Data stored at `~/.config/brain/surrealdb`
+- **SurrealDB embedded** (`surrealkv://`) — zero-config graph database, no Docker required. Data stored at `~/.config/brainshape/surrealdb`
 - Structural sync: two-pass (nodes first, then relationships), runs on every startup unconditionally
 - Embedding sync: incremental (SHA-256 hash-gated), single event loop for batch processing, direct SurrealQL writes
 - Simplified KG pipeline: load → split → embed → write (no LLM entity extraction)
@@ -15,17 +15,17 @@
 - Folder-aware note creation and editing (edit_note looks up path from graph)
 - Tool responses use notes-relative paths only (no system path leakage)
 - Seed notes for first-run experience (Welcome, About Me, 3 Tutorials)
-- **Settings system**: persistent JSON config (~/.config/brain/settings.json), runtime-configurable LLM provider (Anthropic/OpenAI/Ollama/Claude Code), model selection, unified font family, auto-migration of old settings keys
-- **Claude Code provider**: spawns `claude` CLI as subprocess with `--output-format stream-json`, connects to Brain's MCP tools via stdio transport. Uses `--session-id` + `--resume` for conversation continuity. No API key needed — uses Claude Code subscription. Only Brain MCP tools are allowed (built-in tools like Bash/Read disabled via `--allowedTools`).
+- **Settings system**: persistent JSON config (~/.config/brainshape/settings.json), runtime-configurable LLM provider (Anthropic/OpenAI/Ollama/Claude Code), model selection, unified font family, auto-migration of old settings keys
+- **Claude Code provider**: spawns `claude` CLI as subprocess with `--output-format stream-json`, connects to Brainshape's MCP tools via stdio transport. Uses `--session-id` + `--resume` for conversation continuity. No API key needed — uses Claude Code subscription. Only Brainshape MCP tools are allowed (built-in tools like Bash/Read disabled via `--allowedTools`).
 - **Configurable embedding model**: default `sentence-transformers/all-mpnet-base-v2` (ungated), switchable via settings, auto-migrates vector index on dimension change
 - **MCP client**: consume external MCP servers via `langchain-mcp-adapters`, stdio + HTTP transports, hot-reload on settings change (no restart required)
-- **MCP server**: exposes all 9 tools via MCP protocol for external agents. Two transports: HTTP (mounted at `/mcp` on the FastAPI server, available automatically when the app is running) and stdio (standalone via `uv run python -m brain.mcp_server`)
+- **MCP server**: exposes all 9 tools via MCP protocol for external agents. Two transports: HTTP (mounted at `/mcp` on the FastAPI server, available automatically when the app is running) and stdio (standalone via `uv run python -m brainshape.mcp_server`)
 - **File watching**: watchdog monitors notes directory, auto-triggers structural sync on .md changes (debounced 2s)
 - **Voice transcription**: pluggable provider system — local (mlx-whisper on Apple Silicon), OpenAI Whisper API, or Mistral Voxtral API. Provider + model configurable in settings. Auto-migrates old `whisper_model` setting.
 - **Meeting transcription**: `POST /transcribe/meeting` records audio and saves timestamped transcription as a new Note with configurable title, folder, and tags
 
 ### FastAPI Server
-- HTTP server on port 8765 exposing all Brain operations
+- HTTP server on port 8765 exposing all Brainshape operations
 - Endpoints: health, config, notes CRUD, agent init/message (SSE streaming), sync (structural/semantic/full)
 - Graph endpoints: stats, overview, neighborhood (BFS), memories CRUD, notes tags
 - Search endpoints: POST /search/keyword (BM25), POST /search/semantic (vector similarity), both with optional tag filter
@@ -87,7 +87,7 @@
 - CI: GitHub Actions workflow runs ruff, ty, and pytest (with coverage) on push/PR to main
 - Pre-commit hooks: ruff lint, ruff format, gitleaks secret detection, pytest
 - Dependabot: weekly PRs for Python deps and GitHub Actions versions
-- Type checking: ty for Python (brain/ only), tsc for TypeScript frontend
+- Type checking: ty for Python (brainshape/ only), tsc for TypeScript frontend
 
 ## Known Issues
 

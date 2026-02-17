@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from brain import claude_code
+from brainshape import claude_code
 
 # Common mock patches for subprocess-based tests
 _MOCK_TMP = "/tmp/test-mcp.json"  # noqa: S108
@@ -61,15 +61,15 @@ class TestBuildMcpConfig:
     def test_structure(self):
         config = claude_code._build_mcp_config()
         assert "mcpServers" in config
-        assert "brain" in config["mcpServers"]
-        brain = config["mcpServers"]["brain"]
-        assert brain["command"] == "uv"
-        assert brain["args"] == ["run", "python", "-m", "brain.mcp_server"]
-        assert "cwd" in brain
+        assert "brainshape" in config["mcpServers"]
+        bs = config["mcpServers"]["brainshape"]
+        assert bs["command"] == "uv"
+        assert bs["args"] == ["run", "python", "-m", "brainshape.mcp_server"]
+        assert "cwd" in bs
 
     def test_cwd_contains_pyproject(self):
         config = claude_code._build_mcp_config()
-        cwd = Path(config["mcpServers"]["brain"]["cwd"])
+        cwd = Path(config["mcpServers"]["brainshape"]["cwd"])
         assert (cwd / "pyproject.toml").exists()
 
 

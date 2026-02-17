@@ -90,7 +90,7 @@ export function MeetingRecorder({ onClose, onComplete }: MeetingRecorderProps) {
         {phase === "idle" && (
           <div className="text-center space-y-4 py-4">
             <p className="text-sm text-muted-foreground">
-              Record audio and Brain will create a timestamped meeting note.
+              Record audio and Brainshape will create a timestamped meeting note.
             </p>
             <Button onClick={handleStartRecording} className="w-full">
               Start Recording

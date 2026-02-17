@@ -2,7 +2,7 @@
 
 Instead of routing through LangChain, this provider invokes the ``claude``
 CLI in print mode (``-p``) with ``--output-format stream-json``.  The CLI
-connects to Brain's tools via an MCP stdio server, so the desktop UI and
+connects to Brainshape's tools via an MCP stdio server, so the desktop UI and
 SSE streaming contract remain unchanged.
 """
 
@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 # Track active sessions so we know when to pass --resume
 _active_sessions: set[str] = set()
 
-# Keep in sync with brain/tools.py ALL_TOOLS
-_BRAIN_TOOL_NAMES = [
+# Keep in sync with brainshape/tools.py ALL_TOOLS
+_BRAINSHAPE_TOOL_NAMES = [
     "search_notes",
     "semantic_search",
     "read_note",
@@ -33,7 +33,7 @@ _BRAIN_TOOL_NAMES = [
     "store_memory",
     "create_connection",
 ]
-_ALLOWED_TOOLS = ",".join(f"mcp__brain__{name}" for name in _BRAIN_TOOL_NAMES)
+_ALLOWED_TOOLS = ",".join(f"mcp__brainshape__{name}" for name in _BRAINSHAPE_TOOL_NAMES)
 
 
 def _get_claude_binary() -> str:
@@ -53,13 +53,13 @@ def _get_claude_binary() -> str:
 
 
 def _build_mcp_config() -> dict[str, Any]:
-    """Build an MCP config dict pointing to Brain's stdio MCP server."""
+    """Build an MCP config dict pointing to Brainshape's stdio MCP server."""
     project_root = str(Path(__file__).resolve().parent.parent)
     return {
         "mcpServers": {
-            "brain": {
+            "brainshape": {
                 "command": "uv",
-                "args": ["run", "python", "-m", "brain.mcp_server"],
+                "args": ["run", "python", "-m", "brainshape.mcp_server"],
                 "cwd": project_root,
             }
         }
@@ -82,7 +82,7 @@ async def stream_claude_code_response(
 
     # Write temporary MCP config file
     mcp_config = _build_mcp_config()
-    fd, config_path = tempfile.mkstemp(suffix=".json", prefix="brain-mcp-")
+    fd, config_path = tempfile.mkstemp(suffix=".json", prefix="brainshape-mcp-")
     try:
         with os.fdopen(fd, "w") as f:
             json.dump(mcp_config, f)

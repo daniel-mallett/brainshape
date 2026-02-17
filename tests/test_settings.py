@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from brain.settings import (
+from brainshape.settings import (
     DEFAULTS,
     VALID_PROVIDERS,
     VALID_TRANSCRIPTION_PROVIDERS,
@@ -19,7 +19,7 @@ from brain.settings import (
 def tmp_settings_file(tmp_path, monkeypatch):
     """Point settings file at a temp location."""
     settings_file = tmp_path / "settings.json"
-    monkeypatch.setattr("brain.settings.SETTINGS_FILE", settings_file)
+    monkeypatch.setattr("brainshape.settings.SETTINGS_FILE", settings_file)
     return settings_file
 
 
@@ -46,7 +46,7 @@ class TestLoadSettings:
         tmp_settings_file.write_text("not json{{{")
         import logging
 
-        with caplog.at_level(logging.WARNING, logger="brain.settings"):
+        with caplog.at_level(logging.WARNING, logger="brainshape.settings"):
             settings = load_settings()
         assert settings == DEFAULTS
         assert any("Failed to read settings file" in r.message for r in caplog.records)
@@ -61,7 +61,7 @@ class TestSaveSettings:
 
     def test_creates_parent_dirs(self, tmp_path, monkeypatch):
         deep_file = tmp_path / "a" / "b" / "settings.json"
-        monkeypatch.setattr("brain.settings.SETTINGS_FILE", deep_file)
+        monkeypatch.setattr("brainshape.settings.SETTINGS_FILE", deep_file)
         save_settings(DEFAULTS)
         assert deep_file.exists()
 
@@ -154,7 +154,7 @@ class TestGetNotesPath:
         assert get_notes_path() == "~/my-notes"
 
     def test_falls_back_to_config_when_empty(self, monkeypatch):
-        monkeypatch.setattr("brain.config.settings.notes_path", "~/env-notes")
+        monkeypatch.setattr("brainshape.config.settings.notes_path", "~/env-notes")
         assert get_notes_path() == "~/env-notes"
 
     def test_defaults_include_notes_path(self):

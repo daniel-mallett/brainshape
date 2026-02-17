@@ -1,7 +1,7 @@
 import time
 from unittest.mock import MagicMock
 
-from brain.watcher import NoteChangeHandler, start_watcher
+from brainshape.watcher import NoteChangeHandler, start_watcher
 
 
 class TestNoteChangeHandler:

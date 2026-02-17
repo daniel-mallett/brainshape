@@ -80,7 +80,7 @@ const themeSpec = {
 };
 
 /** Syntax highlighting that reads from CSS variables */
-const brainHighlightStyle = HighlightStyle.define([
+const brainshapeHighlightStyle = HighlightStyle.define([
   // Headings
   { tag: tags.heading, color: "var(--editor-heading)", fontWeight: "bold" },
   { tag: tags.heading1, color: "var(--editor-heading)", fontWeight: "bold", fontSize: "1.4em" },
@@ -116,7 +116,7 @@ const brainHighlightStyle = HighlightStyle.define([
   { tag: tags.invalid, color: "var(--destructive)" },
 ]);
 
-const highlightExt = syntaxHighlighting(brainHighlightStyle);
+const highlightExt = syntaxHighlighting(brainshapeHighlightStyle);
 
 /** Detect whether the current theme is dark via the .dark class on <html>. */
 export function isDarkTheme(): boolean {
@@ -124,12 +124,12 @@ export function isDarkTheme(): boolean {
 }
 
 /** Build the dark/light-sensitive theme (without highlight styles). */
-export function brainBaseTheme(dark: boolean) {
+export function brainshapeBaseTheme(dark: boolean) {
   return EditorView.theme(themeSpec, { dark });
 }
 
 /** Build theme extension with correct dark/light mode. Called when editor is created. */
-export function brainThemeExtension(dark?: boolean) {
+export function brainshapeThemeExtension(dark?: boolean) {
   const isDark = dark ?? isDarkTheme();
-  return [brainBaseTheme(isDark), highlightExt];
+  return [brainshapeBaseTheme(isDark), highlightExt];
 }

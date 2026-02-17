@@ -78,7 +78,7 @@ function App() {
   const sidebarPanelRef = useRef<PanelImperativeHandle>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     try {
-      const stored = localStorage.getItem("react-resizable-panels:brain-layout");
+      const stored = localStorage.getItem("react-resizable-panels:brainshape-layout");
       if (stored) {
         const layout = JSON.parse(stored);
         return (layout.sidebar ?? 1) > 0;
@@ -89,7 +89,7 @@ function App() {
   const chatPanelRef = useRef<PanelImperativeHandle>(null);
   // Layout persistence
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
-    id: "brain-layout",
+    id: "brainshape-layout",
     storage: localStorage,
   });
 
@@ -262,9 +262,9 @@ function App() {
     return (
       <div className="h-screen flex items-center justify-center bg-background text-foreground">
         <div className="text-center">
-          <p className="text-destructive mb-2">Cannot connect to Brain server</p>
+          <p className="text-destructive mb-2">Cannot connect to Brainshape server</p>
           <p className="text-muted-foreground text-sm">
-            Run: <code className="bg-muted px-2 py-0.5 rounded text-sm">uv run python -m brain.server</code>
+            Run: <code className="bg-muted px-2 py-0.5 rounded text-sm">uv run python -m brainshape.server</code>
           </p>
         </div>
       </div>
@@ -287,7 +287,7 @@ function App() {
     <div className="h-screen flex flex-col bg-background text-foreground">
       <header className="flex items-center justify-between px-4 py-1.5 border-b border-border">
         <div className="flex items-center gap-2">
-          <h1 className="text-sm font-semibold">Brain</h1>
+          <h1 className="text-sm font-semibold">Brainshape</h1>
           {activeView === "editor" && (
             <Button variant={sidebarOpen ? "secondary" : "ghost"} size="sm" onClick={() => {
               const panel = sidebarPanelRef.current;
@@ -335,7 +335,7 @@ function App() {
       <div className="flex-1 min-h-0 relative">
         <Group
           orientation="horizontal"
-          id="brain-layout"
+          id="brainshape-layout"
           defaultLayout={defaultLayout}
           onLayoutChanged={onLayoutChanged}
           style={{ height: "100%" }}

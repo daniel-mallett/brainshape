@@ -2,7 +2,7 @@
 
 ## Overview
 
-Brain is a local-first, single-user application. The trust boundary sits between the agent (LLM + tools) and the host system. The goal is to limit what the agent can access, even if its behavior is unexpected.
+Brainshape is a local-first, single-user application. The trust boundary sits between the agent (LLM + tools) and the host system. The goal is to limit what the agent can access, even if its behavior is unexpected.
 
 ## Credential Isolation
 
@@ -49,7 +49,7 @@ The `query_graph` tool executes raw SurrealQL strings against SurrealDB. This is
 The practical risk is limited because:
 
 - SurrealDB contains only note content and extracted entities — no credentials or secrets.
-- The database is embedded (no network exposure) — data is stored locally at `~/.config/brain/surrealdb`.
+- The database is embedded (no network exposure) — data is stored locally at `~/.config/brainshape/surrealdb`.
 - The worst-case outcome of a destructive query (e.g., `DELETE note`) is data loss in the graph, which can be rebuilt from the notes directory via `/sync`.
 
 ### `create_connection` — schema protection

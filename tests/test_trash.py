@@ -2,7 +2,7 @@
 
 import pytest
 
-from brain.notes import (
+from brainshape.notes import (
     empty_trash,
     list_notes,
     list_trash,

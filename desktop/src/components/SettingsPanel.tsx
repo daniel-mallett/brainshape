@@ -493,7 +493,7 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
                 <Input
                   value={notesPath}
                   onChange={(e) => { setNotesPath(e.target.value); markDirty(); }}
-                  placeholder="~/brain"
+                  placeholder="~/brainshape"
                   className="h-8 text-sm flex-1"
                 />
                 {isTauri() && (
@@ -730,7 +730,7 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
           <div className="space-y-4">
             <SectionHeading>Import Notes</SectionHeading>
             <FieldHint>
-              Copy markdown notes from another directory into your Brain notes folder.
+              Copy markdown notes from another directory into your Brainshape notes folder.
               Preserves folder structure. Only .md files are imported.
             </FieldHint>
 

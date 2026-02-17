@@ -3,11 +3,11 @@ from pathlib import Path
 
 from langchain_core.tools import tool
 
-from brain.graph_db import GraphDB
-from brain.kg_pipeline import KGPipeline
-from brain.notes import parse_note, rewrite_note, write_note
+from brainshape.graph_db import GraphDB
+from brainshape.kg_pipeline import KGPipeline
+from brainshape.notes import parse_note, rewrite_note, write_note
 
-# Set by create_brain_agent() before tools are used
+# Set by create_brainshape_agent() before tools are used
 db: GraphDB | None = None
 pipeline: KGPipeline | None = None
 
@@ -15,19 +15,19 @@ pipeline: KGPipeline | None = None
 def _get_db() -> GraphDB:
     """Return the db instance, raising if tools are used before agent init."""
     if db is None:
-        raise RuntimeError("Tools used before create_brain_agent() — db is not set")
+        raise RuntimeError("Tools used before create_brainshape_agent() — db is not set")
     return db
 
 
 def _get_pipeline() -> KGPipeline:
     """Return the pipeline instance, raising if tools are used before agent init."""
     if pipeline is None:
-        raise RuntimeError("Tools used before create_brain_agent() — pipeline is not set")
+        raise RuntimeError("Tools used before create_brainshape_agent() — pipeline is not set")
     return pipeline
 
 
 def _notes_path() -> Path:
-    from brain.settings import get_notes_path
+    from brainshape.settings import get_notes_path
 
     return Path(get_notes_path()).expanduser()
 

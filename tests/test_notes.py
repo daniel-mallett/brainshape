@@ -1,6 +1,6 @@
 import pytest
 
-from brain.notes import (
+from brainshape.notes import (
     SEED_NOTES_DIR,
     _ensure_within_notes_dir,
     compute_file_hash,
@@ -63,7 +63,7 @@ class TestParseNote:
 
     def test_frontmatter_tags(self, tmp_notes):
         result = parse_note(tmp_notes / "Welcome.md", tmp_notes)
-        assert "brain" in result["tags"]
+        assert "brainshape" in result["tags"]
         assert "getting-started" in result["tags"]
 
     def test_inline_tags(self, tmp_notes):

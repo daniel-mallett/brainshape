@@ -2,9 +2,9 @@
 
 ## How It Works
 
-Brain reads notes as plain markdown files on disk. We read the files directly, extracting wikilinks, tags, and frontmatter. Notes can be imported from Obsidian or created fresh.
+Brainshape reads notes as plain markdown files on disk. We read the files directly, extracting wikilinks, tags, and frontmatter. Notes can be imported from Obsidian or created fresh.
 
-## Notes Parser (`brain/notes.py`)
+## Notes Parser (`brainshape/notes.py`)
 
 ### parse_note(file_path, notes_path)
 
@@ -85,7 +85,7 @@ Renames a note on disk and rewrites all `[[Old Title]]` / `[[Old Title|alias]]` 
 ## Notes Path
 
 - Configured via `NOTES_PATH` in `.env` or via the Settings UI (native file picker)
-- Default: `~/Brain`
+- Default: `~/Brainshape`
 - Expanded with `Path.expanduser()` (supports `~/`)
 - Must NOT overlap with the project directory (security constraint, enforced by `PUT /settings`)
 - Notes are identified by notes-relative paths for cross-device consistency
@@ -93,13 +93,13 @@ Renames a note on disk and rewrites all `[[Old Title]]` / `[[Old Title|alias]]` 
 
 ## Sync Across Devices
 
-Notes use notes-relative paths as unique keys in SurrealDB. If the notes directory is at `/Users/alice/Brain` on one machine and `/home/alice/Brain` on another, the same note still maps to the same graph record (e.g., `meeting.md`).
+Notes use notes-relative paths as unique keys in SurrealDB. If the notes directory is at `/Users/alice/Brainshape` on one machine and `/home/alice/Brainshape` on another, the same note still maps to the same graph record (e.g., `meeting.md`).
 
-The notes directory itself needs to be synced by an external tool (iCloud, Dropbox, etc.). Brain just reads/writes the files — it doesn't handle replication.
+The notes directory itself needs to be synced by an external tool (iCloud, Dropbox, etc.). Brainshape just reads/writes the files — it doesn't handle replication.
 
 ## File Watching
 
-Implemented in `brain/watcher.py` using `watchdog`. A `NoteChangeHandler` monitors the notes directory for `.md` file changes and auto-triggers structural sync with a 2-second debounce. The watcher is started on server startup and stopped on shutdown.
+Implemented in `brainshape/watcher.py` using `watchdog`. A `NoteChangeHandler` monitors the notes directory for `.md` file changes and auto-triggers structural sync with a 2-second debounce. The watcher is started on server startup and stopped on shutdown.
 
 ## Vault Import
 

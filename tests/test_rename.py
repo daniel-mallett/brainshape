@@ -2,7 +2,7 @@
 
 import pytest
 
-from brain.notes import rename_note, rewrite_wikilinks, write_note
+from brainshape.notes import rename_note, rewrite_wikilinks, write_note
 
 
 class TestRenameNote:

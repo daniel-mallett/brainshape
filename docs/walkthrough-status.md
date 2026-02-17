@@ -2,23 +2,23 @@
 
 ## Completed
 
-1. **main.py** — Thin entry point, delegates to `brain.cli.run_cli()`. Future interfaces (Slack, web, etc.) will have their own entry points importing from `brain.agent`.
+1. **main.py** — Thin entry point, delegates to `brainshape.cli.run_cli()`. Future interfaces (Slack, web, etc.) will have their own entry points importing from `brainshape.agent`.
 
-2. **brain/config.py** — `pydantic-settings` loads from `.env`, singleton `settings` object. Discussion: future API keys for internet-connected tools must follow the same pattern (pre-authenticated clients, agent never sees raw keys).
+2. **brainshape/config.py** — `pydantic-settings` loads from `.env`, singleton `settings` object. Discussion: future API keys for internet-connected tools must follow the same pattern (pre-authenticated clients, agent never sees raw keys).
 
-3. **brain/graph_db.py** — SurrealDB embedded wrapper. `query()` is the single primitive everything builds on. `bootstrap_schema()` creates tables, indexes, and analyzers on startup. `get_relation_tables()` and `get_custom_node_tables()` discover edge and entity tables dynamically via `INFO FOR DB`.
+3. **brainshape/graph_db.py** — SurrealDB embedded wrapper. `query()` is the single primitive everything builds on. `bootstrap_schema()` creates tables, indexes, and analyzers on startup. `get_relation_tables()` and `get_custom_node_tables()` discover edge and entity tables dynamically via `INFO FOR DB`.
 
 4. **Graph design deep dive** — Single-table-per-entity design with SurrealDB's `TYPE RELATION` for edges. Two layers (structural + semantic) in one embedded database. Notes-relative paths as unique keys for cross-device consistency. See `docs/graph-design.md`.
 
-5. **brain/kg_pipeline.py** — Simple pipeline: read file → split text (4000 chars, 200 overlap) → embed via SentenceTransformer → write chunks to SurrealDB with `RELATE chunk->from_document->note`.
+5. **brainshape/kg_pipeline.py** — Simple pipeline: read file → split text (4000 chars, 200 overlap) → embed via SentenceTransformer → write chunks to SurrealDB with `RELATE chunk->from_document->note`.
 
-6. **brain/notes.py** — Regex-based parsing for wikilinks (with deduplication, anchor/alias stripping, embed skipping), tags (code block exclusion, case normalization); `python-frontmatter` for YAML. Path traversal protection via `_ensure_within_notes_dir()`.
+6. **brainshape/notes.py** — Regex-based parsing for wikilinks (with deduplication, anchor/alias stripping, embed skipping), tags (code block exclusion, case normalization); `python-frontmatter` for YAML. Path traversal protection via `_ensure_within_notes_dir()`.
 
-7. **brain/sync.py** — Three functions: `sync_semantic` (KG pipeline, expensive, incremental via content hash), `sync_structural` (SurrealQL, cheap, two-pass UPSERT + relationships, runs unconditionally), `sync_all` (orchestrator).
+7. **brainshape/sync.py** — Three functions: `sync_semantic` (KG pipeline, expensive, incremental via content hash), `sync_structural` (SurrealQL, cheap, two-pass UPSERT + relationships, runs unconditionally), `sync_all` (orchestrator).
 
-8. **brain/server.py** — FastAPI server exposing all Brain operations over HTTP + SSE. Dynamic graph endpoints using table discovery. Memory connections with bidirectional edge resolution. CORS locked to localhost + Tauri origins. Session-based agent conversations.
+8. **brainshape/server.py** — FastAPI server exposing all Brainshape operations over HTTP + SSE. Dynamic graph endpoints using table discovery. Memory connections with bidirectional edge resolution. CORS locked to localhost + Tauri origins. Session-based agent conversations.
 
-9. **brain/tools.py** — 9 LangChain tools with entity-type-aware connections, reserved table name protection, duplicate edge prevention, and edge cleanup in `_sync_note_structural()`.
+9. **brainshape/tools.py** — 9 LangChain tools with entity-type-aware connections, reserved table name protection, duplicate edge prevention, and edge cleanup in `_sync_note_structural()`.
 
 10. **desktop/** — Tauri 2 app with React + TypeScript. CodeMirror 6 editor with vim mode, agent chat panel with SSE streaming, file browser sidebar, graph visualization, memory management. ShadCN UI components with Tailwind v4.
 

@@ -5,15 +5,15 @@ from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.memory import MemorySaver
 
-from brain import tools
-from brain.graph_db import GraphDB
-from brain.kg_pipeline import KGPipeline, create_kg_pipeline
-from brain.settings import get_llm_kwargs, get_llm_model_string
+from brainshape import tools
+from brainshape.graph_db import GraphDB
+from brainshape.kg_pipeline import KGPipeline, create_kg_pipeline
+from brainshape.settings import get_llm_kwargs, get_llm_model_string
 
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """\
-You are Brain, a personal knowledge management assistant.
+You are Brainshape, a personal knowledge management assistant.
 
 You have access to the user's notes stored in a SurrealDB knowledge graph.
 You can search, read, create, and edit notes. You can store memories, create
@@ -49,7 +49,7 @@ projects, goals, or anything worth remembering, use store_memory immediately:
 
 To model the user's world (people, projects, concepts), use create_connection:
   create_connection("person", "Alice", "works_with", "person", "Bob")
-  create_connection("note", "Project Plan", "about", "project", "Brain")
+  create_connection("note", "Project Plan", "about", "project", "Brainshape")
   create_connection("memory", "Name: Daniel", "relates_to", "note", "About Me")
 For note and memory types, the entity must already exist — notes are looked up by
 title, memories by content. Other types (person, project, tag) are created if needed.
@@ -73,12 +73,12 @@ note references — always use [[double brackets]].\
 """
 
 
-def create_brain_agent(
+def create_brainshape_agent(
     db: GraphDB | None = None,
     pipeline: KGPipeline | None = None,
     mcp_tools: list | None = None,
 ):
-    """Create and return the Brain agent + db + pipeline.
+    """Create and return the Brainshape agent + db + pipeline.
 
     This is the single entry point for any interface (CLI, Slack, web, etc.)
 
@@ -96,7 +96,7 @@ def create_brain_agent(
         return None, None, None
 
     if pipeline is None:
-        from brain.settings import get_notes_path
+        from brainshape.settings import get_notes_path
 
         notes_path = Path(get_notes_path()).expanduser()
         pipeline = create_kg_pipeline(db, notes_path)

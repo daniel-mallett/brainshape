@@ -11,10 +11,10 @@ class Settings(BaseSettings):
     model_name: str = "claude-haiku-4-5-20251001"
 
     # SurrealDB
-    surrealdb_path: str = "~/.config/brain/surrealdb"
+    surrealdb_path: str = "~/.config/brainshape/surrealdb"
 
     # Notes
-    notes_path: str = "~/brain"
+    notes_path: str = "~/brainshape"
 
 
 settings = Settings()
@@ -27,7 +27,7 @@ def export_api_keys() -> None:
     with runtime taking precedence. Uses setdefault so explicit
     shell exports aren't overwritten.
     """
-    from brain.settings import load_settings
+    from brainshape.settings import load_settings
 
     runtime = load_settings()
 

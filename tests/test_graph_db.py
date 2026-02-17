@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from brain.graph_db import GraphDB, _convert_record_ids
+from brainshape.graph_db import GraphDB, _convert_record_ids
 
 
 class TestConvertRecordIds:
@@ -8,7 +8,7 @@ class TestConvertRecordIds:
         mock_rid = MagicMock()
         mock_rid.__str__ = lambda self: "note:abc123"
         # Patch isinstance check
-        with patch("brain.graph_db.RecordID", type(mock_rid)):
+        with patch("brainshape.graph_db.RecordID", type(mock_rid)):
             result = _convert_record_ids(mock_rid)
             assert result == "note:abc123"
 
@@ -27,45 +27,51 @@ class TestConvertRecordIds:
 
 
 class TestGraphDB:
-    @patch("brain.graph_db.Surreal")
+    @patch("brainshape.graph_db.Surreal")
     def test_query_returns_list_of_dicts(self, mock_surreal_cls):
         mock_conn = MagicMock()
         mock_surreal_cls.return_value = mock_conn
         mock_conn.query.return_value = [{"name": "Alice", "age": 30}]
 
         db = GraphDB()
+        mock_conn.query.reset_mock()  # clear calls from _migrate_namespace
+        mock_conn.query.return_value = [{"name": "Alice", "age": 30}]
         results = db.query("SELECT * FROM note")
 
         assert results == [{"name": "Alice", "age": 30}]
         mock_conn.query.assert_called_once()
 
-    @patch("brain.graph_db.Surreal")
+    @patch("brainshape.graph_db.Surreal")
     def test_query_passes_parameters(self, mock_surreal_cls):
         mock_conn = MagicMock()
         mock_surreal_cls.return_value = mock_conn
         mock_conn.query.return_value = []
 
         db = GraphDB()
+        mock_conn.query.reset_mock()  # clear calls from _migrate_namespace
+        mock_conn.query.return_value = []
         db.query("SELECT * FROM note WHERE name = $name", {"name": "Bob"})
 
         mock_conn.query.assert_called_once_with(
             "SELECT * FROM note WHERE name = $name", {"name": "Bob"}
         )
 
-    @patch("brain.graph_db.Surreal")
+    @patch("brainshape.graph_db.Surreal")
     def test_bootstrap_schema_runs_all_statements(self, mock_surreal_cls):
         mock_conn = MagicMock()
         mock_surreal_cls.return_value = mock_conn
         mock_conn.query.return_value = []
 
         db = GraphDB()
+        mock_conn.query.reset_mock()  # clear calls from _migrate_namespace
+        mock_conn.query.return_value = []
         db.bootstrap_schema()
 
         # 4 tables + 3 edge tables + 3 unique indexes + 2 property indexes
         # + 1 analyzer + 2 fulltext indexes = 15 statements
         assert mock_conn.query.call_count == 15
 
-    @patch("brain.graph_db.Surreal")
+    @patch("brainshape.graph_db.Surreal")
     def test_close(self, mock_surreal_cls):
         mock_conn = MagicMock()
         mock_surreal_cls.return_value = mock_conn
@@ -75,7 +81,7 @@ class TestGraphDB:
 
         mock_conn.close.assert_called_once()
 
-    @patch("brain.graph_db.Surreal")
+    @patch("brainshape.graph_db.Surreal")
     def test_get_relation_tables(self, mock_surreal_cls):
         mock_conn = MagicMock()
         mock_surreal_cls.return_value = mock_conn
@@ -95,7 +101,7 @@ class TestGraphDB:
         assert "relates_to" in tables
         assert "from_document" not in tables  # excluded by default
 
-    @patch("brain.graph_db.Surreal")
+    @patch("brainshape.graph_db.Surreal")
     def test_get_relation_tables_include_internal(self, mock_surreal_cls):
         mock_conn = MagicMock()
         mock_surreal_cls.return_value = mock_conn
@@ -110,7 +116,7 @@ class TestGraphDB:
         assert "from_document" in tables
         assert "tagged_with" in tables
 
-    @patch("brain.graph_db.Surreal")
+    @patch("brainshape.graph_db.Surreal")
     def test_get_custom_node_tables(self, mock_surreal_cls):
         mock_conn = MagicMock()
         mock_surreal_cls.return_value = mock_conn
@@ -129,7 +135,7 @@ class TestGraphDB:
         assert "note" not in custom  # core table
         assert "tagged_with" not in custom  # relation table
 
-    @patch("brain.graph_db.Surreal")
+    @patch("brainshape.graph_db.Surreal")
     def test_get_relation_tables_empty_db(self, mock_surreal_cls):
         mock_conn = MagicMock()
         mock_surreal_cls.return_value = mock_conn
@@ -138,7 +144,7 @@ class TestGraphDB:
         assert db.get_relation_tables() == []
         assert db.get_custom_node_tables() == []
 
-    @patch("brain.graph_db.Surreal")
+    @patch("brainshape.graph_db.Surreal")
     def test_relation_tables_includes_custom_relations(self, mock_surreal_cls):
         """Custom relation tables like works_with appear in get_relation_tables."""
         mock_conn = MagicMock()
@@ -157,7 +163,7 @@ class TestGraphDB:
         assert "manages" in tables
         assert "tagged_with" in tables
 
-    @patch("brain.graph_db.Surreal")
+    @patch("brainshape.graph_db.Surreal")
     def test_custom_node_tables_excludes_relations(self, mock_surreal_cls):
         """Relation tables never appear in get_custom_node_tables."""
         mock_conn = MagicMock()
@@ -175,7 +181,7 @@ class TestGraphDB:
         assert "concept" in custom
         assert "works_with" not in custom
 
-    @patch("brain.graph_db.Surreal")
+    @patch("brainshape.graph_db.Surreal")
     def test_custom_node_tables_excludes_core(self, mock_surreal_cls):
         """Core tables (note, tag, memory, chunk) never appear in custom node tables."""
         mock_conn = MagicMock()

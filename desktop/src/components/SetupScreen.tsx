@@ -9,7 +9,7 @@ interface SetupScreenProps {
 }
 
 export function SetupScreen({ onComplete }: SetupScreenProps) {
-  const [path, setPath] = useState("~/brain");
+  const [path, setPath] = useState("~/brainshape");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -36,7 +36,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
     <div className="h-screen flex items-center justify-center bg-background text-foreground">
       <div className="max-w-md w-full p-8 space-y-6">
         <div className="space-y-2 text-center">
-          <h1 className="text-2xl font-bold">Welcome to Brain</h1>
+          <h1 className="text-2xl font-bold">Welcome to Brainshape</h1>
           <p className="text-muted-foreground text-sm">
             Choose a directory for your notes. This is where your markdown
             files will be stored.
@@ -49,7 +49,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
             <Input
               value={path}
               onChange={(e) => setPath(e.target.value)}
-              placeholder="~/brain"
+              placeholder="~/brainshape"
               className="flex-1"
             />
             {isTauri() && (

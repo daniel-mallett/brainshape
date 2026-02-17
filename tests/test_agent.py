@@ -2,25 +2,25 @@
 
 from unittest.mock import MagicMock, patch
 
-from brain.agent import SYSTEM_PROMPT, create_brain_agent, recreate_agent
+from brainshape.agent import SYSTEM_PROMPT, create_brainshape_agent, recreate_agent
 
 
 class TestCreateBrainAgent:
-    @patch("brain.agent.init_chat_model")
-    @patch("brain.agent.create_agent")
-    @patch("brain.agent.create_kg_pipeline")
-    @patch("brain.agent.GraphDB")
+    @patch("brainshape.agent.init_chat_model")
+    @patch("brainshape.agent.create_agent")
+    @patch("brainshape.agent.create_kg_pipeline")
+    @patch("brainshape.agent.GraphDB")
     def test_creates_agent_with_defaults(
         self, mock_db_cls, mock_pipeline_fn, mock_create, mock_init_model
     ):
-        """create_brain_agent() creates a new DB + pipeline when none are given."""
+        """create_brainshape_agent() creates a new DB + pipeline when none are given."""
         mock_db = MagicMock()
         mock_db_cls.return_value = mock_db
         mock_pipeline = MagicMock()
         mock_pipeline_fn.return_value = mock_pipeline
         mock_create.return_value = MagicMock()
 
-        agent, db, pipeline = create_brain_agent()
+        agent, db, pipeline = create_brainshape_agent()
 
         mock_db_cls.assert_called_once()
         mock_db.bootstrap_schema.assert_called_once()
@@ -29,38 +29,38 @@ class TestCreateBrainAgent:
         assert db is mock_db
         assert pipeline is mock_pipeline
 
-    @patch("brain.agent.init_chat_model")
-    @patch("brain.agent.create_agent")
+    @patch("brainshape.agent.init_chat_model")
+    @patch("brainshape.agent.create_agent")
     def test_uses_provided_db_and_pipeline(self, mock_create, mock_init_model):
         """When db and pipeline are provided, they are used directly."""
         mock_db = MagicMock()
         mock_pipeline = MagicMock()
         mock_create.return_value = MagicMock()
 
-        agent, db, pipeline = create_brain_agent(db=mock_db, pipeline=mock_pipeline)
+        agent, db, pipeline = create_brainshape_agent(db=mock_db, pipeline=mock_pipeline)
 
         assert db is mock_db
         assert pipeline is mock_pipeline
         # bootstrap_schema should NOT be called on the provided db
         mock_db.bootstrap_schema.assert_not_called()
 
-    @patch("brain.agent.init_chat_model")
-    @patch("brain.agent.create_agent")
+    @patch("brainshape.agent.init_chat_model")
+    @patch("brainshape.agent.create_agent")
     def test_sets_tools_globals(self, mock_create, mock_init_model):
-        """create_brain_agent sets tools.db and tools.pipeline."""
-        from brain import tools
+        """create_brainshape_agent sets tools.db and tools.pipeline."""
+        from brainshape import tools
 
         mock_db = MagicMock()
         mock_pipeline = MagicMock()
         mock_create.return_value = MagicMock()
 
-        create_brain_agent(db=mock_db, pipeline=mock_pipeline)
+        create_brainshape_agent(db=mock_db, pipeline=mock_pipeline)
 
         assert tools.db is mock_db
         assert tools.pipeline is mock_pipeline
 
-    @patch("brain.agent.init_chat_model")
-    @patch("brain.agent.create_agent")
+    @patch("brainshape.agent.init_chat_model")
+    @patch("brainshape.agent.create_agent")
     def test_includes_mcp_tools(self, mock_create, mock_init_model):
         """MCP tools are appended to the built-in tool list."""
         mock_db = MagicMock()
@@ -68,28 +68,28 @@ class TestCreateBrainAgent:
         mock_create.return_value = MagicMock()
         extra_tool = MagicMock()
 
-        create_brain_agent(db=mock_db, pipeline=mock_pipeline, mcp_tools=[extra_tool])
+        create_brainshape_agent(db=mock_db, pipeline=mock_pipeline, mcp_tools=[extra_tool])
 
         call_kwargs = mock_create.call_args[1]
         assert extra_tool in call_kwargs["tools"]
 
-    @patch("brain.agent.init_chat_model")
-    @patch("brain.agent.create_agent")
+    @patch("brainshape.agent.init_chat_model")
+    @patch("brainshape.agent.create_agent")
     def test_system_prompt_passed(self, mock_create, mock_init_model):
         """The system prompt is passed to create_agent."""
         mock_create.return_value = MagicMock()
 
-        create_brain_agent(db=MagicMock(), pipeline=MagicMock())
+        create_brainshape_agent(db=MagicMock(), pipeline=MagicMock())
 
         call_kwargs = mock_create.call_args[1]
         assert call_kwargs["system_prompt"] == SYSTEM_PROMPT
 
-    @patch("brain.agent.GraphDB")
+    @patch("brainshape.agent.GraphDB")
     def test_returns_none_on_connection_error(self, mock_db_cls):
-        """create_brain_agent returns (None, None, None) when DB is unreachable."""
+        """create_brainshape_agent returns (None, None, None) when DB is unreachable."""
         mock_db_cls.side_effect = ConnectionError("Cannot open SurrealDB")
 
-        agent, db, pipeline = create_brain_agent()
+        agent, db, pipeline = create_brainshape_agent()
 
         assert agent is None
         assert db is None
@@ -97,11 +97,11 @@ class TestCreateBrainAgent:
 
 
 class TestRecreateAgent:
-    @patch("brain.agent.init_chat_model")
-    @patch("brain.agent.create_agent")
+    @patch("brainshape.agent.init_chat_model")
+    @patch("brainshape.agent.create_agent")
     def test_recreates_with_same_db_pipeline(self, mock_create, mock_init_model):
         """recreate_agent reuses the given db and pipeline."""
-        from brain import tools
+        from brainshape import tools
 
         mock_db = MagicMock()
         mock_pipeline = MagicMock()
@@ -113,8 +113,8 @@ class TestRecreateAgent:
         assert tools.pipeline is mock_pipeline
         assert agent is mock_create.return_value
 
-    @patch("brain.agent.init_chat_model")
-    @patch("brain.agent.create_agent")
+    @patch("brainshape.agent.init_chat_model")
+    @patch("brainshape.agent.create_agent")
     def test_recreate_with_mcp_tools(self, mock_create, mock_init_model):
         """recreate_agent includes MCP tools."""
         mock_create.return_value = MagicMock()
@@ -125,8 +125,8 @@ class TestRecreateAgent:
         call_kwargs = mock_create.call_args[1]
         assert extra in call_kwargs["tools"]
 
-    @patch("brain.agent.init_chat_model")
-    @patch("brain.agent.create_agent")
+    @patch("brainshape.agent.init_chat_model")
+    @patch("brainshape.agent.create_agent")
     def test_recreate_without_mcp_tools(self, mock_create, mock_init_model):
         """recreate_agent works without MCP tools."""
         mock_create.return_value = MagicMock()

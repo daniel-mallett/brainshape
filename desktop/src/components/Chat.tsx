@@ -150,7 +150,7 @@ export function Chat({ onNavigateToNote, shikiTheme }: {
           {messages.length === 0 && (
             <div className="text-center mt-8 space-y-4">
               <p className="text-sm text-muted-foreground">
-                Ask Brain anything about your notes
+                Ask Brainshape anything about your notes
               </p>
               <div className="flex flex-wrap gap-2 justify-center px-2">
                 {[

@@ -55,7 +55,7 @@ Entity tables (`person`, `concept`, `project`, etc.) and their relationships are
 
 ## Path as Unique Key
 
-Record paths are **notes-relative** (e.g., `meeting.md`) not absolute (e.g., `/Users/dmallett/Brain/meeting.md`). This ensures the same note doesn't create duplicate records when the notes directory is synced across devices with different mount points.
+Record paths are **notes-relative** (e.g., `meeting.md`) not absolute (e.g., `/Users/dmallett/Brainshape/meeting.md`). This ensures the same note doesn't create duplicate records when the notes directory is synced across devices with different mount points.
 
 Implemented in `notes.py:parse_note()` using `file_path.relative_to(notes_path)`.
 

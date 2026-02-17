@@ -1,7 +1,7 @@
 [project]
-name = "brain"
+name = "brainshape"
 version = "0.1.0"
-description = "second braaaain"
+description = "Personal second-brain agent with knowledge graph memory"
 readme = "README.md"
 requires-python = "==3.13.*"
 dependencies = [
@@ -40,7 +40,7 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
-addopts = "--cov=brain --cov-report=term-missing"
+addopts = "--cov=brainshape --cov-report=term-missing"
 
 [tool.ty.src]
 exclude = ["tests/"]
@@ -54,5 +54,5 @@ select = ["E", "F", "I", "W", "B", "S", "UP", "SIM", "PTH"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S105"]
-"brain/server.py" = ["S608"]  # table names from hardcoded tuples
-"brain/tools.py" = ["S608"]   # table names from _sanitize_identifier()
+"brainshape/server.py" = ["S608"]  # table names from hardcoded tuples
+"brainshape/tools.py" = ["S608"]   # table names from _sanitize_identifier()

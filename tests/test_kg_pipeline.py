@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from brain.kg_pipeline import KGPipeline, _split_text, create_kg_pipeline
+from brainshape.kg_pipeline import KGPipeline, _split_text, create_kg_pipeline
 
 
 class TestSplitText:
@@ -124,7 +124,7 @@ class TestKGPipelineIndexMigration:
 
         with (
             patch("sentence_transformers.SentenceTransformer"),
-            caplog.at_level(logging.WARNING, logger="brain.kg_pipeline"),
+            caplog.at_level(logging.WARNING, logger="brainshape.kg_pipeline"),
         ):
             KGPipeline(mock_db, MagicMock(), embedding_dimensions=384)
 
@@ -132,10 +132,10 @@ class TestKGPipelineIndexMigration:
 
 
 class TestCreateKgPipeline:
-    @patch("brain.kg_pipeline.KGPipeline")
+    @patch("brainshape.kg_pipeline.KGPipeline")
     def test_reads_settings(self, mock_cls, tmp_path, monkeypatch):
         """create_kg_pipeline reads embedding config from settings."""
-        monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
+        monkeypatch.setattr("brainshape.settings.SETTINGS_FILE", tmp_path / "settings.json")
         mock_db = MagicMock()
 
         create_kg_pipeline(mock_db, tmp_path)

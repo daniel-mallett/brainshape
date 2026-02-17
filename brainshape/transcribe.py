@@ -16,7 +16,7 @@ _local_model_path: str | None = None
 
 def _get_model(settings: dict) -> str:
     """Resolve the transcription model, falling back to provider default."""
-    from brain.settings import TRANSCRIPTION_MODEL_DEFAULTS
+    from brainshape.settings import TRANSCRIPTION_MODEL_DEFAULTS
 
     model = settings.get("transcription_model", "")
     if model:
@@ -168,7 +168,7 @@ def transcribe_audio(audio_path: str | Path) -> dict:
         Dict with 'text' (full transcription) and 'segments'
         (list of {start, end, text} timestamped chunks).
     """
-    from brain.settings import load_settings
+    from brainshape.settings import load_settings
 
     settings = load_settings()
     provider = settings.get("transcription_provider", "local")

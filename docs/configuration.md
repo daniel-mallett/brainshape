@@ -2,12 +2,12 @@
 
 ## Environment Variables (`.env`)
 
-Brain uses `.env` for infrastructure secrets and `~/.config/brain/settings.json` for runtime preferences. Keys set in `.env` (or shell exports) take precedence over settings.
+Brainshape uses `.env` for infrastructure secrets and `~/.config/brainshape/settings.json` for runtime preferences. Keys set in `.env` (or shell exports) take precedence over settings.
 
 ### Required
 
 ```bash
-NOTES_PATH=~/Brain              # Your notes directory (created on first run)
+NOTES_PATH=~/Brainshape         # Your notes directory (created on first run)
 ANTHROPIC_API_KEY=sk-ant-...    # Required if using Anthropic (default provider)
 ```
 
@@ -16,7 +16,7 @@ ANTHROPIC_API_KEY=sk-ant-...    # Required if using Anthropic (default provider)
 SurrealDB is embedded — no separate server or Docker needed. Data is stored locally:
 
 ```bash
-SURREALDB_PATH=~/.config/brain/surrealdb   # Default path, configurable
+SURREALDB_PATH=~/.config/brainshape/surrealdb   # Default path, configurable
 ```
 
 If SurrealDB fails to initialize, the server starts in degraded mode: notes CRUD works (filesystem-only), but agent and graph features are unavailable. The desktop app shows a warning bar.
@@ -29,7 +29,7 @@ MODEL_NAME=claude-haiku-4-5-20251001   # Override default model
 
 ## LLM Providers
 
-Configure via the Settings UI or `~/.config/brain/settings.json`.
+Configure via the Settings UI or `~/.config/brainshape/settings.json`.
 
 ### Anthropic (Default)
 
@@ -72,7 +72,7 @@ Settings:
 
 Uses your existing Claude Code subscription — no separate API key needed. Requires the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) to be installed and authenticated.
 
-Brain spawns `claude` as a subprocess with `--output-format stream-json`, connects to Brain's MCP tools via stdio transport, and uses `--session-id` + `--resume` for conversation continuity. Only Brain MCP tools are allowed (built-in tools like Bash/Read are disabled via `--allowedTools`).
+Brainshape spawns `claude` as a subprocess with `--output-format stream-json`, connects to Brainshape's MCP tools via stdio transport, and uses `--session-id` + `--resume` for conversation continuity. Only Brainshape MCP tools are allowed (built-in tools like Bash/Read are disabled via `--allowedTools`).
 
 Settings:
 - `llm_provider`: `"claude-code"`
@@ -120,7 +120,7 @@ Settings:
 
 ## Runtime Settings
 
-The Settings UI writes to `~/.config/brain/settings.json`. Changes apply immediately (hot-reload, no restart needed).
+The Settings UI writes to `~/.config/brainshape/settings.json`. Changes apply immediately (hot-reload, no restart needed).
 
 ### Notes Path
 
@@ -163,18 +163,18 @@ Allowed commands: `npx`, `uvx`, `node`, `python`, `python3`, `deno`, `bun`.
 
 ## Troubleshooting
 
-### "Cannot connect to Brain server"
+### "Cannot connect to Brainshape server"
 
 The desktop app can't reach the backend.
 
-1. Check server is running: `uv run python -m brain.server`
+1. Check server is running: `uv run python -m brainshape.server`
 2. Check port 8765 is not blocked by another process
 
 ### "SurrealDB not connected" warning
 
 The server started in degraded mode because SurrealDB failed to initialize.
 
-1. Check the SurrealDB path is writable: `ls -la ~/.config/brain/surrealdb`
+1. Check the SurrealDB path is writable: `ls -la ~/.config/brainshape/surrealdb`
 2. Check disk space
 3. Restart the server
 

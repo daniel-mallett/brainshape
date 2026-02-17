@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from brain.transcribe import (
+from brainshape.transcribe import (
     _get_model,
     _transcribe_local,
     _transcribe_mistral,
@@ -64,7 +64,7 @@ def test_transcribe_audio_dispatches_to_local(mock_mlx_whisper, tmp_path, monkey
         "text": " Hello ",
         "segments": [{"start": 0.0, "end": 1.0, "text": " Hello "}],
     }
-    monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
+    monkeypatch.setattr("brainshape.settings.SETTINGS_FILE", tmp_path / "settings.json")
 
     result = transcribe_audio(str(audio))
     assert result["text"] == "Hello"
@@ -74,7 +74,7 @@ def test_transcribe_audio_dispatches_to_local(mock_mlx_whisper, tmp_path, monkey
 def test_transcribe_audio_unknown_provider(monkeypatch, tmp_path):
     import json
 
-    monkeypatch.setattr("brain.settings.SETTINGS_FILE", tmp_path / "settings.json")
+    monkeypatch.setattr("brainshape.settings.SETTINGS_FILE", tmp_path / "settings.json")
     sf = tmp_path / "settings.json"
     sf.write_text(json.dumps({"transcription_provider": "nonexistent"}))
 

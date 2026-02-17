@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from brain import tools
+from brainshape import tools
 
 
 class TestLifespan:
@@ -13,13 +13,13 @@ class TestLifespan:
         mock_db = MagicMock()
         mock_pipeline = MagicMock()
 
-        monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_path))
+        monkeypatch.setattr("brainshape.config.settings.notes_path", str(tmp_path))
 
         with (
-            patch("brain.mcp_server.GraphDB", return_value=mock_db),
-            patch("brain.mcp_server.create_kg_pipeline", return_value=mock_pipeline),
+            patch("brainshape.mcp_server.GraphDB", return_value=mock_db),
+            patch("brainshape.mcp_server.create_kg_pipeline", return_value=mock_pipeline),
         ):
-            from brain.mcp_server import _lifespan, mcp
+            from brainshape.mcp_server import _lifespan, mcp
 
             async with _lifespan(mcp):
                 mock_db.bootstrap_schema.assert_called_once()
@@ -32,13 +32,13 @@ class TestLifespan:
     async def test_cleanup_runs_on_error(self, monkeypatch, tmp_path):
         mock_db = MagicMock()
 
-        monkeypatch.setattr("brain.config.settings.notes_path", str(tmp_path))
+        monkeypatch.setattr("brainshape.config.settings.notes_path", str(tmp_path))
 
         with (
-            patch("brain.mcp_server.GraphDB", return_value=mock_db),
-            patch("brain.mcp_server.create_kg_pipeline", return_value=MagicMock()),
+            patch("brainshape.mcp_server.GraphDB", return_value=mock_db),
+            patch("brainshape.mcp_server.create_kg_pipeline", return_value=MagicMock()),
         ):
-            from brain.mcp_server import _lifespan, mcp
+            from brainshape.mcp_server import _lifespan, mcp
 
             with pytest.raises(RuntimeError):
                 async with _lifespan(mcp):
@@ -55,7 +55,7 @@ class TestMcpTools:
         mock_db.query.return_value = [
             {"title": "Test Note", "path": "Test Note.md", "snippet": "hello", "score": 0.9}
         ]
-        from brain.mcp_server import mcp
+        from brainshape.mcp_server import mcp
 
         result = await mcp.call_tool("search_notes", {"query": "hello"})
         assert any("Test Note" in str(block) for block in result)
@@ -65,7 +65,7 @@ class TestMcpTools:
         mock_db.query.return_value = [
             {"title": "Concept", "path": "Concept.md", "chunk": "related text", "score": 0.8}
         ]
-        from brain.mcp_server import mcp
+        from brainshape.mcp_server import mcp
 
         result = await mcp.call_tool("semantic_search", {"query": "meaning"})
         assert any("Concept" in str(block) for block in result)
@@ -76,7 +76,7 @@ class TestMcpTools:
         mock_db.query.return_value = [
             {"title": "My Note", "path": "My Note.md", "content": "Note body"}
         ]
-        from brain.mcp_server import mcp
+        from brainshape.mcp_server import mcp
 
         result = await mcp.call_tool("read_note", {"title": "My Note"})
         assert any("Note body" in str(block) for block in result)
@@ -84,7 +84,7 @@ class TestMcpTools:
     @pytest.mark.asyncio
     async def test_query_graph(self, mock_db):
         mock_db.query.return_value = [{"n": "value"}]
-        from brain.mcp_server import mcp
+        from brainshape.mcp_server import mcp
 
         result = await mcp.call_tool("query_graph", {"surql": "SELECT * FROM note"})
         assert any("value" in str(block) for block in result)
@@ -98,7 +98,7 @@ class TestMcpTools:
                 "incoming_links": [],
             }
         ]
-        from brain.mcp_server import mcp
+        from brainshape.mcp_server import mcp
 
         result = await mcp.call_tool("find_related", {"title": "X"})
         assert any("python" in str(block) for block in result)
@@ -109,7 +109,7 @@ class TestMcpToolRegistration:
 
     @pytest.mark.asyncio
     async def test_all_tools_registered(self):
-        from brain.mcp_server import mcp
+        from brainshape.mcp_server import mcp
 
         registered = await mcp.list_tools()
         tool_names = {t.name for t in registered}
@@ -128,7 +128,7 @@ class TestMcpToolRegistration:
 
     @pytest.mark.asyncio
     async def test_create_note_optional_params(self):
-        from brain.mcp_server import mcp
+        from brainshape.mcp_server import mcp
 
         registered = await mcp.list_tools()
         create = next(t for t in registered if t.name == "create_note")

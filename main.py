@@ -1,4 +1,4 @@
-from brain.cli import run_cli
+from brainshape.cli import run_cli
 
 
 def main():

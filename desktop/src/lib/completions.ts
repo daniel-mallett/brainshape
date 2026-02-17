@@ -86,7 +86,7 @@ function tagCompletion(context: CompletionContext): CompletionResult | null {
   return { from, options, filter: false };
 }
 
-export const brainAutocompletion = autocompletion({
+export const brainshapeAutocompletion = autocompletion({
   override: [wikilinkCompletion, tagCompletion],
   activateOnTyping: true,
 });

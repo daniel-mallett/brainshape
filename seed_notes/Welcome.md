@@ -1,11 +1,11 @@
 ---
 tags:
-  - brain
+  - brainshape
   - getting-started
 ---
-# Welcome to Brain
+# Welcome to Brainshape
 
-Brain is your personal second-brain agent. It connects your markdown notes to a knowledge graph, giving an AI agent long-term memory and deep understanding of your notes.
+Brainshape is your personal second-brain agent. It connects your markdown notes to a knowledge graph, giving an AI agent long-term memory and deep understanding of your notes.
 
 ## What can it do?
 
@@ -16,7 +16,7 @@ Brain is your personal second-brain agent. It connects your markdown notes to a 
 
 ## Getting started
 
-Check out the tutorials to learn how Brain works:
+Check out the tutorials to learn how Brainshape works:
 
 - [[Getting Started]] — set up your notes and start chatting
 - [[Writing Notes]] — learn about markdown, wikilinks, and tags

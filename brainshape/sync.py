@@ -2,9 +2,9 @@ import asyncio
 import logging
 from pathlib import Path
 
-from brain.graph_db import GraphDB
-from brain.kg_pipeline import KGPipeline
-from brain.notes import compute_file_hash, list_notes, read_all_notes
+from brainshape.graph_db import GraphDB
+from brainshape.kg_pipeline import KGPipeline
+from brainshape.notes import compute_file_hash, list_notes, read_all_notes
 
 logger = logging.getLogger(__name__)
 

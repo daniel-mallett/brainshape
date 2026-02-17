@@ -1,8 +1,8 @@
-# Brain
+# Brainshape
 
-[![CI](https://github.com/daniel-mallett/brain/actions/workflows/ci.yml/badge.svg)](https://github.com/daniel-mallett/brain/actions/workflows/ci.yml)
+[![CI](https://github.com/daniel-mallett/brainshape/actions/workflows/ci.yml/badge.svg)](https://github.com/daniel-mallett/brainshape/actions/workflows/ci.yml)
 
-A personal second-brain agent with knowledge graph memory. Brain connects your markdown notes to a SurrealDB embedded knowledge graph, enabling an AI agent to read, search, create, and edit notes while building its own persistent memory over time.
+A personal second-brain agent with knowledge graph memory. Brainshape connects your markdown notes to a SurrealDB embedded knowledge graph, enabling an AI agent to read, search, create, and edit notes while building its own persistent memory over time.
 
 ## Features
 
@@ -36,8 +36,8 @@ No Docker or external database required — SurrealDB runs embedded in the Pytho
 
 ```bash
 # 1. Clone and install dependencies
-git clone https://github.com/daniel-mallett/brain.git
-cd brain
+git clone https://github.com/daniel-mallett/brainshape.git
+cd brainshape
 uv sync
 cd desktop && npm install && cd ..
 
@@ -57,13 +57,13 @@ Press Ctrl+C to stop all processes.
 
 ```bash
 ANTHROPIC_API_KEY=sk-ant-...          # Required for default LLM
-NOTES_PATH=~/Brain                    # Your notes directory
-SURREALDB_PATH=~/.config/brain/surrealdb  # Database storage (optional)
+NOTES_PATH=~/Brainshape                # Your notes directory
+SURREALDB_PATH=~/.config/brainshape/surrealdb  # Database storage (optional)
 ```
 
 ### LLM Provider
 
-Brain supports four LLM providers, configurable via the Settings UI:
+Brainshape supports four LLM providers, configurable via the Settings UI:
 
 | Provider | API Key | Default Model |
 |----------|---------|---------------|
@@ -74,7 +74,7 @@ Brain supports four LLM providers, configurable via the Settings UI:
 
 For Ollama: install from [ollama.ai](https://ollama.ai), pull a model (`ollama pull llama3.1`), then switch provider in Settings.
 
-For Claude Code: install the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), then switch provider in Settings. Brain connects via MCP stdio transport — no API key needed.
+For Claude Code: install the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), then switch provider in Settings. Brainshape connects via MCP stdio transport — no API key needed.
 
 ### Embedding Model
 
@@ -99,26 +99,26 @@ See [docs/configuration.md](docs/configuration.md) for full configuration refere
 uv run main.py
 
 # Server only (API on port 8765)
-uv run python -m brain.server
+uv run python -m brainshape.server
 
 # Desktop app (requires server running)
 cd desktop && npm run tauri dev
 
 # Batch sync (for cron/launchd)
-uv run python -m brain.batch           # semantic sync
-uv run python -m brain.batch --structural
-uv run python -m brain.batch --full
+uv run python -m brainshape.batch           # semantic sync
+uv run python -m brainshape.batch --structural
+uv run python -m brainshape.batch --full
 ```
 
 ### MCP Server
 
-Expose Brain tools to external agents:
+Expose Brainshape tools to external agents:
 
 ```bash
 # Stdio transport (for Claude Code)
-uv run python -m brain.mcp_server
+uv run python -m brainshape.mcp_server
 
-# HTTP transport — automatically available at /mcp when running brain.server
+# HTTP transport — automatically available at /mcp when running brainshape.server
 ```
 
 ## Development
@@ -136,7 +136,7 @@ uv run pre-commit install        # Install git hooks
 ## Architecture
 
 ```
-brain/                    # Python backend
+brainshape/               # Python backend
   server.py               # FastAPI (HTTP + SSE)
   agent.py                # LangChain agent factory
   tools.py                # 9 agent tools

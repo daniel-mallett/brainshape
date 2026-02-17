@@ -2,8 +2,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from brain import tools
-from brain.notes import init_notes
+from brainshape import tools
+from brainshape.notes import init_notes
 
 
 @pytest.fixture
@@ -45,5 +45,5 @@ def tools_setup(mock_db, mock_pipeline):
 @pytest.fixture
 def notes_settings(tmp_notes, monkeypatch):
     """Point get_notes_path() at the tmp notes directory."""
-    monkeypatch.setattr("brain.settings.get_notes_path", lambda: str(tmp_notes))
+    monkeypatch.setattr("brainshape.settings.get_notes_path", lambda: str(tmp_notes))
     return tmp_notes
