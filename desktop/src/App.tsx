@@ -286,7 +286,21 @@ function App() {
   return (
     <div className="h-screen flex flex-col bg-background text-foreground">
       <header className="flex items-center justify-between px-4 py-1.5 border-b border-border">
-        <h1 className="text-sm font-semibold">Brain</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-sm font-semibold">Brain</h1>
+          {activeView === "editor" && (
+            <Button variant={sidebarOpen ? "secondary" : "ghost"} size="sm" onClick={() => {
+              const panel = sidebarPanelRef.current;
+              if (panel) {
+                if (sidebarOpen) { panel.collapse(); setSidebarOpen(false); } else { panel.expand(); setSidebarOpen(true); }
+              }
+            }} className="h-6 w-6 p-0" title="Toggle file tree">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                <path d="M3.75 3A1.75 1.75 0 0 0 2 4.75v3.26a3.235 3.235 0 0 1 1.75-.51h12.5c.644 0 1.245.188 1.75.51V6.75A1.75 1.75 0 0 0 16.25 5h-4.836a.25.25 0 0 1-.177-.073L9.823 3.513A1.75 1.75 0 0 0 8.586 3H3.75ZM3.75 9A1.75 1.75 0 0 0 2 10.75v4.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0 0 18 15.25v-4.5A1.75 1.75 0 0 0 16.25 9H3.75Z" />
+              </svg>
+            </Button>
+          )}
+        </div>
         <div className="flex items-center gap-1 text-xs">
           {config && <span className="text-muted-foreground mr-2">{config.notes_path}</span>}
           <Button variant={activeView === "editor" ? "secondary" : "ghost"} size="sm" onClick={() => setActiveView("editor")} className="h-6 text-xs">Editor</Button>
@@ -294,14 +308,6 @@ function App() {
           <Button variant={activeView === "memory" ? "secondary" : "ghost"} size="sm" onClick={() => setActiveView("memory")} className="h-6 text-xs">Memory</Button>
           <Button variant={activeView === "search" ? "secondary" : "ghost"} size="sm" onClick={() => setActiveView("search")} className="h-6 text-xs">Search</Button>
           <div className="border-l border-border h-4 mx-1" />
-          {activeView === "editor" && (
-            <Button variant={sidebarOpen ? "secondary" : "ghost"} size="sm" onClick={() => {
-              const panel = sidebarPanelRef.current;
-              if (panel) {
-                if (sidebarOpen) { panel.collapse(); setSidebarOpen(false); } else { panel.expand(); setSidebarOpen(true); }
-              }
-            }} className="h-6 text-xs">Files</Button>
-          )}
           <Button variant={chatOpen ? "secondary" : "ghost"} size="sm" onClick={() => {
             const panel = chatPanelRef.current;
             if (panel) {
@@ -311,10 +317,10 @@ function App() {
             }
           }} className="h-6 text-xs">Chat</Button>
           <div className="border-l border-border h-4 mx-1" />
-          <Button variant={meetingOpen ? "secondary" : "ghost"} size="sm" onClick={() => setMeetingOpen(!meetingOpen)} className="h-6 w-6 p-0" title="Record Meeting">
+          <Button variant={meetingOpen ? "secondary" : "ghost"} size="sm" onClick={() => setMeetingOpen(!meetingOpen)} className="h-6 w-6 p-0" title="Record Meeting" aria-label="Record Meeting">
             <MeetingIcon className="w-3.5 h-3.5" />
           </Button>
-          <Button variant={settingsOpen ? "secondary" : "ghost"} size="sm" onClick={settingsOpen ? handleCloseSettings : handleOpenSettings} className="h-6 w-6 p-0" title="Settings">
+          <Button variant={settingsOpen ? "secondary" : "ghost"} size="sm" onClick={settingsOpen ? handleCloseSettings : handleOpenSettings} className="h-6 w-6 p-0" title="Settings" aria-label="Settings">
             <GearIcon className="w-3.5 h-3.5" />
           </Button>
         </div>
