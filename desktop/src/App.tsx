@@ -76,7 +76,16 @@ function App() {
   const [shikiTheme, setShikiTheme] = useState<[string, string]>(DEFAULT_THEME.codeTheme);
   const sidebarRef = useRef<SidebarHandle>(null);
   const sidebarPanelRef = useRef<PanelImperativeHandle>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try {
+      const stored = localStorage.getItem("react-resizable-panels:brain-layout");
+      if (stored) {
+        const layout = JSON.parse(stored);
+        return (layout.sidebar ?? 1) > 0;
+      }
+    } catch { /* ignore */ }
+    return true;
+  });
   const chatPanelRef = useRef<PanelImperativeHandle>(null);
   // Layout persistence
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
@@ -285,6 +294,14 @@ function App() {
           <Button variant={activeView === "memory" ? "secondary" : "ghost"} size="sm" onClick={() => setActiveView("memory")} className="h-6 text-xs">Memory</Button>
           <Button variant={activeView === "search" ? "secondary" : "ghost"} size="sm" onClick={() => setActiveView("search")} className="h-6 text-xs">Search</Button>
           <div className="border-l border-border h-4 mx-1" />
+          {activeView === "editor" && (
+            <Button variant={sidebarOpen ? "secondary" : "ghost"} size="sm" onClick={() => {
+              const panel = sidebarPanelRef.current;
+              if (panel) {
+                if (sidebarOpen) { panel.collapse(); setSidebarOpen(false); } else { panel.expand(); setSidebarOpen(true); }
+              }
+            }} className="h-6 text-xs">Files</Button>
+          )}
           <Button variant={chatOpen ? "secondary" : "ghost"} size="sm" onClick={() => {
             const panel = chatPanelRef.current;
             if (panel) {
@@ -343,7 +360,6 @@ function App() {
                 canGoForward={canGoForward}
                 onGoBack={goBack}
                 onGoForward={goForward}
-                onShowSidebar={!sidebarOpen ? () => sidebarPanelRef.current?.expand() : undefined}
               />
             )}
             {activeView === "graph" && <GraphPanel onNavigateToNote={handleNavigateToNote} />}
