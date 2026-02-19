@@ -275,6 +275,91 @@ def empty_trash(notes_path: Path) -> int:
     return count
 
 
+# Characters forbidden in a single folder-name segment (same as file titles, minus /).
+_INVALID_FOLDER_CHARS = frozenset('\\\0:*?"<>|')
+
+
+def list_folders(notes_path: Path) -> list[str]:
+    """List all subdirectory paths relative to *notes_path*.
+
+    Excludes ``.trash`` and hidden directories (names starting with ``"."``).
+    """
+    folders: list[str] = []
+    for d in sorted(notes_path.rglob("*")):
+        if not d.is_dir():
+            continue
+        rel = str(d.relative_to(notes_path))
+        parts = rel.split("/") if "/" in rel else [rel]
+        if any(p.startswith(".") for p in parts):
+            continue
+        folders.append(rel)
+    return folders
+
+
+def create_folder(notes_path: Path, folder_path: str) -> Path:
+    """Create a folder inside *notes_path*. Returns the created path."""
+    stripped = folder_path.strip().strip("/")
+    if not stripped or stripped in (".", ".."):
+        raise ValueError("Invalid folder name")
+    full = notes_path / folder_path
+    full = _ensure_within_notes_dir(notes_path, full)
+    for segment in Path(folder_path).parts:
+        stripped = segment.strip()
+        if not stripped or stripped in (".", ".."):
+            raise ValueError("Invalid folder name")
+        if any(c in _INVALID_FOLDER_CHARS for c in segment):
+            raise ValueError("Folder name contains invalid characters")
+    full.mkdir(parents=True, exist_ok=True)
+    return full
+
+
+def rename_folder(notes_path: Path, old_rel_path: str, new_name: str) -> tuple[str, str]:
+    """Rename a folder's leaf directory. Returns ``(old_rel, new_rel)``."""
+    old_path = _ensure_within_notes_dir(notes_path, notes_path / old_rel_path)
+    if not old_path.is_dir():
+        raise FileNotFoundError(f"Folder not found: {old_rel_path}")
+
+    stripped = new_name.strip()
+    if not stripped or stripped in (".", ".."):
+        raise ValueError("Invalid folder name")
+    if any(c in _INVALID_FOLDER_CHARS for c in new_name) or "/" in new_name:
+        raise ValueError("Folder name contains invalid characters")
+
+    new_path = old_path.parent / new_name
+    _ensure_within_notes_dir(notes_path, new_path)
+    if new_path.exists():
+        raise FileExistsError(f"A folder named '{new_name}' already exists")
+
+    old_path.rename(new_path)
+    new_rel = str(new_path.relative_to(notes_path))
+    return old_rel_path, new_rel
+
+
+def delete_folder(notes_path: Path, folder_rel_path: str) -> list[Path]:
+    """Move all notes in *folder_rel_path* to trash, then remove the empty folder tree.
+
+    Returns list of trash paths for the moved files.
+    """
+    folder = _ensure_within_notes_dir(notes_path, notes_path / folder_rel_path)
+    if not folder.is_dir():
+        raise FileNotFoundError(f"Folder not found: {folder_rel_path}")
+
+    trashed: list[Path] = []
+    for md in sorted(folder.rglob("*.md")):
+        rel = str(md.relative_to(notes_path))
+        trash_path = move_to_trash(notes_path, rel)
+        trashed.append(trash_path)
+
+    # Remove empty dirs bottom-up
+    for d in sorted(folder.rglob("*"), reverse=True):
+        if d.is_dir() and not any(d.iterdir()):
+            d.rmdir()
+    if folder.exists() and not any(folder.iterdir()):
+        folder.rmdir()
+
+    return trashed
+
+
 _INVALID_TITLE_CHARS = frozenset('/\\\0:*?"<>|')
 
 

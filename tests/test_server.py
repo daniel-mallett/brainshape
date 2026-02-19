@@ -1509,3 +1509,78 @@ class TestPipelineNotesPathRefresh:
         mock_create.assert_called_once()
         call_args = mock_create.call_args
         assert str(call_args[0][1]) == new_path
+
+
+class TestFolderEndpoints:
+    def test_list_files_includes_folders(self, client):
+        resp = client.get("/notes/files")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "folders" in data
+        assert "Tutorials" in data["folders"]
+
+    def test_create_folder(self, client, tmp_notes):
+        resp = client.post("/notes/folder", json={"path": "NewFolder"})
+        assert resp.status_code == 200
+        assert resp.json()["path"] == "NewFolder"
+        assert (tmp_notes / "NewFolder").is_dir()
+
+    def test_create_nested_folder(self, client, tmp_notes):
+        resp = client.post("/notes/folder", json={"path": "A/B/C"})
+        assert resp.status_code == 200
+        assert (tmp_notes / "A" / "B" / "C").is_dir()
+
+    def test_create_folder_traversal(self, client):
+        resp = client.post("/notes/folder", json={"path": "../../evil"})
+        assert resp.status_code == 400
+
+    def test_create_folder_invalid_chars(self, client):
+        resp = client.post("/notes/folder", json={"path": 'bad:name'})
+        assert resp.status_code == 400
+
+    def test_rename_folder(self, client, tmp_notes, server_db):
+        (tmp_notes / "Old").mkdir()
+        server_db.query.return_value = []
+        resp = client.put("/notes/folder/Old/rename", json={"new_name": "New"})
+        assert resp.status_code == 200
+        assert (tmp_notes / "New").is_dir()
+        assert not (tmp_notes / "Old").exists()
+
+    def test_rename_folder_not_found(self, client, server_db):
+        server_db.query.return_value = []
+        resp = client.put("/notes/folder/nonexistent/rename", json={"new_name": "X"})
+        assert resp.status_code == 404
+
+    def test_rename_folder_conflict(self, client, tmp_notes, server_db):
+        (tmp_notes / "A").mkdir()
+        (tmp_notes / "B").mkdir()
+        server_db.query.return_value = []
+        resp = client.put("/notes/folder/A/rename", json={"new_name": "B"})
+        assert resp.status_code == 409
+
+    def test_delete_folder(self, client, tmp_notes, server_db):
+        (tmp_notes / "Doomed").mkdir()
+        (tmp_notes / "Doomed" / "note.md").write_text("bye")
+        server_db.query.return_value = []
+        resp = client.delete("/notes/folder/Doomed")
+        assert resp.status_code == 200
+        assert resp.json()["files_trashed"] == 1
+        assert not (tmp_notes / "Doomed").exists()
+
+    def test_delete_empty_folder(self, client, tmp_notes, server_db):
+        (tmp_notes / "Empty").mkdir()
+        server_db.query.return_value = []
+        resp = client.delete("/notes/folder/Empty")
+        assert resp.status_code == 200
+        assert resp.json()["files_trashed"] == 0
+        assert not (tmp_notes / "Empty").exists()
+
+    def test_delete_folder_not_found(self, client, server_db):
+        server_db.query.return_value = []
+        resp = client.delete("/notes/folder/nonexistent")
+        assert resp.status_code == 404
+
+    def test_empty_folder_appears_in_list(self, client, tmp_notes):
+        (tmp_notes / "EmptyDir").mkdir()
+        resp = client.get("/notes/files")
+        assert "EmptyDir" in resp.json()["folders"]

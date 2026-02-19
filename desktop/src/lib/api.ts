@@ -93,7 +93,7 @@ export interface Note {
   tags: string[];
 }
 
-export function getNoteFiles(): Promise<{ files: NoteFile[] }> {
+export function getNoteFiles(): Promise<{ files: NoteFile[]; folders: string[] }> {
   return request("/notes/files");
 }
 
@@ -148,6 +148,31 @@ export function createNoteFile(
     method: "POST",
     body: JSON.stringify({ title, content, folder }),
   });
+}
+
+// --- Folders ---
+
+export function createFolder(path: string): Promise<{ path: string }> {
+  return request("/notes/folder", {
+    method: "POST",
+    body: JSON.stringify({ path }),
+  });
+}
+
+export function renameFolder(
+  path: string,
+  newName: string
+): Promise<{ old_path: string; new_path: string }> {
+  return request(`/notes/folder/${encodePath(path)}/rename`, {
+    method: "PUT",
+    body: JSON.stringify({ new_name: newName }),
+  });
+}
+
+export function deleteFolder(
+  path: string
+): Promise<{ status: string; files_trashed: number }> {
+  return request(`/notes/folder/${encodePath(path)}`, { method: "DELETE" });
 }
 
 export function syncStructural(): Promise<{ status: string; stats: Record<string, number> }> {

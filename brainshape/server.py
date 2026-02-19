@@ -27,13 +27,17 @@ from brainshape.mcp_client import load_mcp_tools as load_mcp
 from brainshape.mcp_server import create_mcp_server
 from brainshape.notes import (
     _ensure_within_notes_dir,
+    create_folder,
+    delete_folder,
     delete_note,
     empty_trash,
     import_vault,
     init_notes,
+    list_folders,
     list_notes,
     list_trash,
     parse_note,
+    rename_folder,
     rename_note,
     restore_from_trash,
     rewrite_note,
@@ -183,6 +187,14 @@ class UpdateNoteRequest(BaseModel):
 
 class RenameNoteRequest(BaseModel):
     new_title: str
+
+
+class CreateFolderRequest(BaseModel):
+    path: str
+
+
+class RenameFolderRequest(BaseModel):
+    new_name: str
 
 
 class UpdateMemoryRequest(BaseModel):
@@ -361,13 +373,14 @@ def _notes_path() -> Path:
 def notes_files():
     notes_path = _notes_path()
     if not notes_path.exists():
-        return {"files": []}
+        return {"files": [], "folders": []}
     note_list = list_notes(notes_path)
     files = []
     for note in note_list:
         rel = str(note.relative_to(notes_path))
         files.append({"path": rel, "title": note.stem})
-    return {"files": files}
+    folders = list_folders(notes_path)
+    return {"files": files, "folders": folders}
 
 
 @app.get("/notes/file/{path:path}")
@@ -400,6 +413,54 @@ def notes_create(req: CreateNoteRequest):
         return {"path": rel, "title": req.title}
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid path") from None
+
+
+# --- Folders ---
+
+
+@app.post("/notes/folder")
+def notes_create_folder(req: CreateFolderRequest):
+    notes_path = _notes_path()
+    try:
+        folder_path = create_folder(notes_path, req.path)
+        rel = str(folder_path.relative_to(notes_path))
+        return {"path": rel}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
+
+
+@app.put("/notes/folder/{path:path}/rename")
+def notes_rename_folder(path: str, req: RenameFolderRequest):
+    notes_path = _notes_path()
+    try:
+        old_rel, new_rel = rename_folder(notes_path, path, req.new_name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Folder not found") from None
+    except FileExistsError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from None
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
+
+    if _db is not None:
+        sync_structural(_db, notes_path)
+
+    return {"old_path": old_rel, "new_path": new_rel}
+
+
+@app.delete("/notes/folder/{path:path}")
+def notes_delete_folder(path: str):
+    notes_path = _notes_path()
+    try:
+        trashed = delete_folder(notes_path, path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Folder not found") from None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path") from None
+
+    if _db is not None:
+        sync_structural(_db, notes_path)
+
+    return {"status": "ok", "files_trashed": len(trashed)}
 
 
 def _delete_note_from_graph(db: GraphDB, path: str) -> None:

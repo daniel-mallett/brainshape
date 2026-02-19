@@ -4,11 +4,15 @@ from brainshape.notes import (
     SEED_NOTES_DIR,
     _ensure_within_notes_dir,
     compute_file_hash,
+    create_folder,
+    delete_folder,
     delete_note,
     import_vault,
     init_notes,
+    list_folders,
     list_notes,
     parse_note,
+    rename_folder,
     rewrite_note,
     write_note,
 )
@@ -490,3 +494,126 @@ class TestImportVault:
         assert (dest / "existing.md").read_text() == "# Old version — keep this"
         # New file should be imported
         assert (dest / "new.md").read_text() == "# Brand new"
+
+
+class TestListFolders:
+    def test_lists_directories(self, tmp_notes):
+        folders = list_folders(tmp_notes)
+        assert "Tutorials" in folders
+
+    def test_excludes_trash(self, tmp_path):
+        (tmp_path / ".trash").mkdir()
+        (tmp_path / "visible").mkdir()
+        folders = list_folders(tmp_path)
+        assert ".trash" not in folders
+        assert "visible" in folders
+
+    def test_excludes_hidden_dirs(self, tmp_path):
+        (tmp_path / ".hidden").mkdir()
+        (tmp_path / "visible").mkdir()
+        folders = list_folders(tmp_path)
+        assert all(not f.startswith(".") for f in folders)
+
+    def test_includes_empty_folders(self, tmp_path):
+        (tmp_path / "empty").mkdir()
+        folders = list_folders(tmp_path)
+        assert "empty" in folders
+
+    def test_nested_folders(self, tmp_path):
+        (tmp_path / "A" / "B").mkdir(parents=True)
+        folders = list_folders(tmp_path)
+        assert "A" in folders
+        assert "A/B" in folders
+
+
+class TestCreateFolder:
+    def test_creates_folder(self, tmp_path):
+        path = create_folder(tmp_path, "Projects")
+        assert path.is_dir()
+
+    def test_creates_nested(self, tmp_path):
+        path = create_folder(tmp_path, "Projects/Active")
+        assert path.is_dir()
+
+    def test_rejects_traversal(self, tmp_path):
+        with pytest.raises(ValueError):
+            create_folder(tmp_path, "../../evil")
+
+    def test_rejects_invalid_chars(self, tmp_path):
+        with pytest.raises(ValueError):
+            create_folder(tmp_path, 'bad:name')
+
+    def test_idempotent(self, tmp_path):
+        create_folder(tmp_path, "Exist")
+        path = create_folder(tmp_path, "Exist")
+        assert path.is_dir()
+
+    def test_rejects_dot_segments(self, tmp_path):
+        with pytest.raises(ValueError):
+            create_folder(tmp_path, ".")
+
+    def test_rejects_dotdot_segments(self, tmp_path):
+        with pytest.raises(ValueError):
+            create_folder(tmp_path, "ok/..")
+
+
+class TestRenameFolder:
+    def test_renames(self, tmp_path):
+        (tmp_path / "Old").mkdir()
+        old_rel, new_rel = rename_folder(tmp_path, "Old", "New")
+        assert (tmp_path / "New").is_dir()
+        assert not (tmp_path / "Old").exists()
+        assert old_rel == "Old"
+        assert new_rel == "New"
+
+    def test_preserves_contents(self, tmp_path):
+        (tmp_path / "Old").mkdir()
+        (tmp_path / "Old" / "note.md").write_text("hi")
+        rename_folder(tmp_path, "Old", "New")
+        assert (tmp_path / "New" / "note.md").exists()
+
+    def test_not_found(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            rename_folder(tmp_path, "nonexistent", "New")
+
+    def test_conflict(self, tmp_path):
+        (tmp_path / "A").mkdir()
+        (tmp_path / "B").mkdir()
+        with pytest.raises(FileExistsError):
+            rename_folder(tmp_path, "A", "B")
+
+    def test_rejects_invalid_name(self, tmp_path):
+        (tmp_path / "Folder").mkdir()
+        with pytest.raises(ValueError):
+            rename_folder(tmp_path, "Folder", "..")
+
+    def test_rejects_slash_in_name(self, tmp_path):
+        (tmp_path / "Folder").mkdir()
+        with pytest.raises(ValueError):
+            rename_folder(tmp_path, "Folder", "a/b")
+
+
+class TestDeleteFolder:
+    def test_moves_files_to_trash(self, tmp_path):
+        write_note(tmp_path, "Note1", "content", folder="Doomed")
+        trashed = delete_folder(tmp_path, "Doomed")
+        assert len(trashed) == 1
+        assert not (tmp_path / "Doomed").exists()
+        assert (tmp_path / ".trash" / "Doomed" / "Note1.md").exists()
+
+    def test_empty_folder(self, tmp_path):
+        (tmp_path / "Empty").mkdir()
+        trashed = delete_folder(tmp_path, "Empty")
+        assert len(trashed) == 0
+        assert not (tmp_path / "Empty").exists()
+
+    def test_nested_files(self, tmp_path):
+        write_note(tmp_path, "A", "a", folder="Parent/Child")
+        write_note(tmp_path, "B", "b", folder="Parent")
+        trashed = delete_folder(tmp_path, "Parent")
+        assert len(trashed) == 2
+        assert not (tmp_path / "Parent").exists()
+
+    def test_not_found(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            delete_folder(tmp_path, "nonexistent")

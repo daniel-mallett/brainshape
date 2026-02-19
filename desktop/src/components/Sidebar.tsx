@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { createNoteFile, deleteNoteFile, emptyTrash, getNoteFiles, getTrashNotes, renameNoteFile, restoreFromTrash, syncStructural, type NoteFile } from "../lib/api";
+import { createFolder, createNoteFile, deleteFolder, deleteNoteFile, emptyTrash, getNoteFiles, getTrashNotes, renameFolder, renameNoteFile, restoreFromTrash, syncStructural, type NoteFile } from "../lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 
@@ -7,13 +7,25 @@ interface FolderTree {
   [key: string]: FolderTree | NoteFile;
 }
 
-function buildTree(files: NoteFile[]): FolderTree {
+function buildTree(files: NoteFile[], folders: string[]): FolderTree {
   const tree: FolderTree = {};
+  // Ensure all folder paths exist in the tree (including empty folders)
+  for (const folderPath of folders) {
+    const parts = folderPath.split("/");
+    let current = tree;
+    for (const part of parts) {
+      if (!current[part] || isFile(current[part] as FolderTree | NoteFile)) {
+        current[part] = {} as FolderTree;
+      }
+      current = current[part] as FolderTree;
+    }
+  }
+  // Add files
   for (const file of files) {
     const parts = file.path.split("/");
     let current = tree;
     for (let i = 0; i < parts.length - 1; i++) {
-      if (!current[parts[i]] || typeof (current[parts[i]] as NoteFile).path === "string") {
+      if (!current[parts[i]] || isFile(current[parts[i]] as FolderTree | NoteFile)) {
         current[parts[i]] = {} as FolderTree;
       }
       current = current[parts[i]] as FolderTree;
@@ -28,6 +40,7 @@ function isFile(node: FolderTree | NoteFile): node is NoteFile {
 }
 
 interface MenuState {
+  type: "file" | "folder" | "background";
   path: string;
   x: number;
   y: number;
@@ -36,20 +49,41 @@ interface MenuState {
 interface TreeNodeProps {
   name: string;
   node: FolderTree | NoteFile;
+  path: string;
   selectedPath: string | null;
   onSelect: (path: string) => void;
-  onMenuOpen: (path: string, x: number, y: number) => void;
+  onMenuOpen: (path: string, x: number, y: number, type: "file" | "folder") => void;
   renamingPath: string | null;
   renameValue: string;
   onRenameChange: (v: string) => void;
   onRenameSubmit: () => void;
   onRenameCancel: () => void;
+  renamingFolderPath: string | null;
+  folderRenameValue: string;
+  onFolderRenameChange: (v: string) => void;
+  onFolderRenameSubmit: () => void;
+  onFolderRenameCancel: () => void;
+  creatingIn: string;
+  creatingType: "file" | "folder";
+  isCreating: boolean;
+  newTitle: string;
+  onNewTitleChange: (v: string) => void;
+  onCreateSubmit: () => void;
+  onCreateCancel: () => void;
+  createInputRef: React.RefObject<HTMLInputElement | null>;
   depth: number;
 }
 
-function TreeNode({ name, node, selectedPath, onSelect, onMenuOpen, renamingPath, renameValue, onRenameChange, onRenameSubmit, onRenameCancel, depth }: TreeNodeProps) {
+function TreeNode({
+  name, node, path, selectedPath, onSelect, onMenuOpen,
+  renamingPath, renameValue, onRenameChange, onRenameSubmit, onRenameCancel,
+  renamingFolderPath, folderRenameValue, onFolderRenameChange, onFolderRenameSubmit, onFolderRenameCancel,
+  creatingIn, creatingType, isCreating, newTitle, onNewTitleChange, onCreateSubmit, onCreateCancel, createInputRef,
+  depth,
+}: TreeNodeProps) {
   const [expanded, setExpanded] = useState(true);
   const renameRef = useRef<HTMLInputElement>(null);
+  const folderRenameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isFile(node) && renamingPath === node.path) {
@@ -57,6 +91,20 @@ function TreeNode({ name, node, selectedPath, onSelect, onMenuOpen, renamingPath
       renameRef.current?.select();
     }
   }, [renamingPath, node]);
+
+  useEffect(() => {
+    if (!isFile(node) && renamingFolderPath === path) {
+      folderRenameRef.current?.focus();
+      folderRenameRef.current?.select();
+    }
+  }, [renamingFolderPath, node, path]);
+
+  // Auto-expand folder when creating inside it
+  useEffect(() => {
+    if (isCreating && creatingIn === path && !expanded) {
+      setExpanded(true);
+    }
+  }, [isCreating, creatingIn, path, expanded]);
 
   if (isFile(node)) {
     const isSelected = node.path === selectedPath;
@@ -71,7 +119,7 @@ function TreeNode({ name, node, selectedPath, onSelect, onMenuOpen, renamingPath
         }`}
         onContextMenu={(e) => {
           e.preventDefault();
-          onMenuOpen(node.path, e.clientX, e.clientY);
+          onMenuOpen(node.path, e.clientX, e.clientY, "file");
         }}
       >
         {isRenaming ? (
@@ -100,7 +148,7 @@ function TreeNode({ name, node, selectedPath, onSelect, onMenuOpen, renamingPath
               onClick={(e) => {
                 e.stopPropagation();
                 const rect = e.currentTarget.getBoundingClientRect();
-                onMenuOpen(node.path, rect.right, rect.bottom);
+                onMenuOpen(node.path, rect.right, rect.bottom, "file");
               }}
               className="opacity-0 group-hover:opacity-100 px-1 text-muted-foreground hover:text-foreground text-xs flex-shrink-0"
               title="More actions"
@@ -114,6 +162,7 @@ function TreeNode({ name, node, selectedPath, onSelect, onMenuOpen, renamingPath
     );
   }
 
+  const isRenamingThisFolder = renamingFolderPath === path;
   const entries = Object.entries(node).sort(([a, va], [b, vb]) => {
     const aIsFile = isFile(va);
     const bIsFile = isFile(vb);
@@ -121,23 +170,76 @@ function TreeNode({ name, node, selectedPath, onSelect, onMenuOpen, renamingPath
     return a.localeCompare(b);
   });
 
+  const showCreateInput = isCreating && creatingIn === path;
+
   return (
     <div>
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full text-left px-2 py-0.5 text-sm text-foreground hover:bg-accent/50 rounded flex items-center gap-1 transition-colors"
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
-      >
-        <span className="text-xs text-muted-foreground">{expanded ? "\u25BC" : "\u25B6"}</span>
-        {name}
-      </button>
+      {isRenamingThisFolder ? (
+        <input
+          ref={folderRenameRef}
+          value={folderRenameValue}
+          onChange={(e) => onFolderRenameChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onFolderRenameSubmit();
+            if (e.key === "Escape") onFolderRenameCancel();
+          }}
+          onBlur={onFolderRenameSubmit}
+          className="w-full h-6 text-sm bg-background border border-border rounded px-2 mx-1 outline-none"
+          style={{ paddingLeft: `${depth * 12 + 4}px` }}
+        />
+      ) : (
+        <div
+          className="group flex items-center"
+          onContextMenu={(e) => {
+            e.preventDefault();
+            onMenuOpen(path, e.clientX, e.clientY, "folder");
+          }}
+        >
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="flex-1 text-left px-2 py-0.5 text-sm text-foreground hover:bg-accent/50 rounded flex items-center gap-1 transition-colors"
+            style={{ paddingLeft: `${depth * 12 + 8}px` }}
+          >
+            <span className="text-xs text-muted-foreground">{expanded ? "\u25BC" : "\u25B6"}</span>
+            {name}
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const rect = e.currentTarget.getBoundingClientRect();
+              onMenuOpen(path, rect.right, rect.bottom, "folder");
+            }}
+            className="opacity-0 group-hover:opacity-100 px-1 text-muted-foreground hover:text-foreground text-xs flex-shrink-0"
+            title="More actions"
+            aria-label="More actions"
+          >
+            &#x22EF;
+          </button>
+        </div>
+      )}
       {expanded && (
         <div>
+          {showCreateInput && (
+            <div className="px-2 py-0.5" style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}>
+              <Input
+                ref={createInputRef}
+                value={newTitle}
+                onChange={(e) => onNewTitleChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") onCreateSubmit();
+                  if (e.key === "Escape") onCreateCancel();
+                }}
+                placeholder={creatingType === "folder" ? "Folder name..." : "Note title..."}
+                className="h-7 text-sm"
+              />
+            </div>
+          )}
           {entries.map(([key, val]) => (
             <TreeNode
               key={key}
               name={key}
               node={val}
+              path={`${path}/${key}`}
               selectedPath={selectedPath}
               onSelect={onSelect}
               onMenuOpen={onMenuOpen}
@@ -146,6 +248,19 @@ function TreeNode({ name, node, selectedPath, onSelect, onMenuOpen, renamingPath
               onRenameChange={onRenameChange}
               onRenameSubmit={onRenameSubmit}
               onRenameCancel={onRenameCancel}
+              renamingFolderPath={renamingFolderPath}
+              folderRenameValue={folderRenameValue}
+              onFolderRenameChange={onFolderRenameChange}
+              onFolderRenameSubmit={onFolderRenameSubmit}
+              onFolderRenameCancel={onFolderRenameCancel}
+              creatingIn={creatingIn}
+              creatingType={creatingType}
+              isCreating={isCreating}
+              newTitle={newTitle}
+              onNewTitleChange={onNewTitleChange}
+              onCreateSubmit={onCreateSubmit}
+              onCreateCancel={onCreateCancel}
+              createInputRef={createInputRef}
               depth={depth + 1}
             />
           ))}
@@ -165,25 +280,37 @@ interface SidebarProps {
   onSelectFile: (path: string) => void;
 }
 
+const menuBtnClass = "w-full text-left px-2 py-1.5 text-sm rounded-sm hover:bg-accent transition-colors";
+const menuBtnDestructiveClass = "w-full text-left px-2 py-1.5 text-sm rounded-sm text-destructive hover:bg-accent hover:text-destructive transition-colors";
+
 export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar({ selectedPath, onSelectFile }, ref) {
   const [files, setFiles] = useState<NoteFile[]>([]);
+  const [folders, setFolders] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [creatingIn, setCreatingIn] = useState("");
+  const [creatingType, setCreatingType] = useState<"file" | "folder">("file");
   const [newTitle, setNewTitle] = useState("");
   const [filter, setFilter] = useState("");
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [confirmPath, setConfirmPath] = useState<string | null>(null);
+  const [confirmFolderPath, setConfirmFolderPath] = useState<string | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [renamingFolderPath, setRenamingFolderPath] = useState<string | null>(null);
+  const [folderRenameValue, setFolderRenameValue] = useState("");
   const renameInFlightRef = useRef(false);
+  const folderRenameInFlightRef = useRef(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [trashFiles, setTrashFiles] = useState<NoteFile[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const { files } = await getNoteFiles();
+      const { files, folders } = await getNoteFiles();
       setFiles(files);
+      setFolders(folders ?? []);
     } catch (err) {
       console.error("Failed to fetch note files:", err);
     } finally {
@@ -192,7 +319,7 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
   }, []);
 
   useImperativeHandle(ref, () => ({
-    startCreating: () => setCreating(true),
+    startCreating: () => startCreatingIn("", "file"),
     refresh,
   }), [refresh]);
 
@@ -204,27 +331,50 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
     if (creating) inputRef.current?.focus();
   }, [creating]);
 
+  const startCreatingIn = (folder: string, type: "file" | "folder") => {
+    setMenu(null);
+    setPlusMenuOpen(false);
+    setCreatingIn(folder);
+    setCreatingType(type);
+    setNewTitle("");
+    setCreating(true);
+  };
+
   const handleCreate = async () => {
     const title = newTitle.trim();
     if (!title) return;
     try {
-      const { path } = await createNoteFile(title);
-      setCreating(false);
-      setNewTitle("");
-      await refresh();
-      onSelectFile(path);
-      syncStructural().catch((err) =>
-        console.error("Failed to sync after note creation:", err)
-      );
+      if (creatingType === "folder") {
+        const folderPath = creatingIn ? `${creatingIn}/${title}` : title;
+        await createFolder(folderPath);
+        setCreating(false);
+        setNewTitle("");
+        await refresh();
+      } else {
+        const { path } = await createNoteFile(title, "", creatingIn);
+        setCreating(false);
+        setNewTitle("");
+        await refresh();
+        onSelectFile(path);
+        syncStructural().catch((err) =>
+          console.error("Failed to sync after note creation:", err)
+        );
+      }
     } catch (err) {
-      console.error("Failed to create note:", err);
+      console.error(`Failed to create ${creatingType}:`, err);
     }
   };
 
-  const handleMenuOpen = (path: string, x: number, y: number) => {
-    setMenu({ path, x, y });
+  const handleCreateCancel = () => {
+    setCreating(false);
+    setNewTitle("");
   };
 
+  const handleMenuOpen = (path: string, x: number, y: number, type: "file" | "folder") => {
+    setMenu({ type, path, x, y });
+  };
+
+  // File rename handlers
   const handleRenameClick = (path: string) => {
     setMenu(null);
     const file = files.find((f) => f.path === path);
@@ -269,6 +419,51 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
     setRenameValue("");
   };
 
+  // Folder rename handlers
+  const handleFolderRenameClick = (path: string) => {
+    setMenu(null);
+    const folderName = path.split("/").pop() || path;
+    setRenamingFolderPath(path);
+    setFolderRenameValue(folderName);
+  };
+
+  const handleFolderRenameSubmit = async () => {
+    if (!renamingFolderPath || folderRenameInFlightRef.current) return;
+    const newName = folderRenameValue.trim();
+    if (!newName) {
+      setRenamingFolderPath(null);
+      return;
+    }
+    const oldName = renamingFolderPath.split("/").pop() || renamingFolderPath;
+    if (newName === oldName) {
+      setRenamingFolderPath(null);
+      return;
+    }
+    folderRenameInFlightRef.current = true;
+    try {
+      const { new_path } = await renameFolder(renamingFolderPath, newName);
+      setRenamingFolderPath(null);
+      setFolderRenameValue("");
+      await refresh();
+      // If selected file was inside the renamed folder, update selection
+      if (selectedPath && selectedPath.startsWith(renamingFolderPath + "/")) {
+        const newSelectedPath = selectedPath.replace(renamingFolderPath + "/", new_path + "/");
+        onSelectFile(newSelectedPath);
+      }
+    } catch (err) {
+      console.error("Failed to rename folder:", err);
+      setRenamingFolderPath(null);
+    } finally {
+      folderRenameInFlightRef.current = false;
+    }
+  };
+
+  const handleFolderRenameCancel = () => {
+    setRenamingFolderPath(null);
+    setFolderRenameValue("");
+  };
+
+  // File delete handlers
   const handleDeleteClick = (path: string) => {
     setMenu(null);
     setConfirmPath(path);
@@ -286,6 +481,27 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
       }
     } catch (err) {
       console.error("Failed to delete note:", err);
+    }
+  };
+
+  // Folder delete handlers
+  const handleFolderDeleteClick = (path: string) => {
+    setMenu(null);
+    setConfirmFolderPath(path);
+  };
+
+  const handleFolderDeleteConfirm = async () => {
+    if (!confirmFolderPath) return;
+    const path = confirmFolderPath;
+    setConfirmFolderPath(null);
+    try {
+      await deleteFolder(path);
+      await refresh();
+      if (selectedPath && selectedPath.startsWith(path + "/")) {
+        onSelectFile("");
+      }
+    } catch (err) {
+      console.error("Failed to delete folder:", err);
     }
   };
 
@@ -328,7 +544,7 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
     ? files.filter((f) => f.title.toLowerCase().includes(filter.toLowerCase()))
     : files;
 
-  const tree = filter ? null : buildTree(filteredFiles);
+  const tree = filter ? null : buildTree(filteredFiles, folders);
 
   return (
     <div className="h-full flex flex-col">
@@ -346,14 +562,35 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
                 <path fillRule="evenodd" d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.285a1.5 1.5 0 0 0 1.493-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5ZM6.05 6a.75.75 0 0 1 .787.713l.275 5.5a.75.75 0 0 1-1.498.075l-.275-5.5A.75.75 0 0 1 6.05 6Zm3.9 0a.75.75 0 0 1 .712.787l-.275 5.5a.75.75 0 0 1-1.498-.075l.275-5.5A.75.75 0 0 1 9.95 6Z" clipRule="evenodd" />
               </svg>
             </button>
-            <button
-              onClick={() => setCreating(true)}
-              className="text-muted-foreground hover:text-foreground text-lg leading-none"
-              title="New note"
-              aria-label="New note"
-            >
-              +
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setPlusMenuOpen(!plusMenuOpen)}
+                className="text-muted-foreground hover:text-foreground text-lg leading-none"
+                title="New..."
+                aria-label="New note or folder"
+              >
+                +
+              </button>
+              {plusMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setPlusMenuOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-50 min-w-[120px] rounded-md border border-border bg-popover p-1 shadow-md">
+                    <button
+                      onClick={() => startCreatingIn("", "file")}
+                      className={menuBtnClass}
+                    >
+                      New Note
+                    </button>
+                    <button
+                      onClick={() => startCreatingIn("", "folder")}
+                      className={menuBtnClass}
+                    >
+                      New Folder
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
         <div className="relative">
@@ -375,8 +612,17 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
         </div>
       </div>
       <ScrollArea className="flex-1">
-        <div className="py-1">
-          {creating && (
+        <div
+          className="py-1"
+          onContextMenu={(e) => {
+            if (e.target === e.currentTarget) {
+              e.preventDefault();
+              setMenu({ type: "background", path: "", x: e.clientX, y: e.clientY });
+            }
+          }}
+        >
+          {/* Root-level create input */}
+          {creating && creatingIn === "" && (
             <div className="px-2 py-1">
               <Input
                 ref={inputRef}
@@ -384,19 +630,16 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
                 onChange={(e) => setNewTitle(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleCreate();
-                  if (e.key === "Escape") {
-                    setCreating(false);
-                    setNewTitle("");
-                  }
+                  if (e.key === "Escape") handleCreateCancel();
                 }}
-                placeholder="Note title..."
+                placeholder={creatingType === "folder" ? "Folder name..." : "Note title..."}
                 className="h-7 text-sm"
               />
             </div>
           )}
           {loading ? (
             <p className="px-3 py-2 text-sm text-muted-foreground">Loading...</p>
-          ) : filteredFiles.length === 0 ? (
+          ) : filteredFiles.length === 0 && folders.length === 0 ? (
             <p className="px-3 py-2 text-sm text-muted-foreground">
               {filter ? "No matching notes" : "No notes found"}
             </p>
@@ -412,7 +655,7 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
                 }`}
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  handleMenuOpen(file.path, e.clientX, e.clientY);
+                  handleMenuOpen(file.path, e.clientX, e.clientY, "file");
                 }}
               >
                 <button
@@ -425,7 +668,7 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
                   onClick={(e) => {
                     e.stopPropagation();
                     const rect = e.currentTarget.getBoundingClientRect();
-                    handleMenuOpen(file.path, rect.right, rect.bottom);
+                    handleMenuOpen(file.path, rect.right, rect.bottom, "file");
                   }}
                   className="opacity-0 group-hover:opacity-100 px-1 text-muted-foreground hover:text-foreground text-xs flex-shrink-0"
                   title="More actions"
@@ -449,6 +692,7 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
                   key={key}
                   name={key}
                   node={val}
+                  path={key}
                   selectedPath={selectedPath}
                   onSelect={onSelectFile}
                   onMenuOpen={handleMenuOpen}
@@ -457,6 +701,19 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
                   onRenameChange={setRenameValue}
                   onRenameSubmit={handleRenameSubmit}
                   onRenameCancel={handleRenameCancel}
+                  renamingFolderPath={renamingFolderPath}
+                  folderRenameValue={folderRenameValue}
+                  onFolderRenameChange={setFolderRenameValue}
+                  onFolderRenameSubmit={handleFolderRenameSubmit}
+                  onFolderRenameCancel={handleFolderRenameCancel}
+                  creatingIn={creatingIn}
+                  creatingType={creatingType}
+                  isCreating={creating}
+                  newTitle={newTitle}
+                  onNewTitleChange={setNewTitle}
+                  onCreateSubmit={handleCreate}
+                  onCreateCancel={handleCreateCancel}
+                  createInputRef={inputRef}
                   depth={0}
                 />
               ))
@@ -472,29 +729,78 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
             onClick={() => setMenu(null)}
           />
           <div
-            className="fixed z-50 min-w-[120px] rounded-md border border-border bg-popover p-1 shadow-md"
+            className="fixed z-50 min-w-[140px] rounded-md border border-border bg-popover p-1 shadow-md"
             style={{
-              left: Math.min(menu.x, window.innerWidth - 140),
-              top: Math.min(menu.y, window.innerHeight - 80),
+              left: Math.min(menu.x, window.innerWidth - 160),
+              top: Math.min(menu.y, window.innerHeight - 120),
             }}
           >
-            <button
-              onClick={() => handleRenameClick(menu.path)}
-              className="w-full text-left px-2 py-1.5 text-sm rounded-sm hover:bg-accent transition-colors"
-            >
-              Rename
-            </button>
-            <button
-              onClick={() => handleDeleteClick(menu.path)}
-              className="w-full text-left px-2 py-1.5 text-sm rounded-sm text-destructive hover:bg-accent hover:text-destructive transition-colors"
-            >
-              Move to Trash
-            </button>
+            {menu.type === "file" && (
+              <>
+                <button
+                  onClick={() => handleRenameClick(menu.path)}
+                  className={menuBtnClass}
+                >
+                  Rename
+                </button>
+                <button
+                  onClick={() => handleDeleteClick(menu.path)}
+                  className={menuBtnDestructiveClass}
+                >
+                  Move to Trash
+                </button>
+              </>
+            )}
+            {menu.type === "folder" && (
+              <>
+                <button
+                  onClick={() => startCreatingIn(menu.path, "file")}
+                  className={menuBtnClass}
+                >
+                  New Note
+                </button>
+                <button
+                  onClick={() => startCreatingIn(menu.path, "folder")}
+                  className={menuBtnClass}
+                >
+                  New Folder
+                </button>
+                <div className="my-1 border-t border-border" />
+                <button
+                  onClick={() => handleFolderRenameClick(menu.path)}
+                  className={menuBtnClass}
+                >
+                  Rename
+                </button>
+                <button
+                  onClick={() => handleFolderDeleteClick(menu.path)}
+                  className={menuBtnDestructiveClass}
+                >
+                  Delete
+                </button>
+              </>
+            )}
+            {menu.type === "background" && (
+              <>
+                <button
+                  onClick={() => startCreatingIn("", "file")}
+                  className={menuBtnClass}
+                >
+                  New Note
+                </button>
+                <button
+                  onClick={() => startCreatingIn("", "folder")}
+                  className={menuBtnClass}
+                >
+                  New Folder
+                </button>
+              </>
+            )}
           </div>
         </>
       )}
 
-      {/* Delete confirmation */}
+      {/* Delete file confirmation */}
       {confirmPath && (
         <>
           <div
@@ -518,6 +824,36 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
                 className="px-3 py-1.5 text-sm rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
               >
                 Move to Trash
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Delete folder confirmation */}
+      {confirmFolderPath && (
+        <>
+          <div
+            className="fixed inset-0 z-50 bg-black/50"
+            onClick={() => setConfirmFolderPath(null)}
+          />
+          <div className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 rounded-lg border border-border bg-popover p-4 shadow-lg">
+            <p className="text-sm mb-1 font-medium">Delete Folder</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Delete &ldquo;{confirmFolderPath.split("/").pop()}&rdquo; and move its contents to trash?
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmFolderPath(null)}
+                className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-accent transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleFolderDeleteConfirm}
+                className="px-3 py-1.5 text-sm rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+              >
+                Delete
               </button>
             </div>
           </div>
