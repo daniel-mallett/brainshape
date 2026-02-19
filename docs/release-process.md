@@ -12,14 +12,12 @@ git push origin v0.1.0
 ## What happens automatically
 
 1. GitHub Actions workflow (`.github/workflows/build.yml`) triggers on `v*` tags
-2. Four parallel build jobs run:
-   - macOS ARM64 (`macos-latest`) → `.dmg`
-   - macOS Intel (`macos-13`) → `.dmg`
-   - Windows (`windows-latest`) → `.msi`
-   - Linux (`ubuntu-latest`) → `.AppImage` + `.deb`
-3. Each job: PyInstaller builds the Python sidecar → copies to Tauri binaries → Tauri builds the app
-4. A GitHub Release is auto-created with all artifacts attached (`softprops/action-gh-release`)
-5. Release notes are auto-generated from commits since the last tag
+2. macOS ARM64 build job runs on `macos-latest`:
+   - PyInstaller builds the Python sidecar
+   - Copies sidecar to Tauri binaries directory
+   - Tauri builds the app and produces a `.dmg`
+3. A GitHub Release is auto-created with the `.dmg` attached (`softprops/action-gh-release`)
+4. Release notes are auto-generated from commits since the last tag
 
 ## Where to find builds
 
@@ -37,4 +35,5 @@ Output: `desktop/src-tauri/target/release/bundle/dmg/`
 
 ## Not yet set up
 
-- **macOS code signing & notarization**: Required for distributing to users outside the Mac App Store. Needs an Apple Developer ID certificate and environment variables set in GitHub Secrets (`APPLE_SIGNING_IDENTITY`, `APPLE_CERTIFICATE`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`). Without this, users get a Gatekeeper warning and must right-click → Open.
+- **macOS code signing & notarization**: Required for distributing to users outside the Mac App Store. Needs an Apple Developer ID certificate and environment variables set in GitHub Secrets (`APPLE_SIGNING_IDENTITY`, `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `KEYCHAIN_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`). Without this, users get a Gatekeeper warning and must run `xattr -cr /Applications/Brainshape.app` before first launch.
+- **Other platforms**: Windows and Linux builds can be added back to the CI matrix when needed (see git history for the matrix config).

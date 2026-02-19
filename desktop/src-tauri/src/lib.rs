@@ -84,15 +84,17 @@ pub fn run() {
             });
 
             // Keep a handle so we can kill the child on shutdown.
-            // Store it in a Box to move it into the event handler later.
             let child = Mutex::new(Some(child));
             app.manage(child);
 
             app.manage(Mutex::new(BackendState { port }));
 
-            // Block until the backend is ready (or timeout after 60s).
-            if !wait_for_health(port, 60) {
-                return Err("Backend server failed to start within 60 seconds".into());
+            // Wait for the backend to respond to health checks (up to 30s).
+            // The server yields /health immediately; heavy init runs in background.
+            if !wait_for_health(port, 30) {
+                eprintln!("[backend] Health check failed after 30s — continuing anyway");
+                // Log the error but don't fail setup. The frontend will show
+                // a connection error and the user can retry.
             }
 
             Ok(())

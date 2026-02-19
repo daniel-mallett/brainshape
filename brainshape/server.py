@@ -1,5 +1,7 @@
 """FastAPI server exposing Brainshape agent, notes, and sync operations over HTTP + SSE."""
 
+import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -49,6 +51,7 @@ _agent = None
 _db: GraphDB | None = None
 _pipeline: KGPipeline | None = None
 _observer = None  # watchdog observer
+_ready = False  # True once background initialization completes
 
 # In-memory session store: session_id → {"config": LangGraph config, "last_used": timestamp}
 _sessions: dict[str, dict] = {}
@@ -56,60 +59,79 @@ _SESSION_TTL = 3600  # 1 hour
 _SESSION_MAX = 100
 
 
+async def _initialize_backend():
+    """Heavy initialization that runs in a background task after the server starts."""
+    global _agent, _db, _pipeline, _observer, _ready
+
+    try:
+        current_settings = load_settings()
+        provider = current_settings.get("llm_provider", "anthropic")
+
+        if provider == "claude-code":
+            # Claude Code provider bypasses LangChain — init db/pipeline directly
+            try:
+                _db = GraphDB()
+                _db.bootstrap_schema()
+                notes_path = Path(get_notes_path()).expanduser()
+                _pipeline = create_kg_pipeline(_db, notes_path)
+            except ConnectionError:
+                logger.warning("Starting without database — graph features unavailable")
+            _agent = None
+        else:
+            # Load MCP tools (async, may be empty if none configured)
+            mcp_tools = await load_mcp()
+            _agent, _db, _pipeline = create_brainshape_agent(mcp_tools=mcp_tools or None)
+
+        if _agent is None and provider != "claude-code":
+            logger.warning("Server starting in degraded mode — no database connection")
+            logger.warning("Notes CRUD will work, but agent and graph features are unavailable")
+
+        notes_path = Path(get_notes_path()).expanduser()
+        init_notes(notes_path)
+        if notes_path.exists() and _db is not None:
+            notes = list_notes(notes_path)
+            if notes:
+                sync_structural(_db, notes_path)
+                if _pipeline is not None:
+                    await sync_semantic_async(_db, _pipeline, notes_path)
+
+        # Start file watcher for auto-sync
+        if notes_path.exists() and _db is not None:
+            db = _db  # local binding for closure type narrowing
+
+            def on_notes_changed():
+                sync_structural(db, notes_path)
+                if _pipeline is not None:
+                    import threading
+
+                    threading.Thread(
+                        target=sync_semantic,
+                        args=(db, _pipeline, notes_path),
+                        daemon=True,
+                    ).start()
+
+            _observer = start_watcher(notes_path, on_notes_changed)
+
+        _ready = True
+        logger.info("Backend initialization complete")
+    except Exception:
+        logger.exception("Backend initialization failed")
+        _ready = True  # Mark ready so health check doesn't block forever
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _agent, _db, _pipeline, _observer
-
-    current_settings = load_settings()
-    provider = current_settings.get("llm_provider", "anthropic")
-
-    if provider == "claude-code":
-        # Claude Code provider bypasses LangChain — init db/pipeline directly
-        try:
-            _db = GraphDB()
-            _db.bootstrap_schema()
-            notes_path = Path(get_notes_path()).expanduser()
-            _pipeline = create_kg_pipeline(_db, notes_path)
-        except ConnectionError:
-            logger.warning("Starting without database — graph features unavailable")
-        _agent = None
-    else:
-        # Load MCP tools (async, may be empty if none configured)
-        mcp_tools = await load_mcp()
-        _agent, _db, _pipeline = create_brainshape_agent(mcp_tools=mcp_tools or None)
-
-    if _agent is None and provider != "claude-code":
-        logger.warning("Server starting in degraded mode — no database connection")
-        logger.warning("Notes CRUD will work, but agent and graph features are unavailable")
-
-    notes_path = Path(get_notes_path()).expanduser()
-    init_notes(notes_path)
-    if notes_path.exists() and _db is not None:
-        notes = list_notes(notes_path)
-        if notes:
-            sync_structural(_db, notes_path)
-            if _pipeline is not None:
-                await sync_semantic_async(_db, _pipeline, notes_path)
-
-    # Start file watcher for auto-sync
-    if notes_path.exists() and _db is not None:
-        db = _db  # local binding for closure type narrowing
-
-        def on_notes_changed():
-            sync_structural(db, notes_path)
-            if _pipeline is not None:
-                import threading
-
-                threading.Thread(
-                    target=sync_semantic,
-                    args=(db, _pipeline, notes_path),
-                    daemon=True,
-                ).start()
-
-        _observer = start_watcher(notes_path, on_notes_changed)
+    # Start heavy initialization in background so /health responds immediately
+    init_task = asyncio.create_task(_initialize_backend())
 
     async with _mcp_server._session_manager.run():  # type: ignore[union-attr]  # session_manager is set after init
         yield
+
+    # Wait for init to finish before cleanup (if still running)
+    if not init_task.done():
+        init_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await init_task
 
     if _observer is not None:
         _observer.stop()
@@ -203,6 +225,7 @@ class UpdateSettingsRequest(BaseModel):
 def health():
     return {
         "status": "ok",
+        "ready": _ready,
         "surrealdb_connected": _db is not None,
         "agent_available": _agent is not None,
     }
