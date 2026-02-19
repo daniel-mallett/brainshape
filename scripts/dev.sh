@@ -21,7 +21,7 @@ trap cleanup EXIT INT TERM
 # 1. Start Python FastAPI server
 echo "Starting Python server on :8765..."
 cd "$ROOT"
-uv run python -m brainshape.server &
+uv run python -m brainshape.server --reload &
 PIDS+=($!)
 
 # Wait for server to be healthy

@@ -1,0 +1,110 @@
+name: Build Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            label: macOS-arm64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            label: macOS-x64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            label: Windows-x64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            label: Linux-x64
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.label }})
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Python + sidecar ---
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync
+
+      - name: Build Python sidecar
+        run: uv run pyinstaller brainshape.spec --noconfirm --clean
+
+      - name: Copy sidecar to Tauri binaries
+        shell: bash
+        run: |
+          mkdir -p desktop/src-tauri/binaries
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp dist/brainshape-server.exe "desktop/src-tauri/binaries/brainshape-server-${{ matrix.target }}.exe"
+          else
+            cp dist/brainshape-server "desktop/src-tauri/binaries/brainshape-server-${{ matrix.target }}"
+            chmod +x "desktop/src-tauri/binaries/brainshape-server-${{ matrix.target }}"
+          fi
+
+      # --- System deps (Linux only) ---
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      # --- Node + Rust + Tauri ---
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        run: cd desktop && npm ci
+
+      - name: Build Tauri app
+        run: cd desktop && npm run tauri build
+
+      # --- Upload artifacts ---
+      - name: Upload macOS DMG
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Brainshape-${{ matrix.label }}
+          path: desktop/src-tauri/target/release/bundle/dmg/*.dmg
+
+      - name: Upload Windows MSI
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Brainshape-${{ matrix.label }}
+          path: desktop/src-tauri/target/release/bundle/msi/*.msi
+
+      - name: Upload Linux bundles
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Brainshape-${{ matrix.label }}
+          path: |
+            desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+            desktop/src-tauri/target/release/bundle/deb/*.deb
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true

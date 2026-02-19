@@ -29,6 +29,7 @@ apple = ["mlx-whisper>=0.4.3"]
 dev = [
     "httpx>=0.28.1",
     "pre-commit>=4.5.1",
+    "pyinstaller>=6.0",
     "pytest>=8.0",
     "pytest-asyncio>=0.25",
     "pytest-cov>=7.0.0",

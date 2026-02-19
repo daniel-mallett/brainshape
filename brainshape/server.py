@@ -1324,6 +1324,14 @@ def import_vault_endpoint(req: ImportVaultRequest):
 # --- Entry point ---
 
 if __name__ == "__main__":
+    import argparse
+
     import uvicorn
 
-    uvicorn.run("brainshape.server:app", host="127.0.0.1", port=8765, reload=True)
+    parser = argparse.ArgumentParser(description="Brainshape server")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--reload", action="store_true")
+    args = parser.parse_args()
+
+    uvicorn.run("brainshape.server:app", host=args.host, port=args.port, reload=args.reload)

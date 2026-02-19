@@ -1,7 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { initSession } from "./api";
-
-const BASE_URL = "http://127.0.0.1:8765";
+import { getBaseUrl, initSession } from "./api";
 
 export type MessagePart =
   | { type: "text"; content: string }
@@ -51,7 +49,8 @@ export function useAgentStream() {
 
       let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
       try {
-        const res = await fetch(`${BASE_URL}/agent/message`, {
+        const base = await getBaseUrl();
+        const res = await fetch(`${base}/agent/message`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ session_id: sessionId, message: text }),

@@ -1,4 +1,36 @@
-const BASE_URL = "http://127.0.0.1:8765";
+/** Resolve the backend base URL.
+ *
+ * In dev mode (Vite dev server), uses the hardcoded default port.
+ * In production (Tauri app), queries the Rust shell for the dynamically
+ * assigned port via the `get_backend_port` command.
+ */
+let _baseUrl: string | null = null;
+
+async function resolveBaseUrl(): Promise<string> {
+  if (_baseUrl) return _baseUrl;
+
+  if (import.meta.env.DEV) {
+    _baseUrl = "http://127.0.0.1:8765";
+    return _baseUrl;
+  }
+
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const port = await invoke<number>("get_backend_port");
+    _baseUrl = `http://127.0.0.1:${port}`;
+  } catch {
+    _baseUrl = "http://127.0.0.1:8765";
+  }
+  return _baseUrl;
+}
+
+// Start resolving eagerly so it's ready by the first API call.
+const baseUrlPromise = resolveBaseUrl();
+
+/** Get the backend base URL (cached after first resolution). */
+export function getBaseUrl(): Promise<string> {
+  return baseUrlPromise;
+}
 
 /** Encode each segment of a file path for safe use in URLs. */
 function encodePath(p: string): string {
@@ -9,7 +41,8 @@ async function request<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const base = await baseUrlPromise;
+  const res = await fetch(`${base}${path}`, {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
@@ -214,7 +247,8 @@ export async function transcribeAudio(
 ): Promise<TranscriptionResult> {
   const formData = new FormData();
   formData.append("audio", audioBlob, "recording.wav");
-  const res = await fetch(`${BASE_URL}/transcribe`, {
+  const base = await baseUrlPromise;
+  const res = await fetch(`${base}/transcribe`, {
     method: "POST",
     body: formData,
   });
@@ -243,7 +277,8 @@ export async function transcribeMeeting(
   if (title) formData.append("title", title);
   if (folder) formData.append("folder", folder);
   if (tags) formData.append("tags", tags);
-  const res = await fetch(`${BASE_URL}/transcribe/meeting`, {
+  const base = await baseUrlPromise;
+  const res = await fetch(`${base}/transcribe/meeting`, {
     method: "POST",
     body: formData,
   });

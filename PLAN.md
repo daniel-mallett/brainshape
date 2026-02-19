@@ -91,7 +91,28 @@
 
 ## Known Issues
 
-- None currently tracked
+### Concurrency & Safety
+- **Session dict not thread-safe** (`server.py`) — `_sessions` is a plain dict modified without locking. Concurrent FastAPI requests can race on eviction. Add `threading.Lock()`.
+- **File watcher concurrent sync** (`server.py`) — multiple file changes spawn multiple daemon threads calling `sync_semantic()` concurrently, risking duplicate chunks. Add a lock or queue.
+- **Claude Code session ID injection** (`claude_code.py`) — `session_id` passed to subprocess without format validation. Validate UUID format before use.
+- **Wikilink rewriting not atomic** (`notes.py`) — `write_text()` overwrites in-place. Disk-full failure mid-write corrupts the file. Write to temp file + rename instead.
+
+### Error Handling Gaps
+- **Async sync failure orphans chunks** (`sync.py`) — if the DB hash update fails after embedding succeeds, file marked "skipped" but chunks exist. Hash never updates, so file retries forever. Wrap hash update in its own try/except.
+- **MCP tool loading silently returns empty** (`mcp_client.py`) — if tool loading fails partway, entire list dropped. Agent runs without tools with no user indication.
+- **KG pipeline migration recovery** (`kg_pipeline.py`) — if any query in the dimension-change exception handler fails, error is silently swallowed, leaving orphaned chunks.
+
+### Frontend
+- **No user-facing error notifications** — errors go to `console.error` but aren't shown to the user. No toast/notification system.
+- **Module-level mutable state** (`wikilinks.ts`) — `navigateCallback` is a global variable, fragile if multiple editors mounted.
+- **Settings dirty flag not cleared on save error** — user can't re-attempt save without closing/reopening panel.
+- **No frontend tests** — zero test files in desktop/. High refactoring risk.
+
+### Minor
+- **Trash collision** (`notes.py`) — timestamp-based naming uses second precision; two deletes in the same second collide.
+- **Search results not paginated** — fixed 20-result limit with no pagination in SearchPanel.
+- **Sidebar folder collapse state not persisted** — resets on re-open.
+- **`server.py` size** — 1,329 lines; could benefit from splitting into route modules.
 
 ## Recent Bug Fixes (Session 3)
 
@@ -131,7 +152,19 @@
 4. ~~Rich markdown preview~~ — **DONE** (three-mode editor: edit/inline/preview)
 5. Streaming transcription — real-time output as user speaks (progressive UI, leverage Mistral realtime API)
 
+### Hardening
+6. **Concurrency fixes** — add `threading.Lock()` around `_sessions` dict, lock/queue for file watcher sync, validate Claude Code session IDs as UUID format
+7. **Atomic file writes** — use write-to-temp + rename for wikilink rewrites and note saves to prevent corruption on disk-full
+8. **Error handling tightening** — separate try/except for hash update in `sync_semantic_async`, recover gracefully from partial KG pipeline migration, log MCP tool load failures with counts
+9. **Frontend error UX** — add toast/notification system for user-visible errors, add per-component error boundaries (Editor, Chat, Graph)
+10. **Frontend testing** — add Vitest + @testing-library/react, starting with SettingsPanel and SearchPanel
+
 ### Platform
-6. **Single-binary install** — bundle Python server as Tauri sidecar, produce signed `.app`/`.dmg`/`.exe`. Now feasible with SurrealDB embedded (no Docker dependency). Next step: PyInstaller or Nuitka to package the Python server.
-7. Plugin system — user-installable extensions beyond MCP servers
-8. Multi-device sync — notes sync via Git or cloud storage
+11. ~~**Single-binary install**~~ — **DONE** (PyInstaller sidecar bundled in Tauri app, dynamic port negotiation, CI matrix build for macOS ARM64/Intel + Windows + Linux). Remaining: macOS code signing and notarization for distribution outside Mac App Store.
+12. Plugin system — user-installable extensions beyond MCP servers
+13. Multi-device sync — notes sync via Git or cloud storage
+
+### Frontend Architecture (when needed)
+14. **Refactor App.tsx state** — 15+ state variables; consider Context API or Zustand for theme/settings/layout to reduce prop drilling
+15. **Split SettingsPanel** — 945 lines; extract into subsection components
+16. **Split server.py** — extract route groups into separate modules
