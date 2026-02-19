@@ -9,25 +9,8 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            label: macOS-arm64
-          - os: macos-13
-            target: x86_64-apple-darwin
-            label: macOS-x64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            label: Windows-x64
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            label: Linux-x64
-
-    runs-on: ${{ matrix.os }}
-    name: Build (${{ matrix.label }})
+    runs-on: macos-latest
+    name: Build (macOS ARM64)
 
     steps:
       - uses: actions/checkout@v4
@@ -40,22 +23,10 @@ jobs:
         run: uv run pyinstaller brainshape.spec --noconfirm --clean
 
       - name: Copy sidecar to Tauri binaries
-        shell: bash
         run: |
           mkdir -p desktop/src-tauri/binaries
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            cp dist/brainshape-server.exe "desktop/src-tauri/binaries/brainshape-server-${{ matrix.target }}.exe"
-          else
-            cp dist/brainshape-server "desktop/src-tauri/binaries/brainshape-server-${{ matrix.target }}"
-            chmod +x "desktop/src-tauri/binaries/brainshape-server-${{ matrix.target }}"
-          fi
-
-      # --- System deps (Linux only) ---
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          cp dist/brainshape-server "desktop/src-tauri/binaries/brainshape-server-aarch64-apple-darwin"
+          chmod +x "desktop/src-tauri/binaries/brainshape-server-aarch64-apple-darwin"
 
       # --- Node + Rust + Tauri ---
       - uses: actions/setup-node@v4
@@ -70,29 +41,12 @@ jobs:
       - name: Build Tauri app
         run: cd desktop && npm run tauri build
 
-      # --- Upload artifacts ---
-      - name: Upload macOS DMG
-        if: runner.os == 'macOS'
+      # --- Upload artifact ---
+      - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
-          name: Brainshape-${{ matrix.label }}
+          name: Brainshape-macOS-arm64
           path: desktop/src-tauri/target/release/bundle/dmg/*.dmg
-
-      - name: Upload Windows MSI
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Brainshape-${{ matrix.label }}
-          path: desktop/src-tauri/target/release/bundle/msi/*.msi
-
-      - name: Upload Linux bundles
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Brainshape-${{ matrix.label }}
-          path: |
-            desktop/src-tauri/target/release/bundle/appimage/*.AppImage
-            desktop/src-tauri/target/release/bundle/deb/*.deb
 
   release:
     needs: build
@@ -108,3 +62,12 @@ jobs:
         with:
           files: artifacts/**/*
           generate_release_notes: true
+          body: |
+            ## Installation (macOS)
+
+            1. Download the `.dmg` below
+            2. Drag **Brainshape** to Applications
+            3. Before first launch, run: `xattr -cr /Applications/Brainshape.app`
+            4. Open Brainshape
+
+            Step 3 is needed because the app is not yet code-signed. macOS blocks unsigned downloaded apps by default.
