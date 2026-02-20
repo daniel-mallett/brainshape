@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 from pathlib import Path
 
 from brainshape.graph_db import GraphDB
@@ -7,6 +8,9 @@ from brainshape.kg_pipeline import KGPipeline
 from brainshape.notes import compute_file_hash, list_notes, read_all_notes
 
 logger = logging.getLogger(__name__)
+
+# Serialize structural syncs to prevent concurrent UPSERTs from racing
+_structural_lock = threading.Lock()
 
 
 def _get_stored_hashes(db: GraphDB) -> dict[str, str]:
@@ -60,15 +64,51 @@ async def sync_semantic_async(db: GraphDB, pipeline: KGPipeline, notes_path: Pat
 def sync_structural(db: GraphDB, notes_path: Path) -> dict:
     """UPSERT note nodes and structural relationships (tags, wikilinks).
 
-    Uses a two-pass approach:
+    Uses a three-pass approach:
+      Pass 0 — Prune graph nodes whose files no longer exist on disk.
       Pass 1 — UPSERT all note nodes (so every note exists before linking).
       Pass 2 — Create tag and wikilink relationships.
 
     Runs on every note unconditionally — structural sync is cheap
     queries, so hash-gating isn't worth the complexity.
+
+    Serialized via ``_structural_lock`` so concurrent callers (the file
+    watcher, API endpoints) cannot produce duplicate UPSERT races.
     """
+    with _structural_lock:
+        return _sync_structural_unlocked(db, notes_path)
+
+
+def _sync_structural_unlocked(db: GraphDB, notes_path: Path) -> dict:
     notes = read_all_notes(notes_path)
-    stats = {"notes": 0, "tags": 0, "links": 0}
+    stats = {"notes": 0, "tags": 0, "links": 0, "pruned": 0}
+
+    # Pass 0: Prune notes that no longer exist on disk
+    disk_paths = {n["path"] for n in notes}
+    stored = db.query("SELECT path FROM note")
+    for row in stored:
+        path = row.get("path", "")
+        if path and path not in disk_paths:
+            # Delete relationships first, then the note node
+            db.query(
+                "DELETE tagged_with WHERE in = (SELECT VALUE id FROM note WHERE path = $path)[0]",
+                {"path": path},
+            )
+            db.query(
+                "DELETE links_to WHERE in = (SELECT VALUE id FROM note WHERE path = $path)[0]",
+                {"path": path},
+            )
+            db.query(
+                "DELETE links_to WHERE out = (SELECT VALUE id FROM note WHERE path = $path)[0]",
+                {"path": path},
+            )
+            db.query(
+                "DELETE chunk WHERE ->from_document->(note WHERE path = $path)",
+                {"path": path},
+            )
+            db.query("DELETE FROM note WHERE path = $path", {"path": path})
+            logger.info("Pruned deleted note from graph: %s", path)
+            stats["pruned"] += 1
 
     # Pass 1: UPSERT all note nodes
     for note in notes:

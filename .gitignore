@@ -17,6 +17,11 @@ wheels/
 # Environment
 .env
 
-# Build artifacts (sidecar binaries, keep .gitkeep)
-desktop/src-tauri/binaries/*
-!desktop/src-tauri/binaries/.gitkeep
+# Build artifacts (sidecar binaries and resources)
+desktop/src-tauri/binaries/
+desktop/src-tauri/resources/brainshape-server/
+
+# Root-level npm artifacts (accidental — frontend lives in desktop/)
+/package.json
+/package-lock.json
+/node_modules/

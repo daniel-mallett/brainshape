@@ -1245,6 +1245,71 @@ class TestRenameEndpoint:
         assert resp.status_code in (400, 404)
 
 
+class TestMoveNote:
+    def test_move_to_folder(self, client, tmp_notes, server_db):
+        server_db.query.return_value = []
+        (tmp_notes / "Dest").mkdir()
+        resp = client.put(
+            "/notes/file/Welcome.md/move",
+            json={"folder": "Dest"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["path"] == "Dest/Welcome.md"
+        assert data["title"] == "Welcome"
+        assert (tmp_notes / "Dest" / "Welcome.md").exists()
+        assert not (tmp_notes / "Welcome.md").exists()
+
+    def test_move_to_root(self, client, tmp_notes, server_db):
+        server_db.query.return_value = []
+        resp = client.put(
+            "/notes/file/Tutorials%2FGetting%20Started.md/move",
+            json={"folder": ""},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["path"] == "Getting Started.md"
+        assert (tmp_notes / "Getting Started.md").exists()
+
+    def test_move_same_folder_noop(self, client, tmp_notes, server_db):
+        server_db.query.return_value = []
+        resp = client.put(
+            "/notes/file/Tutorials%2FGetting%20Started.md/move",
+            json={"folder": "Tutorials"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["path"] == "Tutorials/Getting Started.md"
+
+    def test_move_missing_raises_404(self, client):
+        resp = client.put(
+            "/notes/file/nonexistent.md/move",
+            json={"folder": "Dest"},
+        )
+        assert resp.status_code == 404
+
+    def test_move_collision_raises_409(self, client, tmp_notes):
+        # Create a file with the same name in Tutorials
+        from brainshape.notes import write_note
+        write_note(tmp_notes, "Welcome", "other content", folder="Tutorials")
+        resp = client.put(
+            "/notes/file/Welcome.md/move",
+            json={"folder": "Tutorials"},
+        )
+        assert resp.status_code == 409
+
+    def test_move_updates_graph(self, client, tmp_notes, server_db):
+        server_db.query.return_value = []
+        (tmp_notes / "Target").mkdir()
+        resp = client.put(
+            "/notes/file/Welcome.md/move",
+            json={"folder": "Target"},
+        )
+        assert resp.status_code == 200
+        # Verify graph update was called with correct params
+        calls = server_db.query.call_args_list
+        update_call = [c for c in calls if "UPDATE note SET path" in str(c)]
+        assert len(update_call) >= 1
+
+
 class TestImportVault:
     def test_import_vault(self, client, tmp_notes, tmp_path_factory):
         source = tmp_path_factory.mktemp("vault")

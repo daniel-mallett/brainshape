@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getSettings,
+  getBaseUrl,
   updateSettings,
   importVault,
   getOllamaModels,
@@ -56,16 +57,11 @@ const SUGGESTED_MODELS: Record<string, ModelOption[]> = {
 };
 
 const TRANSCRIPTION_PROVIDERS = [
-  { value: "local", label: "Local (mlx-whisper)" },
   { value: "openai", label: "OpenAI Whisper" },
   { value: "mistral", label: "Mistral Voxtral" },
 ] as const;
 
 const SUGGESTED_TRANSCRIPTION_MODELS: Record<string, ModelOption[]> = {
-  local: [
-    { value: "mlx-community/whisper-small", label: "Whisper Small" },
-    { value: "mlx-community/whisper-large-v3-turbo", label: "Whisper Large v3 Turbo" },
-  ],
   openai: [
     { value: "gpt-4o-mini-transcribe", label: "GPT-4o Mini Transcribe" },
     { value: "gpt-4o-transcribe", label: "GPT-4o Transcribe" },
@@ -262,6 +258,10 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
   const [ollamaError, setOllamaError] = useState("");
   const [ollamaLoading, setOllamaLoading] = useState(false);
 
+  // MCP connection URL
+  const [mcpUrl, setMcpUrl] = useState("");
+  const [mcpCopied, setMcpCopied] = useState(false);
+
   // Import
   const [importPath, setImportPath] = useState("");
   const [importing, setImporting] = useState(false);
@@ -277,7 +277,8 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
       setProvider(s.llm_provider);
       setModel(s.llm_model);
       setOllamaUrl(s.ollama_base_url);
-      setTxProvider(s.transcription_provider || "local");
+      // "local" (mlx-whisper) can't work in the desktop app; default to openai
+      setTxProvider(s.transcription_provider === "local" || !s.transcription_provider ? "openai" : s.transcription_provider);
       setTxModel(s.transcription_model || "");
       setMcpServers(s.mcp_servers || []);
       setAnthropicKey("");
@@ -317,6 +318,11 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
   }, []);
 
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
+
+  // Resolve MCP connection URL
+  useEffect(() => {
+    getBaseUrl().then((base) => setMcpUrl(`${base}/mcp`));
+  }, []);
 
   // Fetch Ollama models when provider is ollama
   useEffect(() => {
@@ -855,7 +861,6 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
                   <option key={p.value} value={p.value}>{p.label}</option>
                 ))}
               </select>
-              {txProvider === "local" && <FieldHint>Runs locally via mlx-whisper. Requires Apple Silicon.</FieldHint>}
             </section>
 
             <section className="space-y-1.5">
@@ -870,6 +875,34 @@ export function SettingsPanel({ dirty, setDirty }: SettingsPanelProps) {
             {txProvider === "mistral" && (
               <ApiKeyField label="Mistral API Key" value={mistralKey} isSet={!!settings?.mistral_api_key_set} onChange={(v) => { setMistralKey(v); markDirty(); }} placeholder="mk-..." hint="Can also be set via MISTRAL_API_KEY environment variable." />
             )}
+          </div>
+
+          {/* ── MCP Connection ── */}
+          <div className="space-y-4">
+            <SectionHeading>MCP Connection</SectionHeading>
+            <FieldHint>
+              Connect external AI agents (Claude Desktop, Claude Code, etc.) to Brainshape using this URL.
+            </FieldHint>
+            <div className="flex items-center gap-2">
+              <Input
+                value={mcpUrl}
+                readOnly
+                className="h-8 text-sm font-mono bg-muted"
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-8 px-3 shrink-0"
+                onClick={() => {
+                  navigator.clipboard.writeText(mcpUrl);
+                  setMcpCopied(true);
+                  setTimeout(() => setMcpCopied(false), 2000);
+                }}
+              >
+                {mcpCopied ? "Copied" : "Copy"}
+              </Button>
+            </div>
           </div>
 
           {/* ── MCP Servers ── */}

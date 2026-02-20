@@ -11,6 +11,7 @@ from brainshape.notes import (
     init_notes,
     list_folders,
     list_notes,
+    move_note,
     parse_note,
     rename_folder,
     rewrite_note,
@@ -161,12 +162,23 @@ class TestWriteNote:
 class TestRewriteNote:
     def test_preserves_frontmatter(self, tmp_path):
         write_note(tmp_path, "Existing", "Old body", tags=["keep"])
-        rewrite_note(tmp_path, "Existing", "New body")
+        rewrite_note(tmp_path, "Existing", "New body #keep")
         import frontmatter
 
         post = frontmatter.load(str(tmp_path / "Existing.md"))
-        assert post.content == "New body"
+        assert post.content == "New body #keep"
         assert "keep" in post.metadata.get("tags", [])
+
+    def test_removes_stale_tags(self, tmp_path):
+        """Tags removed from the body should not persist in frontmatter."""
+        write_note(tmp_path, "Sticky", "content #old-tag")
+        rewrite_note(tmp_path, "Sticky", "content #old-tag")
+        rewrite_note(tmp_path, "Sticky", "content #new-tag")
+        import frontmatter
+
+        post = frontmatter.load(str(tmp_path / "Sticky.md"))
+        assert "new-tag" in post.metadata["tags"]
+        assert "old-tag" not in post.metadata["tags"]
 
     def test_updates_content(self, tmp_path):
         write_note(tmp_path, "Edit", "Before")
@@ -364,13 +376,13 @@ class TestRewriteNoteRegexFixes:
 
     def test_rewrite_normalizes_tag_case(self, tmp_path):
         write_note(tmp_path, "CaseTest", "old", tags=["KeepTag"])
-        rewrite_note(tmp_path, "CaseTest", "New #python content")
+        rewrite_note(tmp_path, "CaseTest", "New #Python content")
         import frontmatter
 
         post = frontmatter.load(str(tmp_path / "CaseTest.md"))
         assert "python" in post.metadata["tags"]
-        assert "keeptag" in post.metadata["tags"]
-        assert "KeepTag" not in post.metadata["tags"]
+        # Frontmatter tags are replaced by body tags (lowercased), not merged
+        assert "keeptag" not in post.metadata["tags"]
 
 
 class TestImportVault:
@@ -617,3 +629,47 @@ class TestDeleteFolder:
     def test_not_found(self, tmp_path):
         with pytest.raises(FileNotFoundError):
             delete_folder(tmp_path, "nonexistent")
+
+
+class TestMoveNote:
+    def test_moves_to_folder(self, tmp_path):
+        write_note(tmp_path, "Note", "content")
+        (tmp_path / "Dest").mkdir()
+        new_rel = move_note(tmp_path, "Note.md", "Dest")
+        assert new_rel == "Dest/Note.md"
+        assert (tmp_path / "Dest" / "Note.md").exists()
+        assert not (tmp_path / "Note.md").exists()
+
+    def test_moves_to_root(self, tmp_path):
+        write_note(tmp_path, "Deep", "content", folder="Sub")
+        new_rel = move_note(tmp_path, "Sub/Deep.md", "")
+        assert new_rel == "Deep.md"
+        assert (tmp_path / "Deep.md").exists()
+        assert not (tmp_path / "Sub" / "Deep.md").exists()
+
+    def test_creates_dest_folder(self, tmp_path):
+        write_note(tmp_path, "Note", "content")
+        new_rel = move_note(tmp_path, "Note.md", "New/Sub")
+        assert new_rel == "New/Sub/Note.md"
+        assert (tmp_path / "New" / "Sub" / "Note.md").exists()
+
+    def test_same_folder_noop(self, tmp_path):
+        write_note(tmp_path, "Note", "content", folder="Dir")
+        new_rel = move_note(tmp_path, "Dir/Note.md", "Dir")
+        assert new_rel == "Dir/Note.md"
+        assert (tmp_path / "Dir" / "Note.md").exists()
+
+    def test_not_found(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            move_note(tmp_path, "ghost.md", "Dest")
+
+    def test_name_collision(self, tmp_path):
+        write_note(tmp_path, "Note", "v1")
+        write_note(tmp_path, "Note", "v2", folder="Dest")
+        with pytest.raises(FileExistsError):
+            move_note(tmp_path, "Note.md", "Dest")
+
+    def test_path_traversal(self, tmp_path):
+        write_note(tmp_path, "Note", "content")
+        with pytest.raises(ValueError):
+            move_note(tmp_path, "Note.md", "../outside")

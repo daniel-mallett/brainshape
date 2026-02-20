@@ -35,15 +35,13 @@ No Docker or external database required — SurrealDB runs embedded in the Pytho
 ## Quick Start
 
 ```bash
-# 1. Clone and install dependencies
+# 1. Clone and set up (checks prerequisites, installs all dependencies)
 git clone https://github.com/daniel-mallett/brainshape.git
 cd brainshape
-uv sync
-cd desktop && npm install && cd ..
+./scripts/setup.sh
 
-# 2. Configure environment
-cp .env.example .env
-# Edit .env: set ANTHROPIC_API_KEY and NOTES_PATH
+# 2. Edit .env to set ANTHROPIC_API_KEY and NOTES_PATH
+$EDITOR .env
 
 # 3. Start everything (server + desktop app)
 ./scripts/dev.sh
@@ -98,7 +96,7 @@ See [docs/configuration.md](docs/configuration.md) for full configuration refere
 # CLI chat
 uv run main.py
 
-# Server only (API on port 8765)
+# Server only (API on port 52836)
 uv run python -m brainshape.server
 
 # Desktop app (requires server running)
@@ -123,6 +121,16 @@ uv run python -m brainshape.mcp_server
 
 ## Development
 
+### First-time setup
+
+```bash
+./scripts/setup.sh
+```
+
+This checks prerequisites, installs Python and Node dependencies, copies `.env.example`, and installs pre-commit hooks.
+
+### Common commands
+
 ```bash
 uv run pytest                    # Run tests
 uv run pytest -v                 # Verbose
@@ -130,7 +138,6 @@ uv run ruff check                # Lint
 uv run ruff check --fix          # Auto-fix
 uv run ty check                  # Type check (Python)
 cd desktop && npx tsc --noEmit   # Type check (TypeScript)
-uv run pre-commit install        # Install git hooks
 ```
 
 ## Architecture

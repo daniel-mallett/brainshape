@@ -2,13 +2,18 @@ import hashlib
 import logging
 import re
 import shutil
+import sys
 from pathlib import Path
 
 import frontmatter
 
 logger = logging.getLogger(__name__)
 
-SEED_NOTES_DIR = Path(__file__).resolve().parent.parent / "seed_notes"
+if getattr(sys, "frozen", False):
+    # PyInstaller frozen build: seed_notes is unpacked to sys._MEIPASS
+    SEED_NOTES_DIR = Path(sys._MEIPASS) / "seed_notes"  # type: ignore[attr-defined]
+else:
+    SEED_NOTES_DIR = Path(__file__).resolve().parent.parent / "seed_notes"
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
 TAG_RE = re.compile(r"(?:^|\s)#([a-zA-Z][\w/-]*)", re.MULTILINE)
@@ -172,16 +177,13 @@ def rewrite_note(notes_path: Path, title: str, new_content: str, relative_path: 
     post = frontmatter.load(str(file_path))
     post.content = new_content
 
-    # Re-extract tags from new content and merge with frontmatter tags
+    # Re-extract tags from new content.  Only body-extracted tags are stored
+    # in frontmatter — this replaces stale tags from previous edits rather
+    # than merging, which would make removed tags "sticky".  parse_note()
+    # still unions body + frontmatter tags at read time, so user-added
+    # frontmatter-only tags are preserved for display/graph purposes.
     body_tags = TAG_RE.findall(_strip_fenced_code(new_content))
-    raw_fm_tags = post.metadata.get("tags", [])
-    if isinstance(raw_fm_tags, str):
-        fm_tags = [raw_fm_tags]
-    elif isinstance(raw_fm_tags, list):
-        fm_tags = raw_fm_tags
-    else:
-        fm_tags = []
-    post.metadata["tags"] = list({t.lower() for t in body_tags + fm_tags})
+    post.metadata["tags"] = list({t.lower() for t in body_tags})
 
     with file_path.open("w") as f:
         f.write(frontmatter.dumps(post))
@@ -358,6 +360,36 @@ def delete_folder(notes_path: Path, folder_rel_path: str) -> list[Path]:
         folder.rmdir()
 
     return trashed
+
+
+def move_note(notes_path: Path, old_relative_path: str, new_folder: str) -> str:
+    """Move a note to a different folder, preserving its filename.
+
+    *new_folder* is a relative path within *notes_path* (empty string = root).
+    Returns the new relative path.  Raises ``FileNotFoundError`` if the source
+    doesn't exist, ``FileExistsError`` on name collision, ``ValueError`` on
+    path traversal.
+    """
+    old_path = _ensure_within_notes_dir(notes_path, notes_path / old_relative_path)
+    if not old_path.exists():
+        raise FileNotFoundError(f"Note not found at {old_relative_path}")
+
+    dest_dir = notes_path / new_folder if new_folder else notes_path
+    dest_dir = _ensure_within_notes_dir(notes_path, dest_dir)
+    new_path = dest_dir / old_path.name
+    _ensure_within_notes_dir(notes_path, new_path)
+
+    # No-op when source and destination are the same
+    if old_path.resolve() == new_path.resolve():
+        return old_relative_path
+
+    if new_path.exists():
+        dest = new_folder or "root"
+        raise FileExistsError(f"A note named '{old_path.stem}' already exists in '{dest}'")
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(old_path), str(new_path))
+    return str(new_path.relative_to(notes_path))
 
 
 _INVALID_TITLE_CHARS = frozenset('/\\\0:*?"<>|')

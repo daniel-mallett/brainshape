@@ -37,11 +37,10 @@ class KGPipeline:
         embedding_model: str = "sentence-transformers/all-mpnet-base-v2",
         embedding_dimensions: int = 768,
     ):
-        from sentence_transformers import SentenceTransformer
-
         self.db = db
         self.notes_path = notes_path
-        self._model = SentenceTransformer(embedding_model)
+        self._model_name = embedding_model
+        self._model = None  # Lazy-loaded on first use
 
         # Ensure the vector index exists. If dimensions changed, recreate it.
         try:
@@ -62,9 +61,18 @@ class KGPipeline:
                 f"FIELDS embedding HNSW DIMENSION {embedding_dimensions} TYPE F32 DIST COSINE"
             )
 
+    def _get_model(self):
+        """Lazy-load the embedding model on first use."""
+        if self._model is None:
+            from sentence_transformers import SentenceTransformer
+
+            logger.info("Loading embedding model: %s", self._model_name)
+            self._model = SentenceTransformer(self._model_name)
+        return self._model
+
     def embed_query(self, text: str) -> list[float]:
         """Embed a text string using the pipeline's embedding model."""
-        return self._model.encode(text).tolist()
+        return self._get_model().encode(text).tolist()
 
     def _write_chunks(
         self,
@@ -107,7 +115,7 @@ class KGPipeline:
             return
 
         # Embed all chunks
-        embeddings = self._model.encode(chunks).tolist()
+        embeddings = self._get_model().encode(chunks).tolist()
 
         # Write to database
         self._write_chunks(relative_path, chunks, embeddings)

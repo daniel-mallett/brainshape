@@ -25,7 +25,7 @@
 - **Meeting transcription**: `POST /transcribe/meeting` records audio and saves timestamped transcription as a new Note with configurable title, folder, and tags
 
 ### FastAPI Server
-- HTTP server on port 8765 exposing all Brainshape operations
+- HTTP server on port 52836 exposing all Brainshape operations
 - Endpoints: health, config, notes CRUD, agent init/message (SSE streaming), sync (structural/semantic/full)
 - Graph endpoints: stats, overview, neighborhood (BFS), memories CRUD, notes tags
 - Search endpoints: POST /search/keyword (BM25), POST /search/semantic (vector similarity), both with optional tag filter

@@ -168,7 +168,7 @@ Allowed commands: `npx`, `uvx`, `node`, `python`, `python3`, `deno`, `bun`.
 The desktop app can't reach the backend.
 
 1. Check server is running: `uv run python -m brainshape.server`
-2. Check port 8765 is not blocked by another process
+2. Check port 52836 is not blocked by another process
 
 ### "SurrealDB not connected" warning
 

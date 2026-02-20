@@ -33,9 +33,9 @@ def _transcribe_local(audio_path: str | Path, settings: dict) -> dict:
         import mlx_whisper  # type: ignore[unresolved-import]
     except ImportError:
         raise RuntimeError(
-            "Local transcription requires mlx-whisper, which only works on "
-            "Apple Silicon. Install it with `uv add mlx-whisper`, or switch "
-            "to a cloud provider (openai/mistral) in settings."
+            "Local transcription requires mlx-whisper (Apple Silicon only). "
+            "Install it with `uv add mlx-whisper`, or switch to a cloud "
+            "provider (OpenAI or Mistral) in Settings > Voice Transcription."
         ) from None
 
     model_path = _get_model(settings)

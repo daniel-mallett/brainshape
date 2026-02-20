@@ -112,6 +112,7 @@ function App() {
 
   useEffect(() => {
     let settingsLoaded = false;
+    let intervalId: ReturnType<typeof setInterval>;
     async function checkConnection() {
       try {
         const h = await health();
@@ -126,14 +127,20 @@ function App() {
           settingsLoaded = true;
           setNeedsSetup(!s.notes_path);
         }
+        // Slow down polling once connected
+        clearInterval(intervalId);
+        intervalId = setInterval(checkConnection, 10000);
       } catch {
         setConnected(false);
         settingsLoaded = false;
+        // Poll faster while waiting for backend to start
+        clearInterval(intervalId);
+        intervalId = setInterval(checkConnection, 2000);
       }
     }
     checkConnection();
-    const interval = setInterval(checkConnection, 10000);
-    return () => clearInterval(interval);
+    intervalId = setInterval(checkConnection, 2000);
+    return () => clearInterval(intervalId);
   }, []);
 
   const handleSelectFile = useCallback(
@@ -258,23 +265,14 @@ function App() {
     [handleSelectFile]
   );
 
-  if (!connected) {
+  if (!connected || !settings) {
     return (
-      <div className="h-screen flex items-center justify-center bg-background text-foreground">
-        <div className="text-center">
-          <p className="text-destructive mb-2">Cannot connect to Brainshape server</p>
-          <p className="text-muted-foreground text-sm">
-            Run: <code className="bg-muted px-2 py-0.5 rounded text-sm">uv run python -m brainshape.server</code>
-          </p>
+      <div className="h-screen flex flex-col items-center justify-center bg-background text-foreground gap-3">
+        <h1 className="text-lg font-semibold">Brainshape</h1>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <svg className="w-4 h-4 animate-spin" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="8" strokeLinecap="round" /></svg>
+          Starting...
         </div>
-      </div>
-    );
-  }
-
-  if (needsSetup === null) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-background text-foreground">
-        <p className="text-sm text-muted-foreground">Loading...</p>
       </div>
     );
   }
@@ -327,8 +325,9 @@ function App() {
       </header>
 
       {healthStatus && !healthStatus.surrealdb_connected && (
-        <div className="px-4 py-1 bg-destructive/10 border-b border-destructive/20 text-xs text-destructive">
-          Database not connected — agent and graph features unavailable.
+        <div className="px-4 py-1 bg-muted border-b border-border text-xs text-muted-foreground flex items-center gap-2">
+          <svg className="w-3 h-3 animate-spin" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="8" strokeLinecap="round" /></svg>
+          Connecting to database...
         </div>
       )}
 
@@ -384,13 +383,13 @@ function App() {
             panelRef={chatPanelRef}
             onResize={(size) => setChatOpen(size.asPercentage > 0)}
           >
-            <Chat onNavigateToNote={handleNavigateByTitle} shikiTheme={shikiTheme} />
+            <Chat onNavigateToNote={handleNavigateByTitle} shikiTheme={shikiTheme} settings={settings} onOpenSettings={handleOpenSettings} />
           </Panel>
         </Group>
 
       </div>
 
-      {meetingOpen && <MeetingRecorder onClose={() => setMeetingOpen(false)} onComplete={handleMeetingComplete} />}
+      {meetingOpen && <MeetingRecorder onClose={() => setMeetingOpen(false)} onComplete={handleMeetingComplete} settings={settings} onOpenSettings={handleOpenSettings} />}
 
       {settingsOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">

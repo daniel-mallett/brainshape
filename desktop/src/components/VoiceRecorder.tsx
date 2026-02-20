@@ -1,14 +1,26 @@
 import { useEffect, useState } from "react";
 import { useVoiceRecorder } from "../lib/useVoiceRecorder";
-import { transcribeAudio } from "../lib/api";
+import { transcribeAudio, type Settings } from "../lib/api";
 import { Button } from "./ui/button";
 
 interface VoiceRecorderProps {
   onTranscription: (text: string) => void;
   disabled?: boolean;
+  settings: Settings | null;
+  onOpenSettings: () => void;
 }
 
-export function VoiceRecorder({ onTranscription, disabled }: VoiceRecorderProps) {
+/** Check if transcription is ready. Returns an error message or null. */
+function checkTranscriptionReady(settings: Settings | null): string | null {
+  if (!settings) return "Settings not loaded.";
+  const provider = settings.transcription_provider || "local";
+  if (provider === "local") return "Voice transcription not configured. Set it up in Settings.";
+  if (provider === "openai" && !settings.openai_api_key_set) return "OpenAI API key required. Set it up in Settings.";
+  if (provider === "mistral" && !settings.mistral_api_key_set) return "Mistral API key required. Set it up in Settings.";
+  return null;
+}
+
+export function VoiceRecorder({ onTranscription, disabled, settings, onOpenSettings }: VoiceRecorderProps) {
   const { isRecording, duration, startRecording, stopRecording, cancelRecording } =
     useVoiceRecorder();
 
@@ -23,8 +35,17 @@ export function VoiceRecorder({ onTranscription, disabled }: VoiceRecorderProps)
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
+  const configError = checkTranscriptionReady(settings);
+
   const handleClick = async () => {
     setError(null);
+
+    // Block recording if transcription isn't configured
+    if (!isRecording && configError) {
+      setError(configError);
+      onOpenSettings();
+      return;
+    }
 
     if (isRecording) {
       const blob = await stopRecording();
@@ -59,7 +80,7 @@ export function VoiceRecorder({ onTranscription, disabled }: VoiceRecorderProps)
         onClick={handleClick}
         disabled={disabled || transcribing}
         className="h-8 px-2"
-        title={isRecording ? "Stop recording" : "Start voice recording"}
+        title={isRecording ? "Stop recording" : configError || "Start voice recording"}
         aria-label={isRecording ? "Stop recording" : "Start voice recording"}
       >
         {transcribing ? (

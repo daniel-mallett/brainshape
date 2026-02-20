@@ -60,11 +60,12 @@ desktop/                  # Tauri 2 + React + TypeScript
 ## Commands
 
 ### Full Dev Environment
+- **First-time setup**: `./scripts/setup.sh` (checks prerequisites, installs deps, copies .env, installs hooks)
 - **Start everything**: `./scripts/dev.sh` (starts Python server + Tauri app, Ctrl+C stops all)
 
 ### Python Backend
 - **Run CLI**: `uv run main.py`
-- **Run server**: `uv run python -m brainshape.server` (starts FastAPI on port 8765)
+- **Run server**: `uv run python -m brainshape.server` (starts FastAPI on port 52836)
 - **Run MCP server**: `uv run python -m brainshape.mcp_server` (stdio transport for Claude Code)
 - **Batch sync**: `uv run python -m brainshape.batch` (semantic), `--structural`, or `--full`
 - **Test**: `uv run pytest` (all tests), `uv run pytest -v` (verbose), `uv run pytest tests/test_notes.py` (single file)

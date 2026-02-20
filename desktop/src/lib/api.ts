@@ -10,7 +10,7 @@ async function resolveBaseUrl(): Promise<string> {
   if (_baseUrl) return _baseUrl;
 
   if (import.meta.env.DEV) {
-    _baseUrl = "http://127.0.0.1:8765";
+    _baseUrl = "http://127.0.0.1:52836";
     return _baseUrl;
   }
 
@@ -19,7 +19,7 @@ async function resolveBaseUrl(): Promise<string> {
     const port = await invoke<number>("get_backend_port");
     _baseUrl = `http://127.0.0.1:${port}`;
   } catch {
-    _baseUrl = "http://127.0.0.1:8765";
+    _baseUrl = "http://127.0.0.1:52836";
   }
   return _baseUrl;
 }
@@ -122,6 +122,16 @@ export function renameNoteFile(
   return request(`/notes/file/${encodePath(path)}/rename`, {
     method: "PUT",
     body: JSON.stringify({ new_title: newTitle }),
+  });
+}
+
+export function moveNoteFile(
+  path: string,
+  folder: string
+): Promise<{ path: string; title: string }> {
+  return request(`/notes/file/${encodePath(path)}/move`, {
+    method: "PUT",
+    body: JSON.stringify({ folder }),
   });
 }
 

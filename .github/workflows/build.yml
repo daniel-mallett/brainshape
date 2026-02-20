@@ -22,11 +22,10 @@ jobs:
       - name: Build Python sidecar
         run: uv run pyinstaller brainshape.spec --noconfirm --clean
 
-      - name: Copy sidecar to Tauri binaries
+      - name: Copy sidecar to Tauri resources
         run: |
-          mkdir -p desktop/src-tauri/binaries
-          cp dist/brainshape-server "desktop/src-tauri/binaries/brainshape-server-aarch64-apple-darwin"
-          chmod +x "desktop/src-tauri/binaries/brainshape-server-aarch64-apple-darwin"
+          cp -R dist/brainshape-server desktop/src-tauri/resources/brainshape-server
+          chmod +x desktop/src-tauri/resources/brainshape-server/brainshape-server
 
       # --- Node + Rust + Tauri ---
       - uses: actions/setup-node@v4
@@ -39,7 +38,18 @@ jobs:
         run: cd desktop && npm ci
 
       - name: Build Tauri app
-        run: cd desktop && npm run tauri build
+        run: cd desktop && npm run tauri build -- --bundles app
+
+      - name: Create DMG
+        run: |
+          DMG_STAGING=$(mktemp -d)
+          cp -R desktop/src-tauri/target/release/bundle/macos/Brainshape.app "$DMG_STAGING/"
+          ln -s /Applications "$DMG_STAGING/Applications"
+          hdiutil create -volname "Brainshape" \
+            -srcfolder "$DMG_STAGING" \
+            -ov -format UDZO \
+            desktop/src-tauri/target/release/bundle/dmg/Brainshape_aarch64.dmg
+          rm -rf "$DMG_STAGING"
 
       # --- Upload artifact ---
       - name: Upload DMG

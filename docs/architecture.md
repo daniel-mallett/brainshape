@@ -101,7 +101,7 @@ Future interfaces (Slack, Discord, voice) each import `create_brainshape_agent()
 
 ## Server Architecture
 
-`brainshape/server.py` is a FastAPI app on `localhost:8765` that exposes:
+`brainshape/server.py` is a FastAPI app on `localhost:52836` that exposes:
 
 - `GET /health` — health check (includes `surrealdb_connected`, `agent_available` status)
 - `GET /config` — current configuration

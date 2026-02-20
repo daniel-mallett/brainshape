@@ -63,7 +63,7 @@ The `create_connection` tool creates entities and relationships in the graph. It
 
 ## HTTP Server (`server.py`)
 
-The FastAPI server binds to `127.0.0.1:8765` — localhost only, not exposed to the network. It adds a web-accessible surface to the agent:
+The FastAPI server binds to `127.0.0.1:52836` — localhost only, not exposed to the network. It adds a web-accessible surface to the agent:
 
 - **CORS** is restricted to `http://localhost:1420` and `:5173` (Vite dev), `tauri://localhost`, and `https://tauri.localhost` (Tauri webview). No wildcard origins.
 - **No authentication** — the server is single-user and local-only. If the server were ever exposed to the network, session auth would need to be added.

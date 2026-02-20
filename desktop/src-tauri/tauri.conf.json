@@ -31,8 +31,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": [
-      "binaries/brainshape-server"
-    ]
+    "resources": [
+      "resources/brainshape-server/*",
+      "resources/brainshape-server/**/*"
+    ],
+    "macOS": {
+      "infoPlist": "Info.plist"
+    }
   }
 }

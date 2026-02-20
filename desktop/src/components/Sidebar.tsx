@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { createFolder, createNoteFile, deleteFolder, deleteNoteFile, emptyTrash, getNoteFiles, getTrashNotes, renameFolder, renameNoteFile, restoreFromTrash, syncStructural, type NoteFile } from "../lib/api";
+import { createFolder, createNoteFile, deleteFolder, deleteNoteFile, emptyTrash, getNoteFiles, getTrashNotes, moveNoteFile, renameFolder, renameNoteFile, restoreFromTrash, syncStructural, type NoteFile } from "../lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 
@@ -72,6 +72,9 @@ interface TreeNodeProps {
   onCreateCancel: () => void;
   createInputRef: React.RefObject<HTMLInputElement | null>;
   depth: number;
+  dragOverFolder: string | null;
+  onDragOverFolder: (folder: string | null) => void;
+  onDropFile: (filePath: string, targetFolder: string) => void;
 }
 
 function TreeNode({
@@ -79,25 +82,29 @@ function TreeNode({
   renamingPath, renameValue, onRenameChange, onRenameSubmit, onRenameCancel,
   renamingFolderPath, folderRenameValue, onFolderRenameChange, onFolderRenameSubmit, onFolderRenameCancel,
   creatingIn, creatingType, isCreating, newTitle, onNewTitleChange, onCreateSubmit, onCreateCancel, createInputRef,
-  depth,
+  depth, dragOverFolder, onDragOverFolder, onDropFile,
 }: TreeNodeProps) {
   const [expanded, setExpanded] = useState(true);
   const renameRef = useRef<HTMLInputElement>(null);
   const folderRenameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (isFile(node) && renamingPath === node.path) {
+    if (isFile(node) && renamingPath === (node as NoteFile).path) {
       renameRef.current?.focus();
       renameRef.current?.select();
     }
-  }, [renamingPath, node]);
+    // Only run when renaming starts, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renamingPath]);
 
   useEffect(() => {
     if (!isFile(node) && renamingFolderPath === path) {
       folderRenameRef.current?.focus();
       folderRenameRef.current?.select();
     }
-  }, [renamingFolderPath, node, path]);
+    // Only run when renaming starts, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renamingFolderPath]);
 
   // Auto-expand folder when creating inside it
   useEffect(() => {
@@ -112,6 +119,11 @@ function TreeNode({
 
     return (
       <div
+        draggable={!isRenaming}
+        onDragStart={(e) => {
+          e.dataTransfer.setData("text/x-note-path", node.path);
+          e.dataTransfer.effectAllowed = "move";
+        }}
         className={`group flex items-center rounded transition-colors ${
           isSelected
             ? "bg-accent text-accent-foreground"
@@ -189,10 +201,31 @@ function TreeNode({
         />
       ) : (
         <div
-          className="group flex items-center"
+          className={`group flex items-center${dragOverFolder === path ? " bg-accent/70 ring-1 ring-primary rounded" : ""}`}
           onContextMenu={(e) => {
             e.preventDefault();
             onMenuOpen(path, e.clientX, e.clientY, "folder");
+          }}
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes("text/x-note-path")) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              onDragOverFolder(path);
+            }
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+              onDragOverFolder(null);
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            onDragOverFolder(null);
+            const filePath = e.dataTransfer.getData("text/x-note-path");
+            if (filePath) {
+              // path is the tree key path (e.g. "FolderA/SubFolder") — convert to relative folder path
+              onDropFile(filePath, path);
+            }
           }}
         >
           <button
@@ -262,6 +295,9 @@ function TreeNode({
               onCreateCancel={onCreateCancel}
               createInputRef={createInputRef}
               depth={depth + 1}
+              dragOverFolder={dragOverFolder}
+              onDragOverFolder={onDragOverFolder}
+              onDropFile={onDropFile}
             />
           ))}
         </div>
@@ -302,6 +338,7 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
   const [folderRenameValue, setFolderRenameValue] = useState("");
   const renameInFlightRef = useRef(false);
   const folderRenameInFlightRef = useRef(false);
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const [trashOpen, setTrashOpen] = useState(false);
   const [trashFiles, setTrashFiles] = useState<NoteFile[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -539,6 +576,19 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
     }
   };
 
+  // Drag-and-drop move handler
+  const handleDropFile = async (filePath: string, targetFolder: string) => {
+    try {
+      const { path: newPath } = await moveNoteFile(filePath, targetFolder);
+      await refresh();
+      if (selectedPath === filePath) {
+        onSelectFile(newPath);
+      }
+    } catch (err) {
+      console.error("Failed to move note:", err);
+    }
+  };
+
   // Filter
   const filteredFiles = filter
     ? files.filter((f) => f.title.toLowerCase().includes(filter.toLowerCase()))
@@ -613,11 +663,31 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
       </div>
       <ScrollArea className="flex-1">
         <div
-          className="py-1"
+          className={`py-1${dragOverFolder === "" ? " bg-accent/40" : ""}`}
           onContextMenu={(e) => {
             if (e.target === e.currentTarget) {
               e.preventDefault();
               setMenu({ type: "background", path: "", x: e.clientX, y: e.clientY });
+            }
+          }}
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes("text/x-note-path") && e.target === e.currentTarget) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              setDragOverFolder("");
+            }
+          }}
+          onDragLeave={(e) => {
+            if (e.target === e.currentTarget) {
+              setDragOverFolder(null);
+            }
+          }}
+          onDrop={(e) => {
+            if (e.target === e.currentTarget) {
+              e.preventDefault();
+              setDragOverFolder(null);
+              const filePath = e.dataTransfer.getData("text/x-note-path");
+              if (filePath) handleDropFile(filePath, "");
             }
           }}
         >
@@ -715,6 +785,9 @@ export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar(
                   onCreateCancel={handleCreateCancel}
                   createInputRef={inputRef}
                   depth={0}
+                  dragOverFolder={dragOverFolder}
+                  onDragOverFolder={setDragOverFolder}
+                  onDropFile={handleDropFile}
                 />
               ))
           )}

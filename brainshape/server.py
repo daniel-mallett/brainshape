@@ -36,6 +36,7 @@ from brainshape.notes import (
     list_folders,
     list_notes,
     list_trash,
+    move_note,
     parse_note,
     rename_folder,
     rename_note,
@@ -45,7 +46,13 @@ from brainshape.notes import (
     write_note,
 )
 from brainshape.settings import VALID_PROVIDERS, get_notes_path, load_settings, update_settings
-from brainshape.sync import sync_semantic, sync_semantic_async, sync_structural
+from brainshape.sync import (
+    _structural_lock,
+    _sync_structural_unlocked,
+    sync_semantic,
+    sync_semantic_async,
+    sync_structural,
+)
 from brainshape.watcher import start_watcher
 
 logger = logging.getLogger(__name__)
@@ -187,6 +194,10 @@ class UpdateNoteRequest(BaseModel):
 
 class RenameNoteRequest(BaseModel):
     new_title: str
+
+
+class MoveNoteRequest(BaseModel):
+    folder: str
 
 
 class CreateFolderRequest(BaseModel):
@@ -508,19 +519,18 @@ def notes_rename(path: str, req: RenameNoteRequest):
 
     new_rel_path = str(new_path.relative_to(notes_path))
 
-    # Update graph node path/title
-    if _db is not None:
-        _db.query(
-            "UPDATE note SET path = $new_path, title = $new_title WHERE path = $old_path",
-            {"old_path": path, "new_path": new_rel_path, "new_title": req.new_title},
-        )
-
     # Rewrite [[Old Title]] → [[New Title]] in all notes
     links_updated = rewrite_wikilinks(notes_path, old_title, req.new_title)
 
-    # Re-sync structural relationships
+    # Hold the structural lock around UPDATE + sync so the watcher's
+    # sync_structural cannot interleave and create a duplicate node.
     if _db is not None:
-        sync_structural(_db, notes_path)
+        with _structural_lock:
+            _db.query(
+                "UPDATE note SET path = $new_path, title = $new_title WHERE path = $old_path",
+                {"old_path": path, "new_path": new_rel_path, "new_title": req.new_title},
+            )
+            _sync_structural_unlocked(_db, notes_path)
 
     return {
         "path": new_rel_path,
@@ -528,6 +538,32 @@ def notes_rename(path: str, req: RenameNoteRequest):
         "old_title": old_title,
         "links_updated": links_updated,
     }
+
+
+@app.put("/notes/file/{path:path}/move")
+def notes_move(path: str, req: MoveNoteRequest):
+    """Move a note to a different folder."""
+    notes_path = _notes_path()
+    try:
+        new_rel_path = move_note(notes_path, path, req.folder)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Note not found") from None
+    except FileExistsError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path") from None
+
+    # Hold the structural lock around UPDATE + sync so the watcher's
+    # sync_structural cannot interleave and create a duplicate node.
+    if _db is not None:
+        with _structural_lock:
+            _db.query(
+                "UPDATE note SET path = $new_path WHERE path = $old_path",
+                {"old_path": path, "new_path": new_rel_path},
+            )
+            _sync_structural_unlocked(_db, notes_path)
+
+    return {"path": new_rel_path, "title": Path(new_rel_path).stem}
 
 
 @app.put("/notes/file/{path:path}")
@@ -1409,13 +1445,25 @@ def import_vault_endpoint(req: ImportVaultRequest):
 
 if __name__ == "__main__":
     import argparse
+    import sys
 
     import uvicorn
 
     parser = argparse.ArgumentParser(description="Brainshape server")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--port", type=int, default=52836)
     parser.add_argument("--reload", action="store_true")
     args = parser.parse_args()
 
-    uvicorn.run("brainshape.server:app", host=args.host, port=args.port, reload=args.reload)
+    # Write port to a well-known file so external tools (MCP clients) can discover it.
+    port_file = Path.home() / ".config" / "brainshape" / "port"
+    port_file.parent.mkdir(parents=True, exist_ok=True)
+    port_file.write_text(str(args.port))
+
+    if getattr(sys, "frozen", False):
+        # PyInstaller frozen build: pass the app object directly.
+        # String-based import ("brainshape.server:app") fails in frozen envs.
+        # reload is incompatible with the object form, but irrelevant here.
+        uvicorn.run(app, host=args.host, port=args.port)
+    else:
+        uvicorn.run("brainshape.server:app", host=args.host, port=args.port, reload=args.reload)

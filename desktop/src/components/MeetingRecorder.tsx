@@ -1,15 +1,33 @@
 import { useEffect, useState } from "react";
 import { useVoiceRecorder } from "../lib/useVoiceRecorder";
-import { transcribeMeeting } from "../lib/api";
+import { transcribeMeeting, type Settings } from "../lib/api";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+
+/** Check if transcription is properly configured. Returns an error message or null. */
+function checkTranscriptionReady(settings: Settings | null): string | null {
+  if (!settings) return "Settings not loaded yet.";
+  const provider = settings.transcription_provider || "local";
+  if (provider === "local") {
+    return "Voice transcription needs to be set up. Choose OpenAI or Mistral as your transcription provider and add an API key.";
+  }
+  if (provider === "openai" && !settings.openai_api_key_set) {
+    return "OpenAI transcription requires an API key. Please add your OpenAI API key.";
+  }
+  if (provider === "mistral" && !settings.mistral_api_key_set) {
+    return "Mistral transcription requires an API key. Please add your Mistral API key.";
+  }
+  return null;
+}
 
 interface MeetingRecorderProps {
   onClose: () => void;
   onComplete: (path: string) => void;
+  settings: Settings | null;
+  onOpenSettings: () => void;
 }
 
-export function MeetingRecorder({ onClose, onComplete }: MeetingRecorderProps) {
+export function MeetingRecorder({ onClose, onComplete, settings, onOpenSettings }: MeetingRecorderProps) {
   const { duration, startRecording, stopRecording, cancelRecording } =
     useVoiceRecorder();
 
@@ -62,7 +80,12 @@ export function MeetingRecorder({ onClose, onComplete }: MeetingRecorderProps) {
       const result = await transcribeMeeting(audioBlob, title, folder, tags);
       onComplete(result.path);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Transcription failed");
+      const msg = err instanceof Error ? err.message : "Transcription failed";
+      if (msg.includes("mlx-whisper") || msg.includes("Local transcription")) {
+        setError("Local transcription is not available in the desktop app. Go to Settings > Voice Transcription and switch to OpenAI or Mistral.");
+      } else {
+        setError(msg);
+      }
       setPhase("details");
     }
   };
@@ -86,17 +109,30 @@ export function MeetingRecorder({ onClose, onComplete }: MeetingRecorderProps) {
           )}
         </div>
 
-        {/* Idle — start recording */}
-        {phase === "idle" && (
-          <div className="text-center space-y-4 py-4">
-            <p className="text-sm text-muted-foreground">
-              Record audio and Brainshape will create a timestamped meeting note.
-            </p>
-            <Button onClick={handleStartRecording} className="w-full">
-              Start Recording
-            </Button>
-          </div>
-        )}
+        {/* Idle — check transcription config, then show record button */}
+        {phase === "idle" && (() => {
+          const configError = checkTranscriptionReady(settings);
+          if (configError) {
+            return (
+              <div className="text-center space-y-4 py-4">
+                <p className="text-sm text-muted-foreground">{configError}</p>
+                <Button onClick={() => { onClose(); onOpenSettings(); }} className="w-full">
+                  Open Settings
+                </Button>
+              </div>
+            );
+          }
+          return (
+            <div className="text-center space-y-4 py-4">
+              <p className="text-sm text-muted-foreground">
+                Record audio and Brainshape will create a timestamped meeting note.
+              </p>
+              <Button onClick={handleStartRecording} className="w-full">
+                Start Recording
+              </Button>
+            </div>
+          );
+        })()}
 
         {/* Recording */}
         {phase === "recording" && (

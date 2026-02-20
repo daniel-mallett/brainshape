@@ -77,9 +77,11 @@ function MessageBubble({
   );
 }
 
-export function Chat({ onNavigateToNote, shikiTheme }: {
+export function Chat({ onNavigateToNote, shikiTheme, settings, onOpenSettings }: {
   onNavigateToNote?: (title: string) => void;
   shikiTheme?: [string, string];
+  settings?: import("../lib/api").Settings | null;
+  onOpenSettings?: () => void;
 }) {
   const { messages, isStreaming, streamingMessageIndex, sendMessage, resetSession } =
     useAgentStream();
@@ -202,6 +204,8 @@ export function Chat({ onNavigateToNote, shikiTheme }: {
               setInput((prev) => (prev ? `${prev} ${text}` : text));
             }}
             disabled={isStreaming}
+            settings={settings ?? null}
+            onOpenSettings={onOpenSettings ?? (() => {})}
           />
           <Input
             value={input}

@@ -1,10 +1,20 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for bundling the Brainshape server as a standalone executable."""
+"""PyInstaller spec for bundling the Brainshape server as a directory bundle.
+
+Uses onedir mode so the app doesn't need to extract on every launch.
+The output directory is bundled into the Tauri app as a resource.
+"""
 
 import sys
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_submodules
+
 block_cipher = None
+
+# Rich dynamically loads unicode data files with hyphenated names (e.g. unicode17-0-0)
+# that PyInstaller can't trace. Collect them all.
+rich_unicode_imports = collect_submodules("rich._unicode_data")
 
 a = Analysis(
     ["brainshape/server.py"],
@@ -62,25 +72,38 @@ a = Analysis(
         "surrealdb",
         "surrealdb.connections",
         "surrealdb.data.types.record_id",
-        # Embeddings
+        # Embeddings + ML
         "sentence_transformers",
         "torch",
         "transformers",
+        "sklearn",
+        "sklearn.utils",
+        "scipy",
         # File watching
         "watchdog",
         "watchdog.events",
         "watchdog.observers",
         # Markdown
         "frontmatter",
+        # anyio backends (required by uvicorn/starlette)
+        "anyio._backends._asyncio",
+        # Starlette internals (dynamically imported by FastAPI)
+        "starlette.responses",
+        "starlette.routing",
+        "starlette.middleware",
+        "starlette.middleware.cors",
+        # Uvicorn H11 protocol (default HTTP implementation)
+        "uvicorn.protocols.http.h11_impl",
+        # Pydantic compiled core
+        "pydantic_core",
         # Other
         "httpx",
         "anyio",
-    ],
+    ] + rich_unicode_imports,
     excludes=[
         "tkinter",
         "matplotlib",
         "PIL",
-        "scipy",
         "notebook",
         "IPython",
         "jupyter",
@@ -90,17 +113,25 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# onedir mode: EXE contains only the bootloader + scripts.
+# COLLECT gathers everything into a directory.
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
-    [],
+    exclude_binaries=True,
     name="brainshape-server",
     debug=False,
     bootloader_ignore_signals=False,
     strip=True,
     upx=False,
-    console=False,
-    onefile=True,
+    console=True,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    name="brainshape-server",
+    strip=True,
+    upx=False,
 )
