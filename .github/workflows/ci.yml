@@ -22,7 +22,7 @@ jobs:
       - run: uv run ty check
       - run: uv run pytest --cov=brainshape --cov-report=term-missing
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
       - run: cd desktop && npm ci && npx tsc --noEmit
