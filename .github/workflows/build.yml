@@ -53,7 +53,7 @@ jobs:
 
       # --- Upload artifact ---
       - name: Upload DMG
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Brainshape-macOS-arm64
           path: desktop/src-tauri/target/release/bundle/dmg/*.dmg
