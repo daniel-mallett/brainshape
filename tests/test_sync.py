@@ -118,6 +118,24 @@ class TestSyncSemantic:
         assert len(delete_calls) == 0
 
 
+class TestSyncPruneOrphanTags:
+    def test_prune_cleans_orphan_tags(self, tmp_notes):
+        """When pruning removes a note, orphaned tags should be cleaned up."""
+        db = MagicMock()
+        # Simulate a stored note that no longer exists on disk
+        db.query.side_effect = lambda q, *a, **kw: (
+            [{"path": "gone.md"}] if q.strip() == "SELECT path FROM note" else []
+        )
+        stats = sync_structural(db, tmp_notes)
+        assert stats["pruned"] == 1
+        orphan_calls = [
+            c
+            for c in db.query.call_args_list
+            if "DELETE tag WHERE" in str(c) and "tagged_with" in str(c)
+        ]
+        assert len(orphan_calls) >= 1
+
+
 class TestSyncEmptyDir:
     def test_structural_empty_dir(self, tmp_path):
         """Structural sync on an empty directory should not crash."""

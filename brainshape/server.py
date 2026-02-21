@@ -486,6 +486,8 @@ def _delete_note_from_graph(db: GraphDB, path: str) -> None:
         db.query(f"DELETE {edge_table} WHERE in = {nid_q}", {"path": path})
         db.query(f"DELETE {edge_table} WHERE out = {nid_q}", {"path": path})
     db.query("DELETE note WHERE path = $path", {"path": path})
+    # Clean orphan tags with no remaining edges
+    db.query("DELETE tag WHERE (SELECT VALUE id FROM tagged_with WHERE out = tag.id) = []")
 
 
 @app.delete("/notes/file/{path:path}")

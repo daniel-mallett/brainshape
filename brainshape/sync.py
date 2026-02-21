@@ -110,6 +110,10 @@ def _sync_structural_unlocked(db: GraphDB, notes_path: Path) -> dict:
             logger.info("Pruned deleted note from graph: %s", path)
             stats["pruned"] += 1
 
+    # Clean orphan tags left behind by pruned notes
+    if stats["pruned"]:
+        db.query("DELETE tag WHERE (SELECT VALUE id FROM tagged_with WHERE out = tag.id) = []")
+
     # Pass 1: UPSERT all note nodes
     for note in notes:
         db.query(

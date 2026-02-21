@@ -1289,6 +1289,7 @@ class TestMoveNote:
     def test_move_collision_raises_409(self, client, tmp_notes):
         # Create a file with the same name in Tutorials
         from brainshape.notes import write_note
+
         write_note(tmp_notes, "Welcome", "other content", folder="Tutorials")
         resp = client.put(
             "/notes/file/Welcome.md/move",
@@ -1536,6 +1537,25 @@ class TestDeleteNoteCustomEdges:
         assert len(delete_calls) >= 1
 
 
+class TestDeleteNoteOrphanTags:
+    """Regression: deleting a note must clean up orphaned tags."""
+
+    def test_delete_cleans_orphan_tags(self, client, tmp_notes, server_db):
+        """_delete_note_from_graph should remove tags with no remaining edges."""
+        server_db.get_relation_tables.return_value = ["tagged_with", "links_to", "from_document"]
+        server_db.query.return_value = []
+
+        resp = client.delete("/notes/file/Welcome.md")
+        assert resp.status_code == 200
+
+        orphan_tag_calls = [
+            c
+            for c in server_db.query.call_args_list
+            if "DELETE tag WHERE" in str(c) and "tagged_with" in str(c)
+        ]
+        assert len(orphan_tag_calls) >= 1
+
+
 class TestDeleteMemoryCustomEdges:
     """Regression: deleting a memory must clean up custom agent-created edges."""
 
@@ -1600,7 +1620,7 @@ class TestFolderEndpoints:
         assert resp.status_code == 400
 
     def test_create_folder_invalid_chars(self, client):
-        resp = client.post("/notes/folder", json={"path": 'bad:name'})
+        resp = client.post("/notes/folder", json={"path": "bad:name"})
         assert resp.status_code == 400
 
     def test_rename_folder(self, client, tmp_notes, server_db):
