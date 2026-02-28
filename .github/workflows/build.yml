@@ -13,7 +13,7 @@ jobs:
     name: Build (macOS ARM64)
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # --- Python + sidecar ---
       - uses: astral-sh/setup-uv@v7
